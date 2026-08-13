@@ -1,0 +1,15 @@
+{
+  "name": "pbsms-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Premium Basic School Management System — multi-tenant platform monorepo. See README.md before doing anything else.",
+  "workspaces": ["apps/api", "apps/web"],
+  "scripts": {
+    "api:dev": "npm run start:dev --workspace apps/api",
+    "web:dev": "npm run dev --workspace apps/web",
+    "api:test": "npm test --workspace apps/api",
+    "api:test:e2e": "npm run test:e2e --workspace apps/api",
+    "migrate": "npm run migrate --workspace apps/api",
+    "seed": "npm run seed --workspace apps/api"
+  }
+}

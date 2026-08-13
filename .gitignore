@@ -1,0 +1,11 @@
+# Claude Code local settings (machine-specific, not shared)
+.claude/settings.local.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Note: pbsms-platform/.gitignore already excludes node_modules/, .env, dist/, logs, etc.
+# within that subtree.

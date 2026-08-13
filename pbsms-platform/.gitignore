@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+.next/
+out/
+
+# Env — never commit real secrets (SRS Chapter 33.4)
+.env
+.env.local
+*.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Postgres local volume artifacts if ever created outside Docker
+*.pgdata/

@@ -1,0 +1,2572 @@
+                                                                                                                     PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+   PREMIUM BASIC SCHOOL MANAGEMENT SYSTEM
+
+            Multi-Tenant Enterprise Software Requirements Specification
+
+Version 2.1 | Adopted Baseline -- Approved for Build | Nursery ­ Kindergarten ­ Primary ­ Junior High
+                                                           School
+
+                                        Platform-as-a-Service Edition
+
+         Supersedes Version 2.0 (Proposed Baseline) and Version 1.0 (Single-Institution Baseline, July 2026)
+
+Item               Value
+Document           PBSMS Multi-Tenant Enterprise SRS
+Version            2.1
+Status             Adopted Baseline -- all Version 2.0 recommendations approved for
+                   build; ready for Phase 0 execution
+Delivery Basis     Greenfield build -- no legacy system exists; there is no data to preserve
+                   or migrate
+Deployment Model   Single platform, multiple independent school tenants
+Country Context    Ghana (default), extensible to other West African markets
+Default Currency   GHS (Ghana Cedi) -- configurable per tenant
+Default Time Zone  Africa/Accra -- configurable per tenant
+Education Levels   Nursery, Kindergarten, Primary (Basic 1­6), Junior High School (JHS 1­3)
+                   Senior High School, tertiary education, semesters, credit hours,
+Out of Scope       GPA/CGPA
+
+Build Readiness Status -- Version 2.1
+
+This is a greenfield build: no prior system exists, so there is no legacy data, no legacy schema and no working
+behavior to audit or preserve. Every recommendation carried a 'confirm before treating as final' caveat in
+Version 2.0. That caveat is now removed. The following are ADOPTED, not proposed, and Phase 0 (Chapter
+44) proceeds on this basis:
+
+Decision                                                         Status
+Tenancy isolation model -- shared database, shared schema,       ADOPTED
+tenant_id + PostgreSQL RLS (Chapter 1)                           ADOPTED
+Tenant hierarchy -- Tenant  School  Campus (Chapter 2)           ADOPTED
+Technology stack -- NestJS, PostgreSQL 15+, Redis, Next.js, S3-
+
+                   Page 1 of 71
+                                                                                 PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Decision                                                                 Status
+
+compatible storage (Chapter 29)
+
+Subscription tiers and metering basis -- per-active-student, four tiers  ADOPTED as v1 working model; revisit
+(Chapter 5)                                                              pricing specifically against real numbers
+                                                                         once pilot billing data exists (Chapter
+                                                                         45.3) -- the mechanism is decided, the
+                                                                         exact figures are not yet market-tested
+
+Named vendor integrations -- Paystack, Hubtel, MTN MoMo, Telecel         ADOPTED as the integration set; vendor
+Cash, WhatsApp Business API (Chapters 24, 26, 36)                        onboarding is a Pre-Phase-0
+                                                                         workstream (Appendix E)
+
+Delivery model -- human-led team, phased roadmap, AI-assisted            ADOPTED
+tooling under review (Volume VI)
+
+A new Appendix E (Pre-Phase-0 Parallel Track) lists everything that is not engineering -- legal, vendor
+onboarding, hiring, pilot recruitment -- that should start immediately and run alongside Chapter 44's
+engineering roadmap rather than after it.
+
+Revision Summary -- Version 1.0  Version 2.0
+
+Version 1.0 specified a single-institution platform. Version 2.0 is a structural rewrite, not an edit: the
+platform is now specified as a multi-tenant system from the ground up, with every downstream chapter
+written against that decision. The table below summarizes what changed and why.
+
+Area              Version 1.0                                  Version 2.0
+Tenancy           School is the root aggregate; school_id
+                  present "where applicable"                   Tenant is the root aggregate; tenant_id
+Isolation                                                      mandatory, indexed and enforced at the
+                  Not specified                                database layer on every tenant-owned table
+Platform roles
+                  None -- only school-level roles existed      Shared database, shared schema,
+Commercial                                                     PostgreSQL Row-Level Security as a second
+model             School bills parents only; no platform       enforcement layer beneath the application
+                  revenue model
+Requirement IDs                                                Platform Super Admin, Support Engineer,
+                  10 IDs total (BR-001­BR-010); traceability   Billing Administrator, Onboarding Specialist
+Non-functional    claimed but not achievable                   added with scoped, audited access
+targets
+                  No numeric targets anywhere; deferred to     Full subscription, tiering and metering model
+Compliance        "baseline measurement"                       added (platform bills schools; schools still
+Local curriculum                                               bill parents)
+fit               Not addressed
+Connectivity                                                   Full ID scheme across every functional and
+                  Generic numeric/developmental grading        non-functional requirement; traceability is
+Communication     only                                         now achievable
+                  Not addressed; "offline" mentioned twice,
+                  incidentally                                 Concrete numeric targets defined for
+                  Email-first; SMS "where enabled"; no         latency, throughput, availability, RTO/RPO
+                  WhatsApp                                     (Appendix B)
+
+                                                               Ghana Data Protection Act, 2012 (Act 843)
+                                                               and GDPR-alignment chapter added, with
+                                                               retention schedule and consent model
+
+                                                               NaCCA Standards-Based Curriculum, BECE,
+                                                               GES reporting and CSSPS alignment added
+
+                                                               Offline-first attendance and score capture
+                                                               specified as a first-class requirement with a
+                                                               defined sync protocol
+
+                                                               WhatsApp Business API specified as the
+                                                               primary channel; SMS and email as defined
+
+                                 Page 2 of 71
+                                                              PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Area               Version 1.0                                Version 2.0
+
+Payments           Generic "provider adapter"; mobile money   fallbacks
+Accessibility      listed as a dropdown value
+Security pipeline                                             Named Ghanaian providers (Paystack,
+Delivery model     "Accessible" asserted with no named        Hubtel, MTN MoMo, Telecel Cash) with a
+Document           standard                                   concrete settlement and reconciliation
+structure          review  tests  build  staging, no          model
+                   security gate
+                                                              WCAG 2.1 Level AA named as the binding
+                   55 sequential prompts for an autonomous    target, with an automated CI gate
+                   AI coding agent ("Codex")
+                                                              SAST, dependency scanning, DAST and a pre-
+                   Identical five-row control table repeated  GA penetration test added as release gates
+                   after all 55 chapters (~15­20% of the
+                   document)                                  Human-led, phased delivery by a named
+                                                              team, using AI coding assistants as a
+                                                              supervised productivity tool, not as the
+                                                              delivery mechanism
+
+                                                              Universal controls stated once (below); per-
+                                                              chapter text limited to what is actually
+                                                              chapter-specific
+
+Universal Requirement Controls
+
+The following controls apply to every requirement in this document unless a chapter explicitly states an
+exception. They are stated once here rather than repeated after each chapter.
+
+Control            Requirement
+Tenant scope
+Permissions        Every protected action MUST be evaluated within the caller's tenant. Cross-tenant
+Audit              access is denied by default at both the application layer and the database layer (Row-
+History            Level Security).
+Reporting
+Testing            Every protected action MUST require server-side authorization and record-scope
+                   validation. Client-side hiding of a control is never treated as authorization.
+
+                   Material state changes MUST record actor, tenant, time, old value, new value, reason
+                   (where applicable) and outcome, in an append-only log.
+
+                   Official records MUST use versioning or reversal. They are never silently overwritten
+                   or hard-deleted while retention rules apply.
+
+                   Applicable operations MUST feed role-based dashboards, scheduled reports and
+                   follow-up actions within their tenant scope.
+
+                   Business rules, permissions, state transitions, calculations, cross-tenant isolation and
+                   regressions MUST have automated test coverage before release (see Chapter 45).
+
+How to Read This Document
+
+Requirement identifiers
+
+Every functional requirement carries a stable identifier in the form FR-<MODULE>-<NNN>. Every non-
+functional requirement carries NFR-<CATEGORY>-<NNN>. Business requirements use BR-<NNN>.
+Tenancy/platform requirements use TEN-<NNN>. Data-protection requirements use DP-<NNN>. Domain-
+alignment requirements use DOM-<NNN>. IDs increment in steps of 10 within a module so that
+requirements can be inserted later without renumbering. The full index is in Appendix A.
+
+Requirement keywords
+
+                                Page 3 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+This document follows RFC 2119-style keyword conventions: MUST/MUST NOT denote a mandatory
+requirement; SHOULD/SHOULD NOT denote a strong recommendation that may be departed from with a
+documented reason; MAY denotes an optional capability.
+
+Module prefixes used in this document
+
+Prefix  Module
+ADM     Admissions
+
+STU     Student Lifecycle
+
+ACA     Academic Structure
+
+ATT     Attendance
+
+ASM     Assessment
+
+GRA     Grading Engine
+
+RES     Results Management
+
+DOC     Documents & Certification
+
+PRO     Promotion & Completion
+
+FIN     Financial Management
+
+FEE     Fee Structure & Billing
+
+PAY     Payments, Allocation & Receipts
+COM     Communication & Notification
+
+ANL     Analytics & Intelligence
+
+OPS     Supporting Operations
+
+SEC     Security
+
+PERF    Performance & Scalability
+AVAIL   Availability, Backup & DR
+
+ACC     Accessibility
+
+API     API & Integration
+
+                                       Page 4 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Table of Contents
+
+Front Matter
+
+    Chapter -- Build Readiness Status, Revision Summary, Universal Requirement Controls & Reading Guide
+
+Volume 0 -- Multi-Tenant Platform Architecture
+
+    Chapter 1 Platform Vision & Tenancy Decision
+    Chapter 2 Tenant Domain Model & Hierarchy
+    Chapter 3 Platform Roles & Access
+    Chapter 4 Tenant Lifecycle
+    Chapter 5 Subscription, Billing & Metering
+    Chapter 6 Tenant-Scoped Non-Functional Architecture
+
+Volume I -- Enterprise Foundation
+
+    Chapter 7 Introduction & Business Context
+    Chapter 8 Business Requirements
+    Chapter 9 Enterprise Design Principles
+    Chapter 10 Enterprise System Architecture
+    Chapter 11 Master Data & Enterprise Data Architecture
+    Chapter 12 Enterprise Business Rules Framework
+    Chapter 13 Roles, Responsibility, Authority & Scope
+    Chapter 14 Operational Intelligence Framework
+
+Volume II -- Academic & Student Lifecycle
+
+    Chapter 15 Admissions Management
+    Chapter 16 Student Lifecycle Management
+    Chapter 17 Academic Management
+    Chapter 18 Attendance Management
+    Chapter 19 Assessment Management
+    Chapter 20 Enterprise Grading Engine
+    Chapter 21 Results Management Engine
+    Chapter 22 Document Engine & Promotion / Completion
+
+Volume III -- Finance, Communication & Operations
+
+    Chapter 23 Enterprise Financial Management & Fee Structures
+    Chapter 24 Invoicing, Payments, Allocation & Receipts
+    Chapter 25 Financial Assistance, Reversals & Reconciliation
+    Chapter 26 Communication & Notification Centre
+    Chapter 27 Academic & Operational Analytics
+    Chapter 28 Supporting Operations
+
+                                                                                    Page 5 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Volume IV -- Technical Architecture
+
+    Chapter 29 Technology Stack & Layered Architecture
+    Chapter 30 Database Architecture, Multi-Tenant Schema & Migration
+    Chapter 31 Entity-Relationship Model & Core Table Definitions
+    Chapter 32 API Architecture & Service Contracts
+    Chapter 33 Application Security, Privacy & Access Control
+    Chapter 34 Frontend Architecture, UX & Offline/PWA Strategy
+    Chapter 35 Background Jobs, Reporting & Integration Architecture
+    Chapter 36 External Integrations & Provider Adapters
+    Chapter 37 Performance, Scalability, Reliability & Observability
+    Chapter 38 Backup, DR, Testing, Deployment & Release Management
+
+Volume V -- Compliance & Local Market Alignment
+
+    Chapter 39 Ghana Data Protection Act & GDPR Alignment
+    Chapter 40 Consent, Retention & Data Subject Rights
+    Chapter 41 NaCCA, BECE, GES & CSSPS Alignment
+    Chapter 42 Accessibility & Inclusive Design
+
+Volume VI -- Delivery Strategy
+
+    Chapter 43 Delivery Methodology & Team
+    Chapter 44 Phased Delivery Roadmap
+    Chapter 45 Quality Gates, Security Review & Pilot Program
+    Chapter 46 Definition of Ready / Definition of Done & Change Control
+
+Appendices
+
+    Appendix A Requirement ID Index
+    Appendix B Non-Functional Requirements Summary
+    Appendix C Glossary
+    Appendix D Change Log vs. Version 1.0
+    Appendix E Pre-Phase-0 Parallel Track
+
+                                                                                    Page 6 of 71
+                                                                             PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+                         --
+
+              VOLUME 0
+
+Multi-Tenant Platform Architecture -- Chapters 1­6
+
+                                       Page 7 of 71
+                                                              PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 1 -- Platform Vision & Tenancy Decision
+
+This chapter states the single most important architectural decision in this specification and the reason every
+other chapter in this document exists in its current form. PBSMS is a platform that many independent
+schools use, not software built for one school.
+
+1.1 Product Vision
+
+PBSMS is a multi-tenant, cloud-hosted school management platform serving Nursery-to-JHS basic schools
+across Ghana. A single deployment of the software serves an unlimited number of independent school
+customers ("tenants"), each with its own data, users, configuration, branding and billing, while sharing one
+codebase, one operations team and one set of infrastructure.
+
+1.2 Why Multi-Tenant, and Not a Separate Deployment per School
+
+     Unit economics: basic schools in this market cannot individually fund dedicated infrastructure, so
+         cost must be shared across tenants to reach an affordable per-student price.
+
+     Operability: one platform to patch, monitor, back up and improve is achievable by a small team; one
+         deployment per school is not.
+
+     Speed to market: a new school should be usable within an hour of signup, not after a bespoke
+         deployment.
+
+     Cross-school insight: proprietors who own more than one school, and PBSMS itself for product
+         improvement, need aggregate visibility that separate deployments cannot provide.
+
+1.3 Isolation Model Decision
+
+TEN-001: The platform MUST use a shared database, shared schema architecture with a mandatory
+tenant_id discriminator on every tenant-owned table, defended by PostgreSQL Row-Level Security (RLS)
+policies as a database-layer enforcement mechanism independent of application code correctness.
+
+Rationale: at this price point and this stage of company maturity, database-per-tenant or schema-per-tenant
+introduces operational cost (migration fan-out, connection pool exhaustion, backup complexity) that is not
+justified by the data volumes involved. RLS closes the single most dangerous failure mode of shared-schema
+multi-tenancy -- a missing WHERE tenant_id = ? clause -- by making tenant isolation a property of the
+database session, not of any individual query.
+
+Decision record
+
+Option considered             Verdict             Reason
+
+Shared DB, shared schema,     Adopted for v1      Lowest operating cost; strong isolation via
+tenant_id + RLS                                   defence in depth; standard PostgreSQL feature,
+                                                  no bespoke infrastructure
+
+Shared DB, schema-per-tenant  Rejected for v1,    Migration must run once per schema; hundreds
+                              revisit at scale    of schemas complicate connection pooling and
+                                                  tooling
+
+Database-per-tenant           Reserved as a paid  Justified only for large school groups or
+                              isolation tier      regulatory demands; offered later as an add-on,
+                                                  not the default
+
+TEN-002: A dedicated-database isolation tier MAY be offered as a premium add-on for large school groups or
+customers with a specific regulatory requirement, without changing the default tier's architecture.
+
+TEN-003: Every table that stores tenant-owned data MUST include a non-nullable tenant_id column, MUST
+index tenant_id as the leading column of its primary access-pattern indexes, and MUST express every
+uniqueness constraint as tenant-scoped (for example UNIQUE(tenant_id, invoice_number), never
+UNIQUE(invoice_number)).
+
+                                                Page 8 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+TEN-004: Every database connection used to serve a tenant request MUST set the RLS session variable for
+that tenant before any query executes, and connection pooling MUST reset or re-set this variable between
+reuses so that a pooled connection can never leak one tenant's session context into another tenant's request.
+TEN-005: Platform-level tables (subscription plans, feature flags, the tenant registry itself, platform audit logs)
+are exempt from tenant_id scoping and are instead restricted to platform-role access only.
+
+                                                                                    Page 9 of 71
+                                                                                 PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 2 -- Tenant Domain Model & Hierarchy
+
+2.1 Domain Hierarchy
+
+Platform Operator (PBSMS)  Tenant (billing and isolation boundary; typically one proprietor or one school
+group)  School (one or more per tenant)  Campus (one or more per school)  Academic Year  Term 
+Division  Class Level  Class  Subject.
+
+TEN-010: A tenant MUST be able to contain more than one school. This is what enables a proprietor who
+owns, for example, a Nursery/KG campus and a separate Primary/JHS campus under one business, or a small
+school group, to operate as one tenant with consolidated billing and one login for shared staff, while still
+reporting separately per school.
+
+TEN-011: A school MUST belong to exactly one tenant. A student, guardian, staff member and all their
+records MUST belong to exactly one tenant, transitively through their school.
+
+2.2 Core Tenancy Entities
+
+Entity               Key attributes                                              Notes
+tenant
+school               id (uuid, pk), name, slug, status, plan_id, billing_email,  Root of the hierarchy. status
+campus               country, default_currency, default_timezone,                 {trial, active, past_due,
+                     created_at, suspended_at, trial_ends_at                     suspended, offboarding,
+                                                                                 closed}
+
+                     id (pk), tenant_id (fk, indexed), name, code, level_scope, One tenant may have many
+
+                     address, created_at                                         schools
+
+                     id (pk), tenant_id, school_id, name, address, is_main       Preserves the useful "one
+                                                                                 school, many campuses"
+                                                                                 model from v1.0 beneath the
+                                                                                 tenant layer
+
+tenant_user          id (pk), tenant_id, user_id, is_platform_user (bool,        Distinguishes platform staff
+                     default false)                                              acting with tenant access from
+                                                                                 that tenant's own staff
+
+tenant_subscription  id (pk), tenant_id, plan_id, seats_or_students_licensed,    Drives Chapter 5
+                     billing_cycle, status, current_period_start/end
+
+2.3 Cross-Tenant Prohibition
+
+TEN-012: No relationship of any kind MAY exist between records belonging to different tenants, with the
+sole exception of platform-role access captured under Chapter 3 and explicitly audited under TEN-030.
+
+TEN-013: A user account MUST belong to exactly one tenant, except platform staff accounts, which belong
+to none and are granted temporary, audited, per-tenant access as described in Chapter 3.
+
+                                          Page 10 of 71
+                                                              PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 3 -- Platform Roles & Access
+
+Version 1.0 defined roles only from the perspective of a single school (Proprietor, Headmaster, Accountant,
+Teacher, Parent, Student, ICT Officer). None of those roles can operate the platform itself. This chapter adds
+the roles required to run PBSMS as a business.
+
+3.1 Platform Roles
+
+Role                   Purpose                                Access model
+Platform Super Admin
+                       Full platform operation: tenant        Break-glass access only; MFA mandatory;
+                       lifecycle, plan configuration, global  every action audited
+                       monitoring
+
+Support Engineer       Diagnose and resolve tenant-reported   Time-boxed, ticket-linked impersonation
+                       issues                                 of a tenant's admin view; explicit tenant
+                                                              consent captured where feasible; full
+                                                              session recording and audit
+
+Billing Administrator  Manage subscriptions, invoicing of     Access to tenant_subscription and
+                       tenants, dunning                       payment records for platform billing only
+                                                              -- no access to a tenant's own
+                                                              student/parent financial records
+
+Onboarding Specialist  Set up new tenants, run seed data      Write access limited to a tenant during its
+                       and initial configuration              onboarding window (TEN-023), auto-
+                                                              revoked on go-live
+
+TEN-020: Platform roles MUST NOT be assignable to any user who is also a member of a tenant, to avoid a
+support engineer using their own school's account to gain elevated privilege over other tenants.
+
+TEN-021: Impersonation of a tenant user by a Support Engineer MUST require a linked support ticket, MUST
+be time-boxed to a maximum of 2 hours per grant, MUST be visible to the tenant's own administrators in
+their audit log in real time, and MUST NOT permit financial reversal, data export, or permission changes
+without a second platform approver (four-eyes).
+
+TEN-022: All platform-role actions against a tenant MUST be written to both the platform audit log and that
+tenant's own audit log, so a tenant administrator can always see what platform staff did in their account.
+
+3.2 School-Level Roles (retained from v1.0, unchanged in substance)
+
+     Proprietor / School Director -- owns the tenant relationship; sees consolidated reporting across all
+         schools in the tenant.
+
+     School Administrator, Headmaster, Assistant Headmaster
+     Academic Coordinator, Examination Officer
+     Admission Officer
+     Accountant / Bursar
+     Class, Subject, Nursery and Kindergarten Teachers
+     Librarian, Health Officer, Storekeeper, Transport Officer
+     Parent / Guardian, Student
+     School ICT Officer -- manages that tenant's own configuration; has no visibility into other tenants
+
+         and no platform role.
+
+                       Page 11 of 71
+                                                                  PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 4 -- Tenant Lifecycle
+
+4.1 Lifecycle States
+
+Trial  Onboarding  Active  Past Due  Suspended  Offboarding  Closed. A tenant record MUST
+always be in exactly one of these states, and every transition MUST be audited with actor, reason and
+timestamp.
+
+State        Meaning                               Data access
+
+Trial        Self-serve or sales-assisted signup,  Full read/write, capped seat/student count,
+             time-limited                          watermarked report cards
+
+Onboarding   Sales-confirmed conversion, guided    Full read/write; Onboarding Specialist has scoped
+             setup running                         write access
+
+Active       Paying, in good standing              Full read/write per subscription plan limits
+
+Past Due     Payment failed or overdue, within     Full read/write continues; billing warnings shown
+             grace period                          to Proprietor/Administrator roles only
+
+Suspended    Grace period expired                  Read-only for guardians/students (published
+                                                   results, invoices, receipts remain visible); write
+                                                   access blocked for staff; data is not deleted
+
+Offboarding  Tenant has requested closure or been  Full data export made available; countdown to
+             closed for non-payment beyond policy  permanent deletion begins
+             limit
+
+Closed       Retention period elapsed              Data permanently deleted per Chapter 40
+                                                   retention schedule, except where law requires
+                                                   longer retention
+
+TEN-023: A trial tenant MUST convert to Onboarding only after a plan is selected and a billing method is
+confirmed (or an approved free-tier exception is recorded).
+
+TEN-024: Suspension for non-payment MUST NOT remove or hide previously published academic results,
+issued receipts, or historical records from parents and students -- a family's access to their own child's
+history is not leverage for collecting an unrelated invoice.
+
+TEN-025: A tenant MUST be able to request a full, machine-readable export of all of its data at any time
+while Active, Past Due or Suspended, and MUST automatically receive one at the start of Offboarding.
+
+TEN-026: Permanent deletion at the end of Offboarding MUST follow the retention schedule in Chapter 40
+-- financial and academic records subject to statutory retention are archived in cold storage rather than
+deleted outright, with access restricted to compliance and legal requests only.
+
+4.2 Onboarding & Seeding
+
+FR-ONB-010: The system MUST provide a guided onboarding wizard that creates, for a new tenant, a default
+academic-year structure, a starter grading scale appropriate to the selected divisions, default fee categories,
+default report-card and receipt templates, and a starter set of KPIs -- so that a new school is operable within
+one working day rather than after weeks of blank-slate configuration.
+
+FR-ONB-020: Onboarding MUST support bulk import of an existing student, guardian and staff roster from
+CSV/Excel with dry-run validation, duplicate detection and a human approval step before commit, reusing
+the same import pipeline used for later ad hoc imports (see Chapter 30).
+
+                                                   Page 12 of 71
+                                                                  PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 5 -- Subscription, Billing & Metering
+
+This chapter is new in Version 2.0 and did not exist in Version 1.0 in any form. It specifies how PBSMS, the
+company, is paid by schools -- distinct from Chapter 24, which specifies how a school bills its own parents.
+
+5.1 Plan Tiers (starting point -- confirm pricing with the business before build)
+
+Tier          Target customer             Indicative basis        Illustrative limits
+
+Starter       Single small school, under  Flat monthly fee        1 school, 1 campus, core
+              ~150 students                                       modules, email support
+
+Standard      Typical single school       Per-active-student per  Unlimited campuses for that
+                                          term                    school, WhatsApp/SMS credits
+                                                                  included up to a threshold,
+                                                                  priority support
+
+Group         Proprietor with 2+ schools  Per-active-student per  Multi-school roll-up dashboards,
+                                          term, volume discount   consolidated billing, dedicated
+                                                                  onboarding
+
+Enterprise /  Large groups, regulatory    Custom                  Dedicated-database isolation tier
+Dedicated     need                                                (TEN-002), custom SLA, custom
+                                                                  integrations
+
+TEN-030: An active student is defined as a student with at least one active enrolment in the current term.
+Suspended, withdrawn, graduated and archived students MUST NOT count toward metered usage.
+
+TEN-031: The platform MUST meter active-student counts per tenant per billing period automatically from
+enrolment data, and MUST make the current count and the resulting projected bill visible to the tenant's
+Proprietor/Administrator role at any time -- no surprise invoices.
+
+5.2 Billing Operations
+
+     FR-BIL-010: Generate a platform invoice per tenant per billing cycle from metered usage and plan
+         terms.
+
+     FR-BIL-020: Support monthly and termly billing cycles, aligned to the Ghanaian three-term academic
+         calendar as an option.
+
+     FR-BIL-030: Accept platform-invoice payment via the same Ghanaian payment rails used for parent
+         billing (Chapter 24), plus bank transfer and card.
+
+     FR-BIL-040: Run configurable dunning on payment failure -- reminder, grace period, Past Due state,
+         then Suspended per Chapter 4 -- with every step notified to the Proprietor by email and WhatsApp.
+
+     FR-BIL-050: Produce a platform revenue report (MRR, churn, expansion, tenant-level ARPU) for
+         internal PBSMS use only, isolated from all tenant data views.
+
+                                          Page 13 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 6 -- Tenant-Scoped Non-Functional Architecture
+
+Every non-functional concern in Version 1.0 (caching, backup, monitoring, rate limiting) was specified at the
+level of one school. This chapter restates those concerns with the tenant as the unit of measurement, and is
+the contract that Chapters 37­38 build on.
+
+6.1 Caching
+
+TEN-040: Every cache key MUST begin with tenant_id. No cache MAY be shared across tenants under any
+circumstance, including "reference data" caches -- a shared curriculum template cache, for example, is
+namespaced per tenant even if its content is momentarily identical across tenants, so a later per-tenant
+customization cannot leak.
+
+6.2 Quotas & Noisy-Neighbour Protection
+
+     NFR-PERF-010: Each tenant MUST be subject to a request-rate limit and a background-job fair-share
+         quota so that one tenant's peak load (for example, an entire school entering scores at the Third
+         Term deadline) cannot degrade response times for other tenants.
+
+     NFR-PERF-011: Bulk operations (report-card batch generation, bulk import, mass notification send)
+         MUST run on a dedicated worker pool, separate from interactive request-serving capacity.
+
+6.3 Observability
+
+TEN-041: Every log line, metric and trace MUST carry tenant_id. Dashboards MUST support both a per-
+tenant view (for support) and an aggregate platform view (for operations), and MUST NOT allow a platform
+dashboard query to return the content of tenant-owned records -- only counts, timings and health
+indicators.
+
+6.4 Backup & Restore
+
+TEN-042: Backup MUST be taken at the whole-platform level for efficiency, but restore MUST support a per-
+tenant point-in-time recovery path that does not require restoring or touching any other tenant's current
+data. This is specified in full in Chapter 39.
+
+                                                                                   Page 14 of 71
+                                                                  PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+                   --
+
+         VOLUME I
+
+Enterprise Foundation -- Chapters 7­14
+
+                            Page 15 of 71
+                                                       PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 7 -- Introduction & Business Context
+
+7.1 Background
+
+Basic schools typically maintain admissions, attendance, grading, finance and communication as separate,
+disconnected records. PBSMS replaces this fragmentation with one integrated platform per school, delivered
+as a shared, multi-tenant service so that the cost of a professional system is achievable for a single
+proprietor-owned basic school, not only for large institutions.
+
+7.2 Business Context
+
+A school manages people, learning, money, documents, communication, facilities and institutional
+accountability. PBSMS treats these as connected business domains supported by a common security, data
+and reporting foundation, delivered multi-tenant so each school's domains stay logically whole while the
+underlying platform is shared.
+
+7.3 Business Drivers
+
+     Operational efficiency
+     Academic quality
+     Financial accountability
+     Institutional governance
+     Parent communication
+     Data integrity and retention
+     Platform sustainability (Version 2.0 addition): the product must be commercially viable to operate as
+
+         a multi-tenant service
+
+7.4 In-Scope Education Levels
+
+     Nursery 1 and Nursery 2
+     Kindergarten 1 and Kindergarten 2
+     Basic 1 through Basic 6
+     JHS 1 through JHS 3
+
+7.5 Out of Scope
+
+     Senior High School administration
+     University, college or tertiary structures
+     Semesters, credit hours, GPA or CGPA
+     Lecturers, faculties and degree programmes
+
+7.6 Configurable Regional Defaults
+
+The Ghana defaults (GHS currency, Africa/Accra time zone, three-term calendar) remain the shipped default,
+but are now explicitly per-tenant configuration values (TEN-010 hierarchy), enabling future expansion to
+other West African markets without a code change.
+
+                                        Page 16 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 8 -- Business Requirements
+
+8.1 Primary Goal
+
+Provide one integrated, secure, multi-tenant platform for the academic, administrative, operational and
+financial management of Nursery-to-JHS schools, operable as a sustainable software business.
+
+8.2 Strategic Requirements
+
+     BR-001: Maintain one authoritative source of institutional data per tenant.
+     BR-002: Reduce manual workload through safe automation.
+     BR-003: Provide timely, role-appropriate decision information.
+     BR-004: Support transparent, reconcilable finance operations, both school-to-parent and platform-
+
+         to-school.
+     BR-005: Improve communication with staff and guardians on the channels they actually use.
+     BR-006: Enforce accountability through permissions, workflows and audit trails, including platform-
+
+         staff access to tenant data.
+     BR-007: Preserve historical records and published versions indefinitely, subject to the retention
+
+         schedule.
+     BR-008: Support configurable policies without source-code changes, at the tenant level.
+     BR-009: Monitor responsibilities using measurable KPIs, at both school and platform level.
+     BR-010: Scale horizontally across tenants without architectural redesign (Version 1.0's BR-010 said
+
+         "scale" with no tenancy model behind it; Volume 0 is that model).
+     BR-011 (new): Onboard a new school tenant to a usable state within one working day.
+     BR-012 (new): Guarantee that no tenant can access, infer, or receive another tenant's data under
+
+         any product surface, including support tooling.
+     BR-013 (new): Operate the platform profitably at a per-student price point affordable to a
+
+         proprietor-owned basic school in Ghana.
+
+8.3 Success Measures
+
+Success is measured by: preserved legacy data during any tenant migration, reduced duplicate entry,
+complete permission and tenant-isolation enforcement, faster processing, reconciled finance at both school
+and platform level, timely reporting, traceable approvals, successful multi-channel message delivery, and
+time-to-value for a newly onboarded tenant.
+
+                                                                                   Page 17 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 9 -- Enterprise Design Principles
+
+     9.1 Tenant Isolation by Default (new): every design decision defaults to isolated; sharing across
+         tenants requires an explicit, reviewed exception.
+
+     9.2 Single Source of Truth: each business entity has one authoritative owner within its tenant; other
+         modules consume its data through controlled services.
+
+     9.3 Modular Independence: modules own their business responsibility and evolve without direct
+         manipulation of another module's internal data.
+
+     9.4 Configuration Before Customization: calendars, class levels, subjects, grading, assessments, fees,
+         reports, branding and workflows are configured per tenant in the application, never hard-coded.
+
+     9.5 Security by Design: authentication, server-side authorization, tenant and record scope, auditing
+         and sensitive-data controls apply to every protected operation.
+
+     9.6 Automation with Oversight: routine calculations, reminders, schedules and document generation
+         are automated; admissions, publication, reversals, promotion and elevated access retain approval
+         gates.
+
+     9.7 Historical Preservation: published academic results, payments, receipts, enrolments and audit
+         records are never silently overwritten or deleted.
+
+     9.8 Usability and Accessibility: interfaces are responsive, keyboard-usable, WCAG 2.1 AA conformant
+         (Chapter 42) and consistent across roles.
+
+     9.9 Design for Intermittent Connectivity (new): interfaces assume mobile data constraints and
+         occasional connectivity loss as the normal case for this market, not the exception (Chapter 34).
+
+                                                                                   Page 18 of 71
+                                                                   PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 10 -- Enterprise System Architecture
+
+10.1 Architectural Objectives
+
+     Multi-tenant isolation as a first-class, testable property
+     Modularity and loose coupling
+     Scalability and maintainability across a growing tenant base
+     Reliable automation
+     Secure integrations
+     High availability and recovery readiness
+
+10.2 Logical Layers  Responsibility
+                     Dashboards, forms and reports; per-tenant branding applied at render time
+Layer                Requests, validation, tenant-context resolution and transaction coordination
+Presentation         Institutional rules and workflows, evaluated within tenant scope
+Application/API      Internal APIs, events and external connectors, with per-tenant credential scoping
+Business domain      Repositories, queries, caching and transactions; tenant_id enforced on every query
+Integration          Master, transactional, historical and audit data, with Row-Level Security policies
+Data access
+Database
+
+10.3 Enterprise Domains
+
+     Platform & Tenancy (new -- Volume 0)
+     Foundation Services
+     Student Lifecycle
+     Academic Operations
+     Financial Management (school-to-parent and platform-to-tenant)
+     Operational Intelligence
+     Governance and Compliance
+
+10.4 Communication Rules
+
+Modules communicate through approved services, APIs or events. Direct cross-module table manipulation is
+prohibited. Cross-tenant communication of any kind is prohibited outside the platform-role paths defined in
+Chapter 3.
+
+10.5 Event-Driven Processing
+
+Domain events (Admission Approved, Result Published, Student Promoted, Payment Reversed, Tenant
+Suspended, Subscription Renewed) carry tenant_id as a mandatory field and trigger controlled downstream
+actions scoped to that tenant.
+
+                     Page 19 of 71
+                                             PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 11 -- Master Data & Enterprise Data Architecture
+
+11.1 Master Data Domains
+
+Domain                      Examples                                                 Owner
+Platform master data (new)                                                           Platform
+                            Subscription plans, feature flags, integration provider
+                            registry
+
+Institutional master data   School and campuses, academic years and terms,
+                            divisions and class levels, classes, rooms, calendars and Tenant
+                            holidays
+
+Academic master data        Subjects, assessment types, grading scales, promotion    Tenant
+                            rules, report templates
+
+People & finance reference  Relationships, nationalities, languages, employment      Tenant
+data                        types, fee categories, payment methods, scholarship
+                            types
+
+11.2 Data Classes
+
+     Platform data (new)
+     Master data
+     Transactional data
+     Reference data
+     Generated data
+     Audit and security data
+
+11.3 Ownership Model
+
+A business entity has one owner within its tenant and any number of authorized consumers. Ownership
+controls mutation; permissions control visibility; tenant_id controls the outer boundary that neither
+ownership nor permission may cross.
+
+11.4 Integrity
+
+     Entity integrity through immutable primary identifiers, scoped by tenant_id.
+     Referential integrity through foreign keys, which MUST NOT reference rows in a different tenant.
+     Domain integrity through validation and controlled vocabularies.
+     Business integrity through workflow and policy checks.
+
+11.5 Lifecycle
+
+Records move through controlled states such as Draft, Submitted, Reviewed, Approved, Published, Locked
+and Archived. Every transition is authorized, tenant-scoped and audited.
+
+11.6 Security Classification
+
+Class                       Examples
+Public                      Approved announcements
+Internal                    Timetables and assignments
+Confidential                Student, guardian, results and statements
+Highly Confidential         Medical, biometric, banking data, IDs and credentials
+
+                              Page 20 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+11.7 Sensitive data (medical details, identification numbers, salaries, banking data, biometric templates,
+password material and security settings) requires elevated controls, masking and restricted export, and is in
+scope for the retention and consent rules in Volume V.
+
+                                                                                   Page 21 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 12 -- Enterprise Business Rules Framework
+
+12.1 Tenancy Rules (new)
+
+     No record MAY reference a foreign key belonging to a different tenant.
+     No user session MAY carry more than one active tenant context at a time, except platform roles
+
+         operating under Chapter 3.
+     Suspension of a tenant MUST NOT alter or hide historical published data (TEN-024).
+
+12.2 Institutional Rules
+
+     Only one academic year is normally current per school or campus.
+     Term dates fall within the academic year.
+     Every class belongs to one level and every level to one division.
+     Every offered class subject must have a valid configuration before publication.
+
+12.3 Student Rules
+
+     Student and admission identifiers are unique per tenant and never reused.
+     A student has no more than one active enrolment per academic year unless an explicit exception is
+
+         configured.
+     Transfers preserve academic, attendance, financial, health and discipline history.
+     Student records are archived, not permanently deleted, subject to the retention schedule.
+
+12.4 Attendance, Assessment and Finance Rules (retained from v1.0)
+
+     Only active enrolments appear in registers; one record exists per student, date and configured
+         session.
+
+     Teachers enter scores only for active assignments; submitted and published data is locked until
+         controlled reopening.
+
+     Invoices and receipts have unique numbers, scoped per tenant; payments reference valid obligations
+         and are never deleted; corrections use reversal transactions with approval and reason.
+
+12.5 Reporting Rules
+
+     Reports respect tenant and record scope with least privilege.
+     Schedules include weekly, monthly, termly and yearly cycles, plus group-level roll-ups where the
+
+         tenant contains multiple schools.
+     Failed deliveries retry and escalate.
+
+                                                                                   Page 22 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 13 -- Roles, Responsibility, Authority & Scope
+
+Platform roles are specified in Chapter 3. This chapter restates and retains the school-level model from
+Version 1.0, which was already sound.
+
+13.1 Model
+
+PBSMS separates roles (institutional identity), responsibilities (expected work), permissions (allowed actions)
+and authority (approval power), all evaluated within a resolved tenant context.
+
+13.2 Permission Actions
+
+     View
+     Create
+     Edit
+     Submit
+     Review
+     Return
+     Approve
+     Reject
+     Publish
+     Reopen
+     Reverse
+     Export
+     Print
+     Configure
+     Archive
+     Restore
+     View audit history
+
+13.3 Scope Hierarchy
+
+Tenant  School  Campus  Department  Division  Class level  Class  Subject  Assigned
+students  Linked children  Record ownership. Tenant is the new outermost scope added in Version 2.0;
+every scope below it is meaningless without it.
+
+13.4 Delegation & Conflict of Interest
+
+Temporary authority includes delegator, recipient, exact functions, start, end and automatic expiry;
+delegation is visible and audited. Workflows identify when one user holds overlapping roles and prevent
+required independent review from being silently bypassed.
+
+                                                                                   Page 23 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 14 -- Operational Intelligence Framework
+
+14.1 Components
+
+     KPI Engine
+     Reporting Engine
+     Scheduler
+     Email/SMS/WhatsApp Service
+     Notification Engine
+     Action Tracker
+     Escalation Engine
+     Executive Dashboards
+     Group/Multi-School Roll-Up (new)
+
+14.2 KPI Definition
+
+Each KPI carries code, name, responsible role, data source and formula, target and weight, warning and
+critical thresholds, reporting frequency, supervisor, status, and tenant scope.
+
+14.3 Group Roll-Up (new capability)
+
+FR-ANL-010: Where a tenant contains more than one school, the Proprietor/Director role MUST see a
+consolidated dashboard comparing collections, attendance, academic performance and outstanding actions
+across all schools in the tenant, in addition to each school's own dashboard. This directly addresses a
+capability Version 1.0 could not offer because it had no concept of a tenant above a single school.
+
+14.4 AI Readiness
+
+Future AI features may summarize trends, draft report-card remarks, and flag at-risk students or unusual
+attendance patterns, but official academic and financial decisions remain with authorized human personnel
+at all times.
+
+                                                                                   Page 24 of 71
+                                                                          PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+                       --
+
+            VOLUME II
+
+Academic & Student Lifecycle -- Chapters 15­22
+
+                                   Page 25 of 71
+                                     PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 15 -- Admissions Management
+
+15.1 Purpose
+
+Admissions controls the applicant lifecycle, within one tenant, before any permanent student record is
+created.
+
+15.2 States
+
+Draft  Submitted  Under Review  Documents Incomplete  Interview/Assessment Scheduled 
+Waitlisted  Approved / Rejected  Admitted  Cancelled.
+
+15.3 Requirements
+
+     FR-ADM-010: Capture applicant identity, photo, birth/nationality/language/address, previous school,
+         guardian and emergency contacts, medical and learning-support information, supporting documents,
+         and interview/entrance-assessment outcomes.
+
+     FR-ADM-020: Detect potential duplicates using configurable combinations of name, birth date,
+         guardian contact and prior school; matches are surfaced for review, never auto-discarded.
+
+     FR-ADM-030: Perform approval-to-student conversion as one atomic transaction -- student,
+         guardian relationships and enrolment are created together or not at all.
+
+     FR-ADM-040: Assign the tenant-scoped admission number at conversion, never before, and never
+         reuse a number.
+
+     FR-ADM-050: Provide applications-received, processing-time, conversion-rate and pending-
+         interview/document KPIs, scoped per school and rolled up per tenant.
+
+Page 26 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 16 -- Student Lifecycle Management
+
+16.1 Central Record
+
+One permanent student profile, scoped to its tenant, connects admissions, guardians, enrolments,
+attendance, academics, finance, health, discipline, documents, promotion and JHS completion.
+
+16.2 Requirements
+
+     FR-STU-010: Maintain a permanent identifier separate from admission number and from yearly
+         enrolment.
+
+     FR-STU-020: Support multiple guardians per student and multiple students per guardian, with
+         relationship-level flags for primary contact, emergency, pickup, finance and report access.
+
+     FR-STU-030: Support class, campus, inbound and outbound transfers with effective dates, reasons,
+         documents and approval, preserving full history. Inter-tenant transfer (a student leaving one PBSMS-
+         hosted school for another) MUST be modelled as export-then-new-admission, never as a direct
+         cross-tenant record move.
+
+     FR-STU-040: Restrict health information beyond general student data; support discipline
+         investigation, response, guardian contact, follow-up, appeal and positive-behaviour recording.
+
+     FR-STU-050: Record every significant student event chronologically with timestamp, actor, module,
+         description and related evidence (student timeline).
+
+     FR-STU-060: Guardians see only linked learners, and only published or explicitly authorized academic,
+         attendance, financial and communication records, enforced identically whether accessed via web or
+         the parent mobile experience (Chapter 34).
+
+                                                                                   Page 27 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 17 -- Academic Management
+
+17.1 Academic Hierarchy
+
+Tenant  School  Campus  Academic Year  Term  Division  Class Level  Class/Section  Class
+Subjects  Teacher Assignments.
+
+17.2 Requirements
+
+     FR-ACA-010: Default progression Nursery 1  Nursery 2  KG 1  KG 2  Basic 1­6  JHS 1­3 
+         Completed Basic Education, configurable per tenant.
+
+     FR-ACA-020: Academic years and terms use Planned, Active/Open, Closed and Archived states;
+         score-entry, review, approval and publication windows are separately configurable per term.
+
+     FR-ACA-030: Subjects vary by division and class level; Nursery/KG may use developmental learning
+         areas, Primary/JHS use configurable subject structures, with an optional NaCCA strand/sub-strand
+         mapping (Chapter 41).
+
+     FR-ACA-040: Detect teacher, class and room conflicts before a timetable can be published; provide
+         class, teacher and room views.
+
+     FR-ACA-050: Provide teacher-workload, unassigned-subject, timetable-compliance, academic-
+         progress, curriculum-coverage and promotion-readiness reports.
+
+                                                                                   Page 28 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 18 -- Attendance Management
+
+18.1 Scope
+
+Attendance covers students, teachers and non-teaching staff, feeding communication, promotion and
+performance monitoring.
+
+18.2 Offline-First Requirement (new -- closes a Version 1.0 gap)
+
+FR-ATT-010: Attendance capture on a teacher's device MUST function without an active internet connection,
+queueing entries locally and synchronizing automatically once connectivity returns, per the offline/sync
+protocol defined in Chapter 34. This is treated as a release-blocking requirement, not an enhancement,
+because intermittent connectivity is the normal operating condition for many basic schools in this market,
+and a register a teacher cannot mark is a register that does not get marked.
+FR-ATT-011: Conflicting attendance entries created offline by the same user across devices are resolved last-
+write-wins by device timestamp; entries created by different users for the same student/date/session are
+surfaced for manual reconciliation rather than silently overwritten.
+
+18.3 Other Requirements
+
+     FR-ATT-020: Statuses: Present, Absent, Late, Excused, Sick, Suspended, Official Activity.
+     FR-ATT-030: Corrections after the submission window require permission and a reason, retaining
+
+         both original and corrected values.
+     FR-ATT-040: Repeated absence, low attendance and missing teacher submissions generate
+
+         notifications, KPI updates and escalation when unresolved.
+     FR-ATT-050: Provide daily registers, weekly trends, monthly summaries, term promotion-eligibility
+
+         and yearly institutional attendance analysis.
+
+                                                                                   Page 29 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 19 -- Assessment Management
+
+19.1 Requirements
+
+     FR-ASM-010: Support configurable assessment types (class exercise, homework, project, mid-term,
+         end-of-term exam) with weighting that sums to a valid total before publication is permitted.
+
+     FR-ASM-020: Restrict score entry to teachers with an active assignment for that class subject in the
+         current term.
+
+     FR-ASM-030: Enforce configured score bounds; require a status or reason for missing scores.
+     FR-ASM-040: Lock submitted and published assessment data until a controlled, audited reopening.
+     FR-ASM-050: Support an optional NaCCA competency/sub-strand tagging on assessment items for
+
+         schools that opt into curriculum-aligned reporting (Chapter 41).
+
+                                                                                   Page 30 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 20 -- Enterprise Grading Engine
+
+20.1 Requirements
+
+     FR-GRA-010: Interpret approved assessment data using a versioned grading policy; the engine never
+         collects scores directly.
+
+     FR-GRA-020: Support developmental grading for Nursery/KG, numerical grading for Primary/JHS,
+         and a competency-based model aligned to NaCCA for schools that opt in, without altering historical
+         outcomes graded under a prior model.
+
+     FR-GRA-030: Each scale item has minimum, maximum, grade, optional point, remark and pass/fail
+         status; ranges MUST NOT overlap or leave unintended gaps.
+
+     FR-GRA-040: Processing pipeline: approved scores  totals  percentage  policy lookup  grade
+          remark  aggregate calculations  result candidate.
+
+     FR-GRA-050: Ranking is disabled by default where developmentally unsuitable (Nursery/KG) and
+         configurable for Primary/JHS, with competition, dense and none modes and explicit tie rules.
+
+     FR-GRA-060: Undefined scales, incomplete components and invalid weights stop processing and
+         create actionable errors rather than silent defaults.
+
+     FR-GRA-070: Every published outcome retains the exact grading-policy version used, permanently.
+
+                                                                                   Page 31 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 21 -- Results Management Engine
+
+21.1 Workflow
+
+Subject Teacher  Class Teacher  optional Academic Coordinator/Examination Officer  Headmaster 
+authorized publication.
+
+21.2 Requirements
+
+     FR-RES-010: States: Draft, Submitted, Returned, Corrected, Reviewed, Approved, Published, Locked,
+         Archived.
+
+     FR-RES-020: Publication requires all configured approvals complete, required subjects resolved or
+         formally exempted, term/publication windows valid, an applicable report template available, and no
+         unresolved validation errors.
+
+     FR-RES-030: Published results are never overwritten; reopening requires reason and authority;
+         recalculation creates a new version while preserving the previous publication.
+
+     FR-RES-040: Teachers see assigned records, managers see their authorized scope, guardians see
+         linked learners, students see only their own published results.
+
+     FR-RES-050: Provide student-trend, class-average/pass-rate, subject-performance, division-
+         comparison and promotion-readiness analytics, with an optional BECE-format mock-exam analytics
+         view for JHS (Chapter 41).
+
+                                                                                   Page 32 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 22 -- Document Engine & Promotion / Completion
+
+22.1 Document Engine
+
+     FR-DOC-010: Generate report cards, transcripts, admission letters and completion certificates from
+         approved, versioned data -- never from live/unapproved records.
+
+     FR-DOC-020: Every generated official document carries a unique, tenant-scoped reference and a
+         digitally verifiable signature or QR code allowing a third party (e.g., a receiving SHS) to confirm
+         authenticity without contacting the school directly.
+
+     FR-DOC-030: Documents are branded per tenant (Chapter 6, Volume 0) using that tenant's
+         configured letterhead, logo and signatory.
+
+22.2 Promotion & JHS Completion
+
+     FR-PRO-010: Convert approved annual academic evidence into controlled progression decisions:
+         promotion, repetition, conditional promotion, pending, transfer, or completion of Basic Education
+         after JHS 3, without overwriting historical enrolments.
+
+     FR-PRO-020: Apply configurable promotion policies by division and class level; separate system
+         recommendations from authorized human decisions.
+
+     FR-PRO-030: Create the next academic-year enrolment only after approval, closing the prior
+         enrolment rather than mutating it.
+
+                                                                                   Page 33 of 71
+                                                                                  PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+                            --
+
+                VOLUME III
+
+Finance, Communication & Operations -- Chapters 23­28
+
+                                            Page 34 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 23 -- Enterprise Financial Management & Fee Structures
+
+This chapter governs school-to-parent finance. Platform-to-school (subscription) finance is specified in
+Chapter 5 and is architecturally and data-model separate -- a school's parent-facing ledger MUST NOT share
+tables with the tenant's own platform subscription ledger, even though both may appear in one PBSMS
+account for the Proprietor.
+
+23.1 Core Principles (retained from v1.0)
+
+     Posted transactions are never silently edited or deleted.
+     Every balance is derived from valid transactions.
+     Receipt and invoice numbers are unique per tenant.
+     Sensitive actions require reasons and, where configured, approval.
+     Financial reports reconcile to source records.
+     Access is restricted by tenant, school, campus and role.
+
+23.2 Fee Structures
+
+     FR-FEE-010: Fee structures are configurable by academic year, term, campus, division, class level and
+         student category.
+
+     FR-FEE-020: Instalment plans define sequence, amount or percentage and due date; the sum MUST
+         equal the total charge.
+
+     FR-FEE-030: Support full, daily, monthly or percentage proration for late entry or transfer.
+     FR-FEE-040: Penalty rules specify trigger, grace period, fixed or percentage amount, cap and
+
+         frequency, tracked separately from the base charge.
+
+                                                                                   Page 35 of 71
+                                                               PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 24 -- Invoicing, Payments, Allocation & Receipts
+
+24.1 Financial Record Model (retained -- this was correct in v1.0)
+
+Student obligations are represented by invoices and items. Payments remain independent receipts of value
+and connect to obligations through allocations. Assistance and adjustments are explicit transactions,
+enabling a complete explanation of every balance.
+
+24.2 Named Payment Integrations (new -- Version 1.0 left this generic)
+
+FR-PAY-010: The platform MUST integrate with the following payment rails at launch, each behind the
+common provider-adapter contract (Chapter 36):
+
+Provider                  Rail                       Notes
+
+Paystack Ghana            Card, bank, mobile money Primary recommended aggregator for breadth of
+
+                          aggregation                coverage
+
+Hubtel                    Mobile money aggregation,  Strong Ghana mobile money reach
+                          USSD
+
+MTN Mobile Money (direct) Mobile money               Largest single mobile money network in Ghana
+
+Telecel Cash (formerly    Mobile money               Second major network
+Vodafone Cash)
+
+Manual/offline reference                                        Cashier-entered with reference and
+                          Cash, bank transfer, cheque reconciliation, for schools/parents without digital
+
+                                                                rails
+
+FR-PAY-020: PBSMS creates an internal payment reference before any provider call; provider callbacks are
+validated for provider identity, signature, timestamp, replay, reference, amount, currency and event ID;
+duplicate delivery is idempotent; provider status maps to a controlled internal state machine; settlement,
+including provider fees, is reconciled against internal records.
+
+FR-PAY-030: Every payment integration credential is stored per tenant, never shared across tenants, and is
+rotatable independently per tenant (TEN and SEC chapters).
+
+24.3 Requirements
+
+     FR-PAY-040: Invoice generation, payment capture, verification, allocation, reversal approval,
+         assistance approval, reconciliation, period close and report export are distinguishable, separately
+         permissioned actions; schools MAY enforce maker-checker controls.
+
+     FR-PAY-050: Every posting records actor, source, time, amount, currency, related student, method
+         and reference; multi-record operations use database transactions and idempotency protections.
+
+24.4 Acceptance Criteria
+
+     No duplicate invoice or receipt numbers within a tenant.
+     Balances recalculate correctly after each transaction.
+     Reversals preserve original records.
+     Reports reconcile by period and method, including provider fees.
+     Unauthorized cross-campus or cross-tenant access is rejected.
+     Retrying a financial request does not double-post.
+
+                                        Page 36 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 25 -- Financial Assistance, Reversals & Reconciliation
+
+25.1 Requirements
+
+     FR-FIN-010: Support scholarships, discounts, waivers and sponsor-funded credit as explicit
+         transaction types, each requiring a reason and, above a configurable threshold, a second approver.
+
+     FR-FIN-020: Reversals preserve the original transaction and create a linked, dated correcting entry;
+         nothing is edited in place.
+
+     FR-FIN-030: Reconciliation proves that system transactions agree with cash, bank, mobile money and
+         payment-provider evidence, including mobile-money settlement reconciliation as its own checked
+         category.
+
+     FR-FIN-040: Provide dashboards for today's collections, unverified transactions,
+         outstanding/overdue balances, collection target vs. actual, unallocated credits, pending
+         reversals/assistance, reconciliation differences and failed deliveries -- per school, rolled up per
+         tenant.
+
+                                                                                   Page 37 of 71
+                                                   PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 26 -- Communication & Notification Centre
+
+Version 1.0 was email-first with SMS "where enabled" and no WhatsApp at all. In this market that ordering is
+backwards. Version 2.0 reorders the channel priority to match how Ghanaian parents actually communicate.
+
+26.1 Channel Priority (new)  Use                                            Notes
+
+Priority Channel
+
+1  WhatsApp Business API     Primary channel for most notifications:        Highest open rate for
+                             attendance alerts, invoice/receipt, results-   this audience;
+                             published notice, general announcements        supports rich media
+                                                                            (PDF report cards,
+                                                                            receipts) and
+                                                                            delivery/read
+                                                                            receipts
+
+2  SMS                       Short, urgent notices; fallback when           Delivery-report
+                             WhatsApp is undeliverable or the guardian      handling, sender-ID
+                             has no smartphone                              registration and per-
+                                                                            message cost
+                                                                            tracking required
+                                                                            (FR-COM-030)
+
+3  Email                     Detailed statements, formal documents, staff-  Retained as the
+                             to-staff communication                         channel of record for
+                                                                            anything requiring a
+                                                                            durable, searchable
+                                                                            copy
+
+4  In-app / push             Future mobile application notifications        Device registration
+                                                                            required; specified as
+                                                                            future scope, not v1
+
+26.2 Requirements
+
+     FR-COM-010: Integrate with the WhatsApp Business API (Meta-approved Business Solution Provider)
+         supporting template messages, media attachments and delivery/read status, scoped per tenant with
+         its own registered sender.
+
+     FR-COM-020: Templates carry subject, body, variables, channel, language, sensitivity level and
+         version; a preview validates variable substitution before send.
+
+     FR-COM-030: SMS integration uses a named Ghanaian SMS aggregator with registered sender ID,
+         tracks delivery reports, bounce and failure, and enforces a configurable per-tenant monthly cost
+         threshold with alerting before it is exceeded.
+
+     FR-COM-040: Reports are role-scoped, sent by schedule, optionally attach safe PDFs, use
+         authenticated links for sensitive detail, record delivery state per channel and retry failures with
+         channel fallback (WhatsApp  SMS  email) where the message is urgent and the first channel fails.
+
+     FR-COM-050: Respect communication preferences, guardian relationships, consent (Chapter 40) and
+         cost controls; children's, medical and discipline-related communication use stricter minimization and
+         channel restriction.
+
+     FR-COM-060: Recipients can acknowledge reports, comment, be assigned as owners, set deadlines,
+         attach evidence, and complete or reopen actions; overdue items escalate through configurable
+         supervision levels.
+
+                                  Page 38 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 27 -- Academic & Operational Analytics
+
+This chapter consolidates Version 1.0's academic analytics with the new group/multi-school roll-up capability
+enabled by Volume 0.
+
+27.1 Requirements
+
+     FR-ANL-020: Provide term-over-term and year-over-year trend analysis at student, class, subject,
+         division and school level.
+
+     FR-ANL-030: Provide a tenant-level roll-up (Chapter 14.3) for proprietors operating more than one
+         school.
+
+     FR-ANL-040: Support configurable, auditable AI-assisted summarization of trends and draft
+         recommendations (Chapter 14.4), always presented as a draft requiring human approval before any
+         action is taken on it.
+
+                                                                                   Page 39 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 28 -- Supporting Operations
+
+28.1 Requirements
+
+     FR-OPS-010: Library -- catalogue, circulation (issue/return/renew/fine), member linkage to
+         student/staff records.
+
+     FR-OPS-020: Transport -- route and stop management, vehicle and driver records, student-route
+         assignment, optional GPS-based arrival notification integration.
+
+     FR-OPS-030: Health -- restricted-access medical records, incident logging, medication administration
+         log, guardian notification for incidents.
+
+     FR-OPS-040: Discipline -- incident recording, investigation, response, guardian contact, follow-up,
+         appeal, and positive-behaviour recognition, all tenant- and record-scoped per Chapter 13.
+
+     FR-OPS-050: Inventory -- asset register, stock levels, issuance tracking, low-stock alerts feeding the
+         notification engine.
+
+                                                                                   Page 40 of 71
+                                                                   PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+                    --
+
+         VOLUME IV
+
+Technical Architecture -- Chapters 29­38
+
+                             Page 41 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 29 -- Technology Stack & Layered Architecture
+
+Version 1.0 deliberately avoided naming a stack, framing PBSMS purely as an upgrade of "the existing
+Premium Grading System." That system does not exist -- PBSMS is confirmed as a greenfield build. This
+chapter's stack is therefore ADOPTED, not conditional: there is no legacy codebase to inspect, preserve, or
+migrate onto it, and Chapter 44's Phase 0 proceeds directly to building on this stack rather than auditing a
+prior system first.
+
+29.1 Recommended Stack
+
+Layer               Recommendation                               Rationale
+Backend framework
+                    Node.js with NestJS (TypeScript), or         Strong typing, mature ecosystem, easy to hire
+                    Laravel (PHP) as a well-supported            for in Ghana; NestJS's module system maps
+                    alternative                                  cleanly onto Chapter 10's domain boundaries
+
+Database            PostgreSQL 15+                               Native Row-Level Security (TEN-001), strong
+                                                                 JSON support for flexible configuration,
+                                                                 mature and inexpensive to operate
+
+Cache & queues      Redis                                        Session cache, rate limiting (NFR-PERF-010),
+                                                                 and background job queue backing store
+
+Frontend            Next.js (React) as a server-rendered,        Enables the offline-first requirement (FR-ATT-
+                    installable PWA                              010) and fast initial load on constrained
+                                                                 mobile data
+
+File storage        S3-compatible object storage                 Portable across cloud providers; supports
+                                                                 signed URLs for private document access
+
+Background workers  Dedicated worker processes consuming         Required for the bulk-operation isolation in
+                    the Redis-backed queue, separate             NFR-PERF-011
+                    deployable from the API
+
+Hosting             Cloud provider with an Africa- or            Latency to Ghana-based users and payment-
+                    Europe-proximate region; static assets       provider webhook endpoints
+                    via CDN
+
+29.2 Layered Architecture
+
+Presentation  Application/API  Domain  Data Access  Infrastructure, as defined in Chapter 10.2,
+implemented respectively as: Next.js frontend  NestJS controllers/DTOs  NestJS domain services and
+policy classes  repository layer using an ORM with mandatory tenant-scoping middleware 
+PostgreSQL/Redis/S3/mail/queue/monitoring providers.
+
+29.3 Transactions and Idempotency
+
+NFR-API-010: Admission conversion, enrolment, transfer, publication, promotion, invoice generation,
+payment posting, allocation and reversal MUST execute within explicit database transaction boundaries;
+retrying any of these operations MUST NOT duplicate records (enforced via idempotency keys on the
+relevant endpoints).
+
+                                                  Page 42 of 71
+                                                                PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 30 -- Database Architecture, Multi-Tenant Schema & Migration
+
+30.1 Conventions
+
+     Plural snake_case table names; singular foreign-key fields.
+     Every table has an immutable UUID primary key; business numbers (admission no., invoice no.) are
+
+         separate, tenant-scoped identifiers.
+     Date types for dates, timestamps (with time zone, stored UTC) for events, fixed-precision decimal
+
+         types for money -- never floating point.
+     Timestamps stored in UTC, displayed using the tenant's configured time zone.
+
+30.2 Mandatory Common Fields (revised -- no longer "where applicable")
+
+Field                    Rule
+tenant_id
+                         NOT NULL on every tenant-owned table; leading column of relevant indexes;
+                         enforced by an RLS policy on the table
+
+school_id, campus_id     NOT NULL wherever the entity is school/campus-specific; still validated as
+status, effective dates  belonging to the row's own tenant_id
+
+                         Present on every entity with a lifecycle
+
+created_at, created_by,  Present on every table
+updated_at, updated_by
+
+deleted_at, deleted_by,  Present wherever soft deletion is appropriate; hard deletion is prohibited on
+reason                   any table listed in the retention schedule (Chapter 40)
+
+30.3 Row-Level Security
+
+NFR-SEC-010: Every tenant-owned table MUST have RLS enabled with a policy of the form USING (tenant_id
+= current_setting('app.current_tenant')::uuid), applied to SELECT, INSERT, UPDATE and DELETE. Database
+roles used by the application MUST NOT have BYPASSRLS. A migration that adds a new tenant-owned table
+without a corresponding RLS policy MUST fail CI (Chapter 45).
+
+30.4 Integrity
+
+     Foreign keys enforce valid relationships and MUST NOT cross tenant boundaries.
+     Unique constraints are tenant-scoped and prevent duplicate admission, enrolment, attendance,
+
+         score, invoice and receipt records.
+     Indexes support tenant scope, foreign keys, academic period, status, date and reference searches.
+     Protected records use versioning, reversal or archival rather than deletion.
+
+30.5 Migration
+
+Tenant onboarding import and any bulk migration follow: inventory and profile source data  map fields 
+back up  test migration in an isolated environment  validate counts and relationships  reconcile
+academic and finance totals  approve  execute  verify. Every migration documents rollback, and
+imports are always scoped to a single tenant_id, never run across tenants in one batch.
+
+                                                 Page 43 of 71
+                                                              PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 31 -- Entity-Relationship Model & Core Table Definitions
+
+31.1 Core Relationship
+
+Tenant  School  Campus, and independently, Student  Enrolment  academic and operational
+transactions. Student identity remains permanent; enrolment carries class and academic-year context.
+
+31.2 Principal Table Groups
+
+Domain              Examples
+Platform (new)      tenants, tenant_subscriptions, plans, feature_flags, platform_audit_logs
+Identity            users, roles, permissions, user_roles, tenant_users, sessions
+Student             students, guardians, student_guardians, enrolments, transfers
+
+Academic            academic_years, terms, divisions, levels, classes, subjects, teacher_assignments
+Assessment
+Finance (school)    assessment_configurations, assessments, scores, grading_policies, results,
+Finance (platform)  result_versions
+Operations
+                    fee_structures, invoices, invoice_items, payments, allocations, reversals,
+                    reconciliations
+
+                    platform_invoices, platform_payments -- structurally isolated from school finance
+                    tables
+
+                    documents, library_items, transport_routes, health_records, discipline_cases,
+                    inventory_items
+
+Governance          workflows, workflow_instances, notifications, notification_deliveries, reports,
+                    audit_logs, jobs
+
+31.3 Representative Table Definitions
+
+Illustrative, not exhaustive -- the full data dictionary is a build-phase deliverable (Chapter 44) traced back to
+these entities.
+
+Table               Key columns
+
+students            id (uuid pk), tenant_id, school_id, admission_no, first_name, last_name, dob, gender,
+                    status, created_at, updated_at
+
+enrolments          id (pk), tenant_id, student_id (fkstudents), academic_year_id, class_id, status,
+                    start_date, end_date, closed_reason
+
+invoices            id (pk), tenant_id, school_id, student_id, invoice_no (unique per tenant), term_id,
+                    total_amount, currency, status, issued_at
+
+payments            id (pk), tenant_id, school_id, provider, provider_ref (unique per tenant+provider),
+                    amount, currency, status, received_at, idempotency_key
+
+allocations         id (pk), tenant_id, payment_id (fk), invoice_item_id (fk), amount, created_at
+
+results             id (pk), tenant_id, student_id, term_id, subject_id, grading_policy_version_id, status,
+                    version_no, published_at
+
+31.4 Prohibited Relationships (retained from v1.0, extended)
+
+ No row MAY reference a foreign key belonging to a different tenant_id.
+ No score without valid assessment and enrolment.
+ No report card without approved result version.
+ No allocation without posted payment and invoice.
+ No guardian access without active relationship.
+ No teacher score entry outside assignment.
+
+                                 Page 44 of 71
+                                                                                                                   PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+ No cross-school or cross-tenant relationship unless explicitly authorized under Chapter 3.
+
+                                                                            Page 45 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 32 -- API Architecture & Service Contracts
+
+32.1 Requirements
+
+     FR-API-010: APIs expose authorized business capabilities only, never unrestricted database access;
+         internal and external consumers use stable, versioned contracts with server-side validation,
+         permissions, tenant scope and audit.
+
+     FR-API-020: The API is versioned (URI-prefixed, e.g. /v1/) with a published deprecation policy of a
+         minimum 6 months' notice before a version is retired.
+
+     FR-API-030: Every authenticated request resolves exactly one tenant context from the caller's
+         credentials before any handler executes; there is no code path in which a handler can be reached
+         without a resolved tenant (platform-role requests included -- see Chapter 3).
+
+     FR-API-040: Rate limits are enforced per tenant and per user (NFR-PERF-010); limit responses use
+         standard 429 semantics with a Retry-After header.
+
+     FR-API-050: A partner/integration API tier (read-mostly, OAuth2 client-credentials, scoped per
+         tenant) is defined for future accounting-system and LMS integrations, even where no integration
+         ships in v1.
+
+                                                                                   Page 46 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 33 -- Application Security, Privacy & Access Control
+
+33.1 Security Model
+
+Least privilege, defence in depth, explicit authorization, secure defaults, data minimization, segregation of
+duties, accountability and privacy by design -- retained from v1.0, now explicitly including tenant isolation as
+a defence-in-depth layer (database RLS beneath application authorization).
+
+33.2 Authentication & Authorization
+
+     SEC-010: Unique named accounts; no shared operational accounts.
+     SEC-020: Adaptive password hashing (Argon2id or bcrypt); rate-limited login and secure reset.
+     SEC-030: MFA mandatory for all platform roles (Chapter 3) and for school Proprietor/Administrator
+
+         roles; optional and encouraged elsewhere.
+     SEC-040: Secure session cookies, rotation, timeout and revocation.
+     SEC-050: Effective access combines active role, permission, tenant scope, record relationship, record
+
+         state, workflow authority and delegation; view/edit/approve/publish/reverse/export remain
+         separately grantable.
+
+33.3 Segregation of Duties
+
+     Cashier cannot approve own reversal.
+     Score entry is separate from final publication.
+     High-privilege role assignment receives extra review.
+     Backup creation and production restoration are distinct authorities.
+     Platform Support Engineer impersonation cannot perform financial reversal or export without a
+
+         second approver (TEN-021).
+
+33.4 Application Controls
+
+     Parameterized database queries throughout -- no string-built SQL.
+     Output escaping and safe rich-text sanitization.
+     CSRF protection and secure headers (CSP, HSTS, X-Content-Type-Options).
+     File signature validation and private object storage with signed, expiring URLs.
+     Protection from open redirects, SSRF, injection and path traversal.
+     Secret management outside source control, via a dedicated secrets manager, scoped per
+
+         environment and per tenant where credentials are tenant-specific (payment provider keys).
+
+33.5 Security Testing Gate (new -- closes a Version 1.0 gap)
+
+NFR-SEC-020: The release pipeline (Chapter 45) MUST include, as blocking gates: static application security
+testing (SAST) on every pull request; dependency and container vulnerability scanning on every build;
+dynamic application security testing (DAST) against staging before promotion to production; and an
+independent penetration test at minimum annually and before General Availability. Critical or high findings
+block release until remediated or formally risk-accepted by a named security owner.
+
+33.6 Data Protection & Monitoring
+
+Security and business audit events are append-only for ordinary users. Children's, medical and discipline
+data use stricter minimization, retention, export and communication-channel rules (Volume V). Incident
+response follows: detect, classify, contain, preserve evidence, investigate, recover, notify authorized parties
+(including tenant administrators and, where required by law, the Data Protection Commission -- Chapter 39),
+correct root cause and monitor.
+
+                                                                                   Page 47 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+33.7 Non-Production Data Handling
+
+SEC-060: Production tenant data, in particular any child's personal, medical or biometric data, MUST NOT be
+copied into a non-production environment. Test and staging environments use a synthetic data generator
+that produces realistic but entirely fictitious Nursery-to-JHS data at representative volume.
+
+                                                                                   Page 48 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 34 -- Frontend Architecture, UX & Offline/PWA Strategy
+
+34.1 Application Shell
+
+     Header with tenant/school branding, context switcher (for multi-school tenants), search,
+         notifications and user menu.
+
+     Permission-generated collapsible sidebar.
+     Main content with breadcrumbs; responsive drawer on small screens.
+     Visible active academic year, term and campus.
+
+34.2 Design System
+
+Central design tokens govern colour, typography, spacing and breakpoints, with a tenant-branding layer
+(logo, primary colour, report letterhead) applied on top without forking the underlying component library.
+
+34.3 Offline & PWA Strategy (new -- closes a Version 1.0 gap)
+
+     FR-UX-010: The web application is installable as a Progressive Web App on Android devices, the
+         dominant device class among parents and teachers in this market.
+
+     FR-UX-020: Attendance registers and score entry (the two highest-frequency, most connectivity-
+         sensitive workflows) MUST be usable offline: the required data (roster, assessment structure) is pre-
+         fetched and cached when connectivity is available, entries are queued locally (IndexedDB) when it is
+         not, and a background sync process pushes queued entries once connectivity returns, per the
+         conflict rule in FR-ATT-011.
+
+     FR-UX-030: The interface MUST show a persistent, unambiguous online/offline/syncing indicator,
+         and MUST NOT allow a user to believe an offline-queued action has reached the server until sync
+         confirms it.
+
+     FR-UX-040: Pages MUST be designed for low data usage -- no unbounded image loads, paginated
+         lists by default, and a data-saver mode for report viewing.
+
+34.4 Accessibility
+
+See Chapter 42 for the binding WCAG 2.1 AA standard and its CI enforcement. Keyboard access, screen-
+reader labelling, contrast, focus management, zoom and reduced-motion support are implemented against
+that standard, not against an unspecified general notion of "accessible."
+
+34.5 State and Security
+
+Loading, success, error, offline, empty and restricted states are visually distinct. The frontend hides
+unavailable actions for usability, but the server remains the sole authority -- no client-side check is ever
+treated as sufficient authorization.
+
+                                                                                   Page 49 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 35 -- Background Jobs, Reporting & Integration Architecture
+
+35.1 Background Jobs
+
+     FR-JOB-010: Schedules support one-time, daily, weekly, monthly, termly, yearly and event-triggered
+         execution, evaluated in the tenant's configured time zone.
+
+     FR-JOB-020: Bulk-operation jobs (report-card batch generation, mass notification, bulk import) run
+         on the dedicated worker pool (NFR-PERF-011), never on request-serving capacity.
+
+     FR-JOB-030: Every job records tenant_id, start, end, outcome and, on failure, a retry count and
+         dead-letter path with alerting.
+
+35.2 Reporting & Data-Projection Architecture
+
+FR-RPT-010: Reporting queries run against read-optimized projections (materialized views or a reporting
+replica), never against the primary transactional tables directly for anything beyond a single-record lookup,
+to protect interactive performance (Chapter 37) under concurrent tenant load.
+
+                                                                                   Page 50 of 71
+                                                                     PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 36 -- External Integrations & Provider Adapters
+
+36.1 Registry and Credentials
+
+Each integration has type, provider, environment, owner, health, configuration reference and credential
+reference. Secrets remain outside code, are scoped per tenant where the integration is tenant-specific
+(payment gateways, WhatsApp sender), and are rotatable and separately managed for sandbox and
+production.
+
+36.2 Named Integrations at Launch
+
+Category           Provider(s)                                       Reference
+Payments
+                   Paystack Ghana, Hubtel, MTN MoMo, Telecel         Chapter 24.2
+                   Cash
+                                                                     Chapter 26.1
+Messaging          WhatsApp Business API (Meta BSP), named
+                   Ghanaian SMS aggregator, SMTP email provider      Registered per campus; offline
+                                                                     events retain original time and
+Biometric devices  Standard fingerprint/RFID device integration for  unique IDs
+(optional)         attendance                                        Named as a defined gap in v1.0
+                                                                     (Section 4.13); scoped here as
+Accounting export  QuickBooks, Sage                                  post-launch
+(future scope)
+
+36.3 Reliability
+
+Timeouts, circuit breakers, bounded retries, exception queues and graceful degradation prevent false
+success and protect core operations. Integration dashboards show health, last success, failures, queue depth,
+latency and credential expiry, scoped per tenant for tenant-specific integrations and globally for platform
+integrations.
+
+                                     Page 51 of 71
+                                                           PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 37 -- Performance, Scalability, Reliability & Observability
+
+Version 1.0 deferred every number in this chapter to "baseline measurement." Version 2.0 states working
+targets now; they are to be re-validated, not invented from nothing, once real production telemetry exists,
+per NFR-PERF-090 below.
+
+37.1 Concrete Performance Targets
+
+Metric                                      Target                                   Requirement ID
+                                             2.5 seconds                             NFR-PERF-020
+Interactive page load (p95, 3G-equivalent    300 ms                                  NFR-PERF-021
+connection)
+
+API response time, standard read (p95)
+
+API response time, standard write (p95)      500 ms                                  NFR-PERF-022
+                                                                                     NFR-PERF-023
+Report-card batch generation, 500 students   5 minutes, as a background job with     NFR-PERF-024
+                                            progress indication                      NFR-PERF-025
+
+Concurrent active users per tenant at peak   200, without cross-tenant degradation
+(e.g. Third-Term score entry)
+
+Platform-wide concurrent tenants at peak     150 tenants concurrently active
+(Year-1 target)
+
+Monthly uptime (production)                  99.5%                                   NFR-AVAIL-010
+Recovery Time Objective (RTO)                                                        NFR-AVAIL-020
+                                             4 hours for full platform;  1 hour for
+                                            single-tenant restore
+
+Recovery Point Objective (RPO)               15 minutes                              NFR-AVAIL-021
+
+Notification delivery latency                60 seconds from trigger to provider     NFR-PERF-026
+(WhatsApp/SMS, non-bulk)                    handoff, p95
+
+NFR-PERF-090: These targets MUST be re-validated against real production telemetry within the first 90 days
+of General Availability and revised where the baseline shows they were set incorrectly; they are working
+numbers deliberately chosen to be testable, not final commitments carved from measurement that does not
+yet exist.
+
+37.2 Scaling
+
+Stateless application instances, shared session store, database, queues and storage allow horizontal scaling.
+Web, worker, report, document and integration capacity scale independently, with tenant-aware autoscaling
+triggers so a small number of very large tenants cannot starve autoscaling headroom from the rest of the
+platform.
+
+37.3 Database and Cache
+
+Query plans, pagination, indexes, bounded connection pools, short transactions and reporting projections
+are mandatory. All cache keys are tenant-scoped (TEN-040) and never bypass authorization.
+
+37.4 Concurrency
+
+Optimistic version columns, short locks, unique constraints, atomic updates and idempotency keys prevent
+lost updates and duplicates for scores, invoices, allocations, receipt numbers, promotion and inventory. NFR-
+PERF-030: concurrent score entry by two teachers for the same class subject is resolved by field-level
+optimistic locking with a clear conflict message identifying the other editor, never a silent last-write-wins on
+the whole record.
+
+37.5 Observability
+
+                                            Page 52 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Structured logs, metrics and traces use correlation IDs and mandatory tenant_id, while excluding secrets.
+Monitored: latency, errors, database, queues, workers, storage, integrations, backup and business-process
+health, with per-tenant and platform-wide dashboards (TEN-041).
+
+37.6 Alerts and Testing
+
+Actionable alerts carry severity, owner and escalation path. Load, stress, endurance, failure, concurrency and
+recovery tests prove capacity and safe failure behaviour against the targets in 37.1, run on a recurring
+schedule, not only pre-launch.
+
+                                                                                   Page 53 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 38 -- Backup, DR, Testing, Deployment & Release Management
+
+38.1 Backup & Disaster Recovery
+
+     NFR-AVAIL-030: Back up database, uploaded and generated files, configuration, application releases
+         and recovery material on a frequent incremental/log basis, with a daily verified backup, weekly full
+         and retained monthly points.
+
+     NFR-AVAIL-031: Maintain live data plus local/nearline and off-site copies, encrypted, with restricted
+         access, checksums, inventories, retention and immutability where supported.
+
+     NFR-AVAIL-032 (new): Support per-tenant point-in-time restore that does not require restoring or
+         affecting any other tenant's current data -- restoring School A after an administrator error must
+         never touch School B.
+
+     NFR-AVAIL-033: Verify archive readability, counts, relationships, files, checksums and migration state
+         on a recurring schedule, not only when a restore is actually needed.
+
+     NFR-AVAIL-034: Document response for hardware failure, corruption, faulty migration, ransomware,
+         account compromise, single-tenant data corruption, facility loss, internet outage and provider
+         outage.
+
+38.2 Testing, Quality Assurance & Traceability
+
+     NFR-QA-010: Automated test coverage MUST meet, at minimum: 80% line coverage on
+         domain/business-logic modules, 100% of permission and tenant-isolation boundary conditions, and
+         end-to-end coverage of every workflow listed as a release-blocking acceptance criterion elsewhere
+         in this document.
+
+     NFR-QA-020: Cross-tenant access attempts are a mandatory, first-class test category -- every
+         endpoint, report, export and background job is tested with a second tenant's credentials attempting
+         to read or write the first tenant's data, and the suite fails the build if any such attempt succeeds.
+
+     NFR-QA-030: Migration tests compare counts, identifiers, relationships, scores, results, invoice
+         balances, payments and documents before and after any migration.
+
+     NFR-QA-040: Every requirement ID in this document (Appendix A) MUST map to design,
+         implementation, database change, API, permission rule, automated test and acceptance evidence
+         before the owning chapter is marked complete.
+
+     NFR-QA-050: Defect severities -- Critical (security, financial integrity, data loss, cross-tenant leak,
+         total outage), High (major workflow unavailable, official result incorrect), Medium (important
+         impairment with workaround), Low (minor usability/presentation). Critical and High defects block
+         release.
+
+38.3 Deployment, Environment & Release Management
+
+     NFR-DEP-010: Local, development, automated test, staging and production use separate databases,
+         storage, secrets, queues, providers, logs and backups; staging resembles production including
+         representative multi-tenant synthetic data.
+
+     NFR-DEP-020: Pipeline: review  automated tests  SAST/dependency scan (Chapter 33.5)  build
+          staging deploy  DAST  migration test  acceptance  approval  backup  production
+         deploy  smoke test  monitoring.
+
+     NFR-DEP-030: Migrations affecting tenant-owned tables are additive-first (expand/contract pattern)
+         so that a mid-rollout state never leaves any tenant with a partially-migrated, inconsistent schema.
+
+     NFR-DEP-040: Feature flags support gradual, tenant-by-tenant rollout, retain full permission
+         enforcement, and have a named owner and a removal plan.
+
+     NFR-DEP-050: Rollback triggers include authentication, authorization, academic calculation, financial
+         integrity, cross-tenant isolation, migration and severe performance failures; valid post-release
+         transactions are preserved, and forward-fix migration is preferred over destructive restoration
+         wherever safe.
+
+                                                                                   Page 54 of 71
+                                                                                  PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+                            --
+
+                VOLUME V
+
+Compliance & Local Market Alignment -- Chapters 39­42
+
+                                            Page 55 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 39 -- Ghana Data Protection Act & GDPR Alignment
+
+This chapter did not exist in Version 1.0. PBSMS processes the personal, medical, disciplinary and biometric
+data of children at scale, hosted in Ghana; this is not an optional chapter.
+
+39.1 Ghana Data Protection Act, 2012 (Act 843)
+
+     DP-010: PBSMS (the company) MUST register as a data controller with Ghana's Data Protection
+         Commission, and MUST support each tenant school in understanding its own controller obligations
+         for the data it enters.
+
+     DP-020: Every category of personal data collected MUST have a documented lawful basis (consent,
+         contract necessity, legal obligation, or legitimate interest), recorded per data category in a data
+         inventory.
+
+     DP-030: The platform MUST provide a data-subject request workflow -- access, rectification, and
+         erasure-where-legally-possible -- with a defined response SLA (30 days, per Act 843 norms), routed
+         to the correct tenant's administrator with platform oversight.
+
+     DP-040: Any personal data breach MUST be assessed within 24 hours of detection and, where it
+         meets the statutory threshold, reported to the Data Protection Commission and affected tenants
+         without undue delay, per the incident procedure in Chapter 33.6.
+
+39.2 GDPR Alignment
+
+DP-050: For any tenant serving guardians resident in the EU/EEA, or should PBSMS engage EU-based sub-
+processors, the platform SHOULD operate to GDPR-equivalent standards (lawful basis, data minimization,
+DPIA for high-risk processing such as biometric attendance, and a Standard Contractual Clauses framework
+for any cross-border transfer) even though Ghana is the primary jurisdiction.
+
+39.3 Controller/Processor Roles in a Multi-Tenant Platform
+
+DP-060: Each tenant school is the data controller for its own students', guardians' and staff's data. PBSMS is
+the data processor, acting only on the tenant's instructions as expressed through the product's configuration
+and the tenant's own staff actions -- except for the narrow set of platform-role actions in Chapter 3, which
+are documented, audited, and limited to what is necessary to operate and support the service.
+
+                                                                                   Page 56 of 71
+                                                                     PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 40 -- Consent, Retention & Data Subject Rights
+
+40.1 Consent
+
+     DP-070: Communication consent is captured per guardian, per channel (WhatsApp, SMS, email), is
+         versioned, and can be withdrawn at any time without affecting the guardian's ability to view their
+         child's records through the parent portal.
+
+     DP-080: Biometric data collection (Chapter 36.2) requires explicit, separately captured guardian
+         consent distinct from general platform terms, given its Highly Confidential classification (Chapter
+         11.6).
+
+40.2 Retention Schedule (new -- replaces v1.0's undefined "according to policy")
+
+Record type                Retention period                   Basis
+Core academic record
+(results, report cards,    Permanent (archived after          Lifelong reference value; BECE/SHS
+certificates)              graduation, not deleted)           placement verification
+
+Attendance records         7 years post-graduation, then      Aligned to typical Ghanaian record-keeping
+                           archived cold storage              norms for schools
+Financial transactions
+(invoices, payments,       7 years, per standard Ghanaian     Tax and audit requirements
+receipts)                  financial record-keeping practice
+
+Medical/health records     Duration of enrolment + 3 years,   Ongoing care relevance balanced against
+                           then archived with restricted      minimization
+                           access
+
+Discipline records         Duration of enrolment + 1 year     Minimization; avoids indefinitely following a
+Biometric templates        unless a legal matter is pending   minor
+
+                           Deleted within 30 days of a        Highly Confidential classification;
+                           student's or staff member's exit   minimization
+                           from the tenant
+
+Audit logs                 3 years online, then cold archive  Security investigation and compliance need
+                           for 7 years total
+
+Tenant data after account  90-day recoverable export          Balances customer recovery against
+closure (Chapter 4)        window, then permanent             minimization
+                           deletion except statutory-
+                           retention categories above
+
+40.3 Data Subject Rights
+
+DP-090: A guardian or staff member MAY request a copy of their own or their linked child's data, correction
+of inaccurate data, and -- where no retention obligation above applies -- erasure. Requests are logged,
+routed to the tenant, and tracked to the DP-030 SLA.
+
+                                             Page 57 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 41 -- NaCCA, BECE, GES & CSSPS Alignment
+
+This chapter closes the local-curriculum gap identified against Version 1.0, which used a generic
+numeric/developmental grading model with no link to Ghana's actual curriculum framework.
+
+41.1 NaCCA Standards-Based Curriculum
+
+     DOM-010: Subjects MAY be structured as strands  sub-strands  content standards  indicators,
+         matching the NaCCA Standards-Based Curriculum, as a tenant-level opt-in on top of the generic
+         subject model in Chapter 17.
+
+     DOM-020: Assessment items MAY be tagged to a specific indicator, enabling competency-coverage
+         reporting (which indicators have been assessed, which have not) rather than only a subject-level
+         score.
+
+     DOM-030: Report cards for tenants using the NaCCA model display a competency profile alongside
+         or instead of a raw numeric score, consistent with GES-issued exemplar formats.
+
+41.2 BECE Support
+
+     DOM-040: Support JHS 3 candidate registration with index numbers, matching the format required
+         for BECE registration.
+
+     DOM-050: Support mock-BECE exam management and results in BECE-equivalent format (grade 1­9
+         scale per subject, aggregate of best six), giving parents and coordinators a realistic preview ahead of
+         the actual examination.
+
+     DOM-060: Provide BECE-readiness analytics: subject-by-subject strength/weakness against historical
+         school performance, at student and class level.
+
+41.3 GES Statutory Reporting
+
+DOM-070: Support GES-standard report-card layout as a selectable template alongside PBSMS's own default,
+and support the common statutory return formats (enrolment census, attendance returns) that schools are
+typically asked to produce for GES/District Education Office, as configurable, exportable reports.
+
+41.4 CSSPS Placement Touchpoints
+
+DOM-080: For JHS 3 completers, support recording of CSSPS (Computerized School Selection and Placement
+System) choices and, where available, placement outcomes, against the student's permanent record --
+informational recording, not an integration with the CSSPS system itself, which is out of scope for v1.
+
+                                                                                   Page 58 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 42 -- Accessibility & Inclusive Design
+
+DOM-090 / NFR-ACC-010: The platform's staff- and guardian-facing web interface MUST conform to WCAG
+2.1 Level AA. This replaces Version 1.0's unqualified use of the word "accessible" with a named, testable
+standard.
+
+42.1 Requirements
+
+     NFR-ACC-020: Automated accessibility checks (axe-core or equivalent) run in CI on every pull request
+         touching frontend code and block merge on new critical violations.
+
+     NFR-ACC-030: A full manual WCAG 2.1 AA audit, including screen-reader testing, is performed
+         before General Availability and annually thereafter.
+
+     NFR-ACC-040: Critical attendance, score-entry, notification, approval and parent-facing functions are
+         verified usable via keyboard alone and via a screen reader, not merely styled to look compliant.
+
+                                                                                   Page 59 of 71
+                                                               PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+                 --
+
+       VOLUME VI
+
+Delivery Strategy -- Chapters 43­46
+
+                        Page 60 of 71
+                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 43 -- Delivery Methodology & Team
+
+Version 1.0's Volume IV specified delivery as 55 sequential prompts executed by an autonomous AI coding
+agent ("Codex") against an existing codebase, with no team, no estimate, and no named owner for any
+decision. That approach is replaced here with a conventional, accountable software delivery model. AI
+coding assistants remain a legitimate and encouraged productivity tool within this model -- see 43.3 -- but
+they are a tool a team uses, not the delivery mechanism itself.
+
+43.1 Why This Change
+
+     Accountability: a specification this consequential -- children's records, school finances, cross-tenant
+         isolation -- needs a named human engineer accountable for each decision, not a prompt-and-hope
+         loop.
+
+     Judgment: several requirements in this document (the tenancy isolation model, the retention
+         schedule, the payment settlement model) require judgment calls, stakeholder sign-off and trade-off
+         decisions that a prompt sequence cannot make.
+
+     Continuity: a real team retains institutional knowledge across the life of the product; a sequence of
+         isolated agent sessions does not.
+
+43.2 Recommended Team Composition (for a v1 build)
+
+Role                         Count        Focus
+
+Engineering Lead / Architect 1            Owns Volume 0 and Volume IV decisions; final say on tenancy,
+                                          security and data model
+
+Backend Engineers            2­3          Domain services, API, integrations, background jobs
+                                          Application shell, offline/PWA, accessibility
+Frontend Engineer            1­2          Test strategy, the cross-tenant isolation suite (NFR-QA-020),
+                                          automation
+QA / Test Engineer           1
+                                          Ghana school-operations knowledge, NaCCA/BECE/GES
+Product / Domain Specialist  1 (can be    accuracy, pilot-school liaison
+                             part-time /
+                             founder)
+
+DevOps / Platform Engineer   1 (can be
+Compliance/DPO advisor       shared/part- CI/CD, environments, observability, backup/DR
+                             time initially)
+
+                             Part-time /  Act 843 registration and ongoing compliance (Chapter 39)
+                             advisory
+
+43.3 AI-Assisted Development
+
+AI coding assistants (general-purpose pair-programming tools) MAY be used by engineers throughout
+delivery to accelerate scaffolding, test-writing and routine implementation, under the same review, testing
+and security-gate requirements as any other code (Chapters 33.5, 38.2). No AI tool is granted autonomous
+commit, deploy, or database-migration authority; every change still passes through the pipeline in Chapter
+38.3 and requires human review before merge.
+
+                                          Page 61 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 44 -- Phased Delivery Roadmap
+
+The roadmap below sequences work by dependency, matching this document's structure, and reflects the
+four-phase plan from the preceding gap analysis, now adopted as the delivery plan of record.
+
+44.1 Phase 0 -- Environment & Foundation Setup (Weeks 1­2)
+
+All Phase 0 decisions in Version 2.0 are adopted (Build Readiness Status, front matter). Phase 0 is therefore
+execution, not deliberation:
+
+     Provision cloud accounts, source control, and the three non-production environments (Chapter 38.3).
+     Stand up the repository from the adopted stack (Chapter 29) with the multi-tenant schema and RLS
+
+         policies from Chapter 30 as the first migration.
+     Stand up CI with the security gates from Chapter 33.5 active from the first commit, not retrofitted
+
+         later.
+     File Data Protection Commission registration (Chapter 39) -- this has external lead time and should
+
+         not wait for engineering to reach Volume V.
+     Begin the Pre-Phase-0 parallel track (Appendix E) -- it runs alongside, not before, this phase.
+
+44.2 Phase 1 -- Platform Foundation (Weeks 3­8)
+
+     Volume 0 in full: tenant model, platform roles, RLS-backed database foundation, onboarding flow
+         skeleton.
+
+     Identity, authentication, authorization and audit (Chapter 33).
+     CI/CD pipeline with security gates from day one (Chapter 38.3), not retrofitted later.
+
+44.3 Phase 2 -- Academic Core (Weeks 9­18)
+
+     Admissions, student lifecycle, academic structure, attendance (including offline/PWA), assessment,
+         grading, results, documents (Chapters 15­22).
+
+     First pilot tenant onboarded onto this slice for early feedback (44.5).
+
+44.4 Phase 3 -- Finance, Communication & Operations (Weeks 19­26)
+
+     Fee structures, invoicing, named payment integrations, reconciliation (Chapters 23­25).
+     WhatsApp/SMS/email communication centre (Chapter 26).
+     Supporting operations (Chapter 28).
+
+44.5 Phase 4 -- Hardening, Compliance & Pilot (Weeks 27­34)
+
+     Full NFR validation against Chapter 37 targets under realistic multi-tenant load.
+     Penetration test and WCAG 2.1 AA audit (Chapters 33.5, 42).
+     2­3 pilot schools live on the full platform with a structured feedback loop and defined go/no-go
+
+         criteria (Chapter 45.3).
+     NaCCA/BECE/GES alignment features (Chapter 41), if not already folded into Phase 2 by pilot-school
+
+         demand.
+
+44.6 Phase 5 -- General Availability (Week 35+)
+
+     Public/sales-assisted tenant onboarding opened.
+     Subscription billing (Chapter 5) fully live.
+     Ongoing NFR re-validation against real telemetry (NFR-PERF-090).
+
+                                                                                   Page 62 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 45 -- Quality Gates, Security Review & Pilot Program
+
+45.1 Release Gate (applies to every production release, not only GA)
+
+     All automated tests pass, including the mandatory cross-tenant isolation suite (NFR-QA-020).
+     No open Critical or High severity defect (Chapter 38.2).
+     SAST/dependency scan clean or risk-accepted by the named security owner (Chapter 33.5).
+     NFR targets (Chapter 37.1) validated in staging under representative multi-tenant load for any
+
+         release touching a high-traffic path.
+     Rollback plan documented (Chapter 38.3).
+
+45.2 Pre-GA Security Review
+
+An independent penetration test (Chapter 33.5) and a full WCAG 2.1 AA audit (Chapter 42.1) MUST both be
+completed, with all Critical/High findings remediated, before General Availability is declared.
+
+45.3 Pilot Program
+
+     Select 2­3 schools reflecting the target range (a small single-campus school and a multi-school
+         proprietor group) as paid or discounted pilot tenants.
+
+     Define explicit go/no-go criteria before pilot start: e.g. zero cross-tenant data incidents, NFR targets
+         met in production, pilot-school Net Promoter Score above an agreed threshold, and no unresolved
+         Critical/High defect for 2 consecutive weeks.
+
+     Run a structured weekly feedback loop with pilot schools throughout Phase 4, feeding directly into
+         the Phase 5 go/no-go decision.
+
+                                                                                   Page 63 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Chapter 46 -- Definition of Ready / Definition of Done & Change Control
+
+46.1 Definition of Ready
+
+A backlog item is ready when its requirement ID, scope, dependencies, tenant-scoping implications, data
+effects, roles, business rules and acceptance tests are known and written down against this document.
+
+46.2 Definition of Done
+
+A backlog item is done only when implementation, migrations (with RLS policy where applicable),
+permissions, validation, integration, audit events, automated tests (including cross-tenant isolation tests
+where relevant), documentation and review evidence are complete and traced to its requirement ID in
+Appendix A.
+
+46.3 Change Control
+
+New or changed requirements are assessed for tenant-isolation impact, dependency impact, migration
+impact, security impact, cost and schedule impact before entering the roadmap in Chapter 44. A change that
+weakens tenant isolation (Chapter 1) or removes a compliance control (Volume V) requires sign-off from the
+Engineering Lead and, for compliance changes, the compliance advisor -- no such change may be made
+silently in the course of unrelated feature work.
+
+                                                                                   Page 64 of 71
+                                                                                   PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+                             --
+
+               APPENDICES
+
+Requirement Index, NFR Summary, Glossary & Change Log
+
+                                             Page 65 of 71
+                                                PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Appendix A -- Requirement ID Index (representative sample)
+
+The full traceability matrix (requirement  design  implementation  test  evidence) required by NFR-
+QA-040 is a living, tool-tracked artifact maintained during delivery. The table below is a representative
+sample of the ID scheme applied across this document, not the complete list.
+
+ID range              Chapter    Count (this document)
+TEN-001 to TEN-042    1­6        19
+BR-001 to BR-013      8          13
+FR-ADM-010 to 050     15         5
+FR-STU-010 to 060     16         6
+FR-ATT-010 to 050     18         6
+FR-GRA-010 to 070     20         7
+FR-PAY-010 to 050     24         5
+FR-COM-010 to 060     26         6
+NFR-PERF-010 to 090   6, 29, 37  13
+NFR-SEC-010 to 060    30, 33     5
+NFR-AVAIL-010 to 034  37, 38     8
+NFR-QA-010 to 050     38         5
+DP-010 to 090         39, 40     9
+DOM-010 to 090        41, 42     9
+
+                                 Page 66 of 71
+                                                       PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Appendix B -- Non-Functional Requirements Summary
+
+All numeric targets in this document, collected in one place for release-gate reference.
+
+Category       Requirement                             Target
+Performance    Page load (p95, 3G)                      2.5s
+Performance    API read (p95)                           300ms
+Performance    API write (p95)                          500ms
+Performance    Report-card batch (500 students)         5 min
+Scalability    Concurrent users per tenant              200
+Scalability    Concurrent tenants (Year 1)              150
+Availability   Monthly uptime                           99.5%
+Availability   RTO (platform / single tenant)          4h / 1h
+Availability   RPO                                      15 min
+Quality        Domain logic test coverage               80%
+Quality        Permission & tenant-isolation coverage  100%
+Compliance     Data subject request response            30 days
+Compliance     Breach assessment                        24 hours
+Accessibility  Standard                                WCAG 2.1 AA
+
+               Page 67 of 71
+                                       PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Appendix C -- Glossary
+
+Term         Definition
+Tenant
+RLS          A single billing and data-isolation boundary on the platform -- typically one proprietor or
+RTO / RPO    school group, which may contain one or more schools.
+NaCCA
+BECE         Row-Level Security -- a PostgreSQL feature restricting which rows a database session can
+CSSPS        see or modify, used here to enforce tenant isolation beneath the application layer.
+GES
+Act 843      Recovery Time Objective / Recovery Point Objective -- maximum acceptable downtime
+WCAG 2.1 AA  and maximum acceptable data loss in a recovery scenario.
+
+             National Council for Curriculum and Assessment -- the body responsible for Ghana's
+             Standards-Based Curriculum.
+
+             Basic Education Certificate Examination -- the national examination taken at the end of JHS
+             3.
+
+             Computerized School Selection and Placement System -- Ghana's system for placing JHS
+             completers into Senior High Schools.
+
+             Ghana Education Service.
+
+             Ghana's Data Protection Act, 2012.
+
+             Web Content Accessibility Guidelines, Level AA -- the named accessibility conformance
+             target for this platform.
+
+                        Page 68 of 71
+                                                                                                                         PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Appendix D -- Change Log vs. Version 1.0
+
+See the Revision Summary at the front of this document for the full comparison table. In brief: Version 2.0
+adds Volume 0 (multi-tenant architecture, 6 chapters), Volume V (compliance and local-market alignment, 4
+chapters) in full; replaces the original Volume IV's AI-agent execution blueprint with Volume VI's human-led
+delivery strategy; adds a requirement ID scheme and numeric non-functional targets throughout; and
+removes the repeated five-row control-table boilerplate in favour of the single Universal Requirement
+Controls section stated once at the front of the document. Version 2.1 confirms the project as a greenfield
+build and converts every Version 2.0 recommendation into an adopted decision (front matter, Build
+Readiness Status), simplifies Chapter 44 Phase 0 accordingly, and adds Appendix E.
+
+                                                                                   Page 69 of 71
+                                                                            PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+Appendix E -- Pre-Phase-0 Parallel Track
+
+Everything below has external lead time, does not block engineering, and should not wait for Phase 1 to
+finish. Each item needs a named owner in your organization -- the placeholders below are role labels, not
+assignments.
+
+E.1 Legal & Compliance
+
+Item                                  Owner                     Target      Reference
+                                      Compliance advisor /      Week 1­3    Chapter 39, DP-010
+Register as data controller with      Founder                   Week 1­4
+Ghana's Data Protection Commission                              Week 2­4    Chapter 5
+                                      Legal counsel             Week 1­2
+Draft Terms of Service and tenant                                           DP-060
+subscription agreement                Legal counsel +                       Chapter 29.1, Chapter
+                                      Compliance advisor                    39
+Draft Data Processing Agreement       Engineering Lead + Legal
+template for tenant contracts         counsel
+
+Confirm data residency / hosting
+jurisdiction position
+
+E.2 Vendor Onboarding
+
+Item                                  Owner                     Target                  Reference
+                                                                Week 1­6 (longest lead  Chapter 26.1, FR-
+WhatsApp Business API approval via a  Founder / Ops             time -- start first)    COM-010
+Meta Business Solution Provider
+                                                                Week 1­3                Chapter 24.2
+Paystack Ghana and Hubtel             Founder / Ops
+merchant/sandbox accounts
+
+MTN MoMo and Telecel Cash direct      Founder / Ops             Week 2­5                Chapter 24.2
+integration access
+
+SMS aggregator account and sender-    Ops                       Week 2­4                FR-COM-030
+ID registration
+
+Cloud provider account and            Engineering Lead          Week 1                  Chapter 29.1
+Africa/Europe-proximate region
+selection
+
+E.3 People                                      Owner                       Target
+
+Item                                                                        Week 1 -- this role should
+                                                                            exist before Phase 0 work
+Confirm or hire Engineering Lead / Architect    Founder                     starts
+
+Hire/assign backend, frontend and QA engineers  Engineering Lead / Founder  Week 1­4, staggered by
+(Chapter 43.2)                                  Founder                     Chapter 44 phase needs
+
+Identify a compliance advisor (part-                                        Week 1­2
+time/advisory is sufficient at this stage)
+
+E.4 Pilot Recruitment
+
+Begin identifying 2­3 candidate pilot schools now (Chapter 45.3), even though they will not go live until
+Phase 4. Recruiting lead time is real, and a proprietor who has already agreed in principle in Week 2 is a very
+different conversation from a cold approach in Week 27. A good candidate mix: one small single-campus
+school, and one multi-school proprietor group -- the second is what actually exercises the tenant hierarchy
+(Chapter 2) and the group roll-up (Chapter 14.3) that a single school never touches.
+
+                                                Page 70 of 71
+                       PBSMS Multi-Tenant Enterprise SRS | Version 2.1
+
+-- End of Document --
+
+Page 71 of 71
+

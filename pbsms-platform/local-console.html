@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PBSMS — Live Console</title>
+<style>
+  :root {
+    --bg: #F2F4F1;
+    --surface: #FFFFFF;
+    --surface-2: #E7EBE6;
+    --ink: #1E2A28;
+    --ink-muted: #55655F;
+    --accent: #C8862E;
+    --accent-strong: #7A4E13;
+    --accent-tint: #F3E3C8;
+    --line: #D7DDD4;
+    --good: #2F7D5C;
+    --good-tint: #DCEEE4;
+    --warn: #B4552B;
+    --warn-tint: #F5E1D5;
+    --bad: #A13A3A;
+    --bad-tint: #F3DEDE;
+    --info: #3B6E92;
+    --info-tint: #DCE8EF;
+    --shadow: 0 1px 2px rgba(30, 42, 40, 0.06), 0 6px 20px rgba(30, 42, 40, 0.06);
+    --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14201D;
+      --surface: #1B2926;
+      --surface-2: #223330;
+      --ink: #EDEFE9;
+      --ink-muted: #9DAEA6;
+      --accent: #E0A94A;
+      --accent-strong: #F2C877;
+      --accent-tint: #3A2F17;
+      --line: #2E3E3A;
+      --good: #4FA37D;
+      --good-tint: #1B3229;
+      --warn: #D97D4A;
+      --warn-tint: #3A2A1E;
+      --bad: #D06060;
+      --bad-tint: #3A2222;
+      --info: #6FA3C4;
+      --info-tint: #1E2F38;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14201D; --surface: #1B2926; --surface-2: #223330; --ink: #EDEFE9; --ink-muted: #9DAEA6;
+    --accent: #E0A94A; --accent-strong: #F2C877; --accent-tint: #3A2F17; --line: #2E3E3A;
+    --good: #4FA37D; --good-tint: #1B3229; --warn: #D97D4A; --warn-tint: #3A2A1E;
+    --bad: #D06060; --bad-tint: #3A2222; --info: #6FA3C4; --info-tint: #1E2F38;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 24px rgba(0,0,0,0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #F2F4F1; --surface: #FFFFFF; --surface-2: #E7EBE6; --ink: #1E2A28; --ink-muted: #55655F;
+    --accent: #C8862E; --accent-strong: #7A4E13; --accent-tint: #F3E3C8; --line: #D7DDD4;
+    --good: #2F7D5C; --good-tint: #DCEEE4; --warn: #B4552B; --warn-tint: #F5E1D5;
+    --bad: #A13A3A; --bad-tint: #F3DEDE; --info: #3B6E92; --info-tint: #DCE8EF;
+    --shadow: 0 1px 2px rgba(30,42,40,0.06), 0 6px 20px rgba(30,42,40,0.06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-tint); }
+
+  a { color: var(--accent-strong); }
+
+  .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+
+  /* ---- Rail ---- */
+  .rail {
+    background: var(--surface);
+    border-right: 1px solid var(--line);
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rail-brand {
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 600;
+    padding: 0 20px 14px;
+    letter-spacing: 0.2px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 10px;
+  }
+  .rail-brand small {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--ink-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+  .rail-tab {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 9px 20px;
+    cursor: pointer;
+    color: var(--ink-muted);
+    border-left: 3px solid transparent;
+    font-size: 13.5px;
+    user-select: none;
+  }
+  .rail-tab:hover { color: var(--ink); background: var(--surface-2); }
+  .rail-tab.active {
+    color: var(--ink);
+    background: var(--accent-tint);
+    border-left-color: var(--accent);
+    font-weight: 600;
+  }
+  .rail-tab .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-muted);
+    margin-left: auto;
+  }
+  .rail-foot {
+    margin-top: auto;
+    padding: 12px 20px 0;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-muted);
+  }
+
+  /* ---- Letterhead ---- */
+  .letterhead {
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    padding: 12px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .letterhead-title {
+    font-family: var(--serif);
+    font-size: 16px;
+  }
+  .letterhead-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-muted);
+  }
+  .pill-btn {
+    font-family: var(--sans);
+    font-size: 12.5px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 5px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .pill-btn:hover { border-color: var(--accent); }
+
+  main { padding: 26px 28px 60px; max-width: 1180px; }
+
+  h1.page-title {
+    font-family: var(--serif);
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    text-wrap: balance;
+  }
+  .page-sub {
+    color: var(--ink-muted);
+    font-size: 13px;
+    margin: 0 0 22px;
+    max-width: 62ch;
+  }
+
+  /* ---- Login gate ---- */
+  .gate {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    padding: 24px;
+  }
+  .gate-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    border-radius: 10px;
+    width: 100%;
+    max-width: 420px;
+    padding: 30px 32px 28px;
+  }
+  .gate-crest {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 2px;
+  }
+  .gate-crest small {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 4px;
+    font-weight: 400;
+  }
+  .gate-rule { height: 1px; background: var(--line); margin: 18px 0 20px; }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    margin-bottom: 5px;
+  }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 14px;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  .field input:focus, .field select:focus, .field textarea:focus, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .field.mono input { font-family: var(--mono); font-size: 12.5px; }
+  .tenant-picks { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tenant-pick {
+    flex: 1;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    border-radius: 7px;
+    padding: 10px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .tenant-pick:hover { border-color: var(--accent); }
+  .tenant-pick.selected { border-color: var(--accent); background: var(--accent-tint); }
+  .tenant-pick .name { font-weight: 600; font-size: 12.5px; }
+  .tenant-pick .role { color: var(--ink-muted); font-size: 11px; }
+
+  button.primary {
+    width: 100%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 11px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  button.primary:hover { background: var(--accent-strong); }
+  button.primary:disabled { opacity: 0.55; cursor: default; }
+
+  button.secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    padding: 7px 13px;
+    font-size: 12.5px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: var(--sans);
+  }
+  button.secondary:hover { border-color: var(--accent); }
+  button.secondary:disabled { opacity: 0.45; cursor: default; }
+
+  .gate-error, .toast-error {
+    background: var(--bad-tint);
+    color: var(--bad);
+    border: 1px solid var(--bad);
+    border-radius: 6px;
+    padding: 9px 11px;
+    font-size: 12.5px;
+    margin-bottom: 14px;
+  }
+
+  /* ---- Cards / grids ---- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 18px 20px;
+  }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 26px; }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 15px 16px;
+  }
+  .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); }
+  .stat-card .value { font-family: var(--serif); font-size: 28px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat-card .sub { font-size: 11.5px; color: var(--ink-muted); margin-top: 2px; font-family: var(--mono); }
+
+  .section-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-muted);
+    margin: 26px 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-muted);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    font-weight: 600;
+  }
+  tbody td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody tr.clickable { cursor: pointer; }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
+  .table-wrap table { min-width: 560px; }
+
+  .chip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .chip-good { background: var(--good-tint); color: var(--good); }
+  .chip-warn { background: var(--warn-tint); color: var(--warn); }
+  .chip-bad { background: var(--bad-tint); color: var(--bad); }
+  .chip-info { background: var(--info-tint); color: var(--info); }
+  .chip-neutral { background: var(--surface-2); color: var(--ink-muted); }
+
+  .empty-state {
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--ink-muted);
+    font-size: 13px;
+  }
+  .loading-state { padding: 24px; color: var(--ink-muted); font-size: 13px; font-family: var(--mono); }
+
+  /* ---- Discipline split view ---- */
+  .split { display: grid; grid-template-columns: 1fr 1.15fr; gap: 20px; align-items: start; }
+  @media (max-width: 980px) { .split { grid-template-columns: 1fr; } }
+
+  .case-row { cursor: pointer; }
+  .case-row.selected { background: var(--accent-tint); }
+  .case-row .cat { font-weight: 600; }
+  .case-row .meta { color: var(--ink-muted); font-size: 11.5px; }
+
+  .detail-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 20px 22px;
+    position: sticky;
+    top: 20px;
+  }
+  .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+  .detail-head h3 { font-family: var(--serif); font-size: 18px; margin: 0; text-wrap: balance; }
+  .detail-meta { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); margin-bottom: 14px; }
+  .detail-desc { font-size: 13px; margin-bottom: 16px; color: var(--ink); }
+  .action-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+
+  .subsection { margin-top: 18px; }
+  .subsection-head {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .log-item {
+    border-left: 2px solid var(--line);
+    padding: 6px 0 6px 12px;
+    margin-bottom: 6px;
+    font-size: 12.5px;
+  }
+  .log-item .meta { color: var(--ink-muted); font-size: 10.5px; font-family: var(--mono); margin-top: 2px; }
+  .inline-form { display: flex; gap: 8px; margin-top: 10px; }
+  .inline-form input, .inline-form select { flex: 1; }
+  .inline-form.stack { flex-direction: column; }
+
+  .mini-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mini-form-grid .full { grid-column: 1 / -1; }
+
+  .form-card { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 18px 20px; margin-bottom: 22px; }
+  .form-card .form-title { font-weight: 600; font-size: 13.5px; margin-bottom: 12px; }
+
+  .toast-error { margin-bottom: 16px; }
+  .helper { font-size: 11.5px; color: var(--ink-muted); margin-top: 3px; }
+
+  code.k { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div id="gate" class="gate"></div>
+<div id="app" class="app" style="display:none;"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================= State ============================= */
+  const state = {
+    baseUrl: localStorage.getItem("pbsms_base_url") || "http://localhost:3000",
+    token: null,
+    userId: null,
+    userLabel: null,
+    tenantLabel: null,
+    tab: "overview",
+    students: [],
+    discipline: { cases: [], selectedId: null, detail: null, loading: false, error: null },
+    recognitions: [],
+    finance: { invoices: [], payments: [] },
+    comm: { notifications: [], reports: [] },
+    error: null,
+  };
+
+  const DEMO_USERS = [
+    { label: "Sunrise Basic School", role: "Headmaster", email: "admin@sunrise.pbsms.test" },
+    { label: "Golden Gate Schools Group", role: "Proprietor", email: "admin@goldengate.pbsms.test" },
+  ];
+
+  /* ============================= API layer ============================= */
+  async function api(path, opts) {
+    opts = opts || {};
+    const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+    if (state.token) headers["Authorization"] = "Bearer " + state.token;
+    let res;
+    try {
+      res = await fetch(state.baseUrl + path, {
+        method: opts.method || "GET",
+        headers,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+      });
+    } catch (e) {
+      throw new Error(
+        "Could not reach " + state.baseUrl + " — is the API running, and is this page open as a local file (not blocked by a browser extension)?"
+      );
+    }
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!res.ok) {
+      throw new Error((data && data.message) ? String(data.message) : (res.status + " " + res.statusText));
+    }
+    return data;
+  }
+
+  function decodeJwt(token) {
+    try {
+      const payload = token.split(".")[1];
+      const json = decodeURIComponent(
+        atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
+          .split("")
+          .map((c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0"))
+          .join("")
+      );
+      return JSON.parse(json);
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /* ============================= Helpers ============================= */
+  function esc(s) {
+    return String(s === null || s === undefined ? "" : s).replace(/[&<>"']/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+  }
+  function fmtDate(s) {
+    if (!s) return "—";
+    const d = new Date(s);
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+  function fmtDateTime(s) {
+    if (!s) return "—";
+    const d = new Date(s);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " · " +
+      d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+  function money(n, ccy) {
+    if (n === null || n === undefined) return "—";
+    const num = Number(n);
+    return (ccy || "GHS") + " " + num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function studentName(id) {
+    const s = state.students.find((x) => x.id === id);
+    return s ? (s.first_name + " " + s.last_name) : id.slice(0, 8) + "…";
+  }
+  function shortId(id) {
+    return id ? id.slice(0, 8) : "—";
+  }
+
+  const CHIP_MAPS = {
+    caseStatus: { reported: "info", investigating: "warn", response_issued: "info", appealed: "bad", closed: "good" },
+    severity: { minor: "good", moderate: "info", major: "warn", severe: "bad" },
+    invoiceStatus: { posted: "info", cancelled: "bad" },
+    notifStatus: { queued: "neutral", sending: "warn", delivered: "good", exhausted: "bad" },
+    reportStatus: { open: "info", acknowledged: "warn", in_progress: "warn", completed: "good", reopened: "bad" },
+    decision: { pending: "warn", upheld: "good", denied: "bad" },
+    sensitivity: { normal: "neutral", restricted: "warn", confidential: "bad" },
+  };
+  function chip(kind, value) {
+    const tone = (CHIP_MAPS[kind] && CHIP_MAPS[kind][value]) || "neutral";
+    return '<span class="chip chip-' + tone + '">' + esc(value || "—") + "</span>";
+  }
+
+  /* ============================= Login gate ============================= */
+  function renderGate() {
+    const gate = document.getElementById("gate");
+    const app = document.getElementById("app");
+    app.style.display = "none";
+    gate.style.display = "flex";
+
+    let selectedIdx = 0;
+
+    function paint() {
+      gate.innerHTML =
+        '<div class="gate-card">' +
+          '<div class="gate-crest">PBSMS<small>Live Console · Local Verification</small></div>' +
+          '<div class="gate-rule"></div>' +
+          (state.error ? '<div class="gate-error">' + esc(state.error) + "</div>" : "") +
+          '<div class="field mono"><label>API base URL</label><input id="f-baseurl" value="' + esc(state.baseUrl) + '" /></div>' +
+          '<div class="field"><label>Sign in as</label></div>' +
+          '<div class="tenant-picks">' +
+            DEMO_USERS.map((u, i) =>
+              '<div class="tenant-pick' + (i === selectedIdx ? " selected" : "") + '" data-idx="' + i + '">' +
+                '<div class="name">' + esc(u.label) + "</div>" +
+                '<div class="role">' + esc(u.role) + "</div>" +
+              "</div>"
+            ).join("") +
+          "</div>" +
+          '<div class="field"><label>Email</label><input id="f-email" value="' + esc(DEMO_USERS[selectedIdx].email) + '" /></div>' +
+          '<div class="field"><label>Password</label><input id="f-password" type="password" value="demo1234" /></div>' +
+          '<button class="primary" id="btn-login">Sign in</button>' +
+          '<p class="helper" style="margin-top:14px;">Both demo accounts use password <code class="k">demo1234</code>. Switch tenants to see Row-Level Security scope the same query to different data.</p>' +
+        "</div>";
+
+      gate.querySelectorAll(".tenant-pick").forEach((el) => {
+        el.addEventListener("click", () => {
+          selectedIdx = Number(el.dataset.idx);
+          paint();
+        });
+      });
+      document.getElementById("btn-login").addEventListener("click", doLogin);
+      gate.querySelectorAll("input").forEach((el) => {
+        el.addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+      });
+    }
+
+    async function doLogin() {
+      state.error = null;
+      state.baseUrl = document.getElementById("f-baseurl").value.trim().replace(/\/$/, "");
+      localStorage.setItem("pbsms_base_url", state.baseUrl);
+      const email = document.getElementById("f-email").value.trim();
+      const password = document.getElementById("f-password").value;
+      const btn = document.getElementById("btn-login");
+      btn.disabled = true;
+      btn.textContent = "Signing in…";
+      try {
+        const res = await api("/v1/auth/login", { method: "POST", body: { email, password } });
+        state.token = res.accessToken;
+        const claims = decodeJwt(state.token);
+        state.userId = claims.sub;
+        const picked = DEMO_USERS.find((u) => u.email === email);
+        state.tenantLabel = picked ? picked.label : "Unknown tenant";
+        state.userLabel = picked ? picked.role : "User";
+        await bootstrapApp();
+      } catch (e) {
+        state.error = e.message;
+        btn.disabled = false;
+        btn.textContent = "Sign in";
+        paint();
+      }
+    }
+
+    paint();
+  }
+
+  /* ============================= App shell ============================= */
+  const TABS = [
+    { id: "overview", label: "Overview" },
+    { id: "students", label: "Students" },
+    { id: "discipline", label: "Discipline" },
+    { id: "finance", label: "Finance" },
+    { id: "comm", label: "Communication" },
+  ];
+
+  function renderShell() {
+    const app = document.getElementById("app");
+    document.getElementById("gate").style.display = "none";
+    app.style.display = "grid";
+    app.innerHTML =
+      '<nav class="rail">' +
+        '<div class="rail-brand">PBSMS<small>Live Console</small></div>' +
+        TABS.map((t) =>
+          '<div class="rail-tab' + (state.tab === t.id ? " active" : "") + '" data-tab="' + t.id + '">' +
+            "<span>" + t.label + "</span>" +
+          "</div>"
+        ).join("") +
+        '<div class="rail-foot">' + esc(state.baseUrl.replace(/^https?:\/\//, "")) + "</div>" +
+      "</nav>" +
+      '<div>' +
+        '<div class="letterhead">' +
+          '<div class="letterhead-title">' + esc(state.tenantLabel) + "</div>" +
+          '<div class="letterhead-meta">' +
+            "<span>" + esc(state.userLabel) + " · " + esc(shortId(state.userId)) + "…</span>" +
+            '<button class="pill-btn" id="btn-logout">Switch tenant</button>' +
+          "</div>" +
+        "</div>" +
+        '<main id="main"></main>' +
+      "</div>";
+
+    app.querySelectorAll(".rail-tab").forEach((el) => {
+      el.addEventListener("click", () => { state.tab = el.dataset.tab; renderShell(); renderTab(); });
+    });
+    document.getElementById("btn-logout").addEventListener("click", () => {
+      Object.assign(state, { token: null, userId: null, tenantLabel: null, tab: "overview" });
+      renderGate();
+    });
+
+    renderTab();
+  }
+
+  function renderTab() {
+    const main = document.getElementById("main");
+    if (state.tab === "overview") return renderOverview(main);
+    if (state.tab === "students") return renderStudents(main);
+    if (state.tab === "discipline") return renderDiscipline(main);
+    if (state.tab === "finance") return renderFinance(main);
+    if (state.tab === "comm") return renderComm(main);
+  }
+
+  async function bootstrapApp() {
+    renderShell();
+    try {
+      state.students = await api("/v1/students");
+    } catch (e) { /* surfaced per-tab */ }
+  }
+
+  /* ============================= Overview ============================= */
+  async function renderOverview(main) {
+    main.innerHTML =
+      '<h1 class="page-title">Register Summary</h1>' +
+      '<p class="page-sub">A live read of what this tenant actually has on file right now — pulled fresh from the API, not cached.</p>' +
+      '<div class="loading-state">Reading modules…</div>';
+
+    const results = await Promise.allSettled([
+      api("/v1/students"),
+      api("/v1/discipline/cases"),
+      api("/v1/discipline/recognitions"),
+      api("/v1/finance/invoices"),
+      api("/v1/communication/notifications"),
+    ]);
+    const [studentsR, casesR, recogR, invoicesR, notifR] = results;
+    if (studentsR.status === "fulfilled") state.students = studentsR.value;
+    const cases = casesR.status === "fulfilled" ? casesR.value : [];
+    const openCases = cases.filter((c) => c.status !== "closed").length;
+
+    const cards = [
+      { label: "Students", value: studentsR.status === "fulfilled" ? studentsR.value.length : "—", sub: "enrolled" },
+      { label: "Discipline cases", value: casesR.status === "fulfilled" ? cases.length : "—", sub: openCases + " open" },
+      { label: "Recognitions", value: recogR.status === "fulfilled" ? recogR.value.length : "—", sub: "positive-behaviour" },
+      { label: "Invoices", value: invoicesR.status === "fulfilled" ? invoicesR.value.length : "—", sub: "finance" },
+      { label: "Notifications", value: notifR.status === "fulfilled" ? notifR.value.length : "—", sub: "communication" },
+    ];
+
+    main.innerHTML =
+      '<h1 class="page-title">Register Summary</h1>' +
+      '<p class="page-sub">A live read of what this tenant actually has on file right now — pulled fresh from the API, not cached.</p>' +
+      '<div class="stat-grid">' +
+        cards.map((c) =>
+          '<div class="stat-card"><div class="label">' + esc(c.label) + '</div>' +
+          '<div class="value">' + esc(c.value) + '</div><div class="sub">' + esc(c.sub) + "</div></div>"
+        ).join("") +
+      "</div>" +
+      '<div class="section-title">Recent discipline activity</div>' +
+      renderCaseTable(cases.slice(0, 5), false);
+
+    if (casesR.status === "fulfilled" && cases.length === 0) {
+      main.querySelector(".table-wrap") && (main.querySelector(".table-wrap").outerHTML = '<div class="empty-state">No discipline cases recorded for this tenant yet.</div>');
+    }
+  }
+
+  /* ============================= Students ============================= */
+  function renderStudents(main) {
+    main.innerHTML =
+      '<h1 class="page-title">Students</h1>' +
+      '<p class="page-sub">The core student record — permanent identity, separate from yearly enrolment.</p>';
+    if (!state.students.length) {
+      main.innerHTML += '<div class="empty-state">No students on file, or still loading.</div>';
+      return;
+    }
+    main.innerHTML +=
+      '<div class="table-wrap"><table><thead><tr>' +
+        "<th>Name</th><th>Admission No.</th><th>Gender</th><th>Date of birth</th><th>Status</th>" +
+      "</tr></thead><tbody>" +
+      state.students.map((s) =>
+        "<tr><td>" + esc(s.first_name + " " + s.last_name) + "</td>" +
+        '<td class="num">' + esc(s.admission_no) + "</td>" +
+        "<td>" + esc(s.gender || "—") + "</td>" +
+        "<td>" + fmtDate(s.dob) + "</td>" +
+        "<td>" + chip("caseStatus", s.status === "active" ? "closed" : s.status) + "</td></tr>"
+      ).join("") +
+      "</tbody></table></div>";
+  }
+
+  /* ============================= Discipline ============================= */
+  function renderCaseTable(cases, clickable) {
+    if (!cases.length) return '<div class="empty-state">No cases yet.</div>';
+    return '<div class="table-wrap"><table><thead><tr>' +
+      "<th>Student</th><th>Category</th><th>Severity</th><th>Incident date</th><th>Status</th>" +
+      "</tr></thead><tbody>" +
+      cases.map((c) =>
+        '<tr class="' + (clickable ? "clickable case-row" + (state.discipline.selectedId === c.id ? " selected" : "") : "") + '" data-id="' + c.id + '">' +
+        "<td>" + esc(studentName(c.student_id)) + "</td>" +
+        "<td class='cat'>" + esc(c.category) + "</td>" +
+        "<td>" + chip("severity", c.severity) + "</td>" +
+        "<td>" + fmtDate(c.incident_date) + "</td>" +
+        "<td>" + chip("caseStatus", c.status) + "</td></tr>"
+      ).join("") +
+      "</tbody></table></div>";
+  }
+
+  async function renderDiscipline(main) {
+    main.innerHTML =
+      '<h1 class="page-title">Discipline</h1>' +
+      '<p class="page-sub">Incident recording through investigation, response, guardian contact, appeal and closure — Chapter 28, FR-OPS-040.</p>' +
+      '<div class="loading-state">Loading cases…</div>';
+
+    try {
+      state.discipline.cases = await api("/v1/discipline/cases");
+      state.recognitions = await api("/v1/discipline/recognitions");
+    } catch (e) {
+      main.innerHTML = '<div class="toast-error">' + esc(e.message) + "</div>";
+      return;
+    }
+
+    paintDiscipline(main);
+  }
+
+  function paintDiscipline(main) {
+    const d = state.discipline;
+    const selected = d.cases.find((c) => c.id === d.selectedId) || null;
+
+    main.innerHTML =
+      '<h1 class="page-title">Discipline</h1>' +
+      '<p class="page-sub">Incident recording through investigation, response, guardian contact, appeal and closure — Chapter 28, FR-OPS-040.</p>' +
+      (d.error ? '<div class="toast-error">' + esc(d.error) + "</div>" : "") +
+      newCaseFormHtml() +
+      '<div class="split">' +
+        "<div>" +
+          '<div class="section-title">Cases (' + d.cases.length + ")</div>" +
+          renderCaseTable(d.cases, true) +
+        "</div>" +
+        '<div id="case-detail">' + (selected ? "" : '<div class="detail-card"><div class="empty-state">Select a case to see its full history and take action.</div></div>') + "</div>" +
+      "</div>" +
+      '<div class="section-title">Positive-behaviour recognition (' + state.recognitions.length + ")</div>" +
+      recognitionFormHtml() +
+      renderRecognitionTable();
+
+    main.querySelectorAll(".case-row").forEach((row) => {
+      row.addEventListener("click", () => selectCase(row.dataset.id));
+    });
+    wireNewCaseForm(main);
+    wireRecognitionForm(main);
+
+    if (selected) paintCaseDetail(selected);
+  }
+
+  function newCaseFormHtml() {
+    return (
+      '<div class="form-card">' +
+        '<div class="form-title">Record a new incident</div>' +
+        '<div class="mini-form-grid">' +
+          '<div class="field"><label>Student</label><select id="nc-student">' +
+            state.students.map((s) => '<option value="' + s.id + '">' + esc(s.first_name + " " + s.last_name) + "</option>").join("") +
+          "</select></div>" +
+          '<div class="field"><label>Severity</label><select id="nc-severity">' +
+            ["minor", "moderate", "major", "severe"].map((v) => '<option value="' + v + '">' + v + "</option>").join("") +
+          "</select></div>" +
+          '<div class="field"><label>Category</label><input id="nc-category" placeholder="e.g. truancy, fighting" /></div>' +
+          '<div class="field"><label>Incident date</label><input id="nc-date" type="date" value="' + new Date().toISOString().slice(0, 10) + '" /></div>' +
+          '<div class="field full"><label>Description</label><textarea id="nc-desc" rows="2" placeholder="What happened"></textarea></div>' +
+        "</div>" +
+        '<button class="secondary" id="nc-submit">Record case</button>' +
+      "</div>"
+    );
+  }
+
+  function wireNewCaseForm(main) {
+    main.querySelector("#nc-submit").addEventListener("click", async () => {
+      const btn = main.querySelector("#nc-submit");
+      const body = {
+        studentId: main.querySelector("#nc-student").value,
+        category: main.querySelector("#nc-category").value.trim() || "unspecified",
+        severity: main.querySelector("#nc-severity").value,
+        incidentDate: main.querySelector("#nc-date").value,
+        description: main.querySelector("#nc-desc").value.trim() || "(no description provided)",
+        reportedBy: state.userId,
+      };
+      btn.disabled = true; btn.textContent = "Recording…";
+      try {
+        await api("/v1/discipline/cases", { method: "POST", body });
+        await renderDiscipline(document.getElementById("main"));
+      } catch (e) {
+        state.discipline.error = e.message;
+        paintDiscipline(document.getElementById("main"));
+      }
+    });
+  }
+
+  async function selectCase(id) {
+    state.discipline.selectedId = id;
+    state.discipline.detail = null;
+    const main = document.getElementById("main");
+    paintDiscipline(main);
+    const holder = document.getElementById("case-detail");
+    holder.innerHTML = '<div class="detail-card"><div class="loading-state">Loading case…</div></div>';
+    try {
+      const [notes, responses, contacts, appeals] = await Promise.all([
+        api("/v1/discipline/cases/" + id + "/notes"),
+        api("/v1/discipline/cases/" + id + "/responses"),
+        api("/v1/discipline/cases/" + id + "/guardian-contacts"),
+        api("/v1/discipline/cases/" + id + "/appeals"),
+      ]);
+      state.discipline.detail = { notes, responses, contacts, appeals };
+      const c = state.discipline.cases.find((x) => x.id === id);
+      paintCaseDetail(c);
+    } catch (e) {
+      holder.innerHTML = '<div class="detail-card"><div class="toast-error">' + esc(e.message) + "</div></div>";
+    }
+  }
+
+  function actionButtonsForStatus(c) {
+    const buttons = [];
+    if (c.status === "reported") buttons.push(["Start investigation", "start-investigation"]);
+    if (c.status === "reported" || c.status === "investigating") buttons.push(["Issue response…", "issue-response"]);
+    if (c.status === "response_issued") { buttons.push(["Close case", "close"]); buttons.push(["File appeal…", "file-appeal"]); }
+    if (c.status === "closed") buttons.push(["Reopen case", "reopen"]);
+    return buttons;
+  }
+
+  function paintCaseDetail(c) {
+    const holder = document.getElementById("case-detail");
+    const det = state.discipline.detail;
+    if (!det) return;
+
+    const actions = actionButtonsForStatus(c);
+    const pendingAppeal = det.appeals.find((a) => a.decision === "pending");
+
+    holder.innerHTML =
+      '<div class="detail-card">' +
+        '<div class="detail-head"><h3>' + esc(c.category) + " — " + esc(studentName(c.student_id)) + "</h3>" + chip("caseStatus", c.status) + "</div>" +
+        '<div class="detail-meta">' + fmtDate(c.incident_date) + " · " + chip("severity", c.severity) + " · " + shortId(c.id) + "…</div>" +
+        '<div class="detail-desc">' + esc(c.description) + "</div>" +
+        '<div class="action-row" id="action-row">' +
+          actions.map(([label, act]) => '<button class="secondary" data-act="' + act + '">' + esc(label) + "</button>").join("") +
+        "</div>" +
+        '<div id="inline-action-form"></div>' +
+
+        '<div class="subsection"><div class="subsection-head">Responses (' + det.responses.length + ")</div>" +
+          (det.responses.length ? det.responses.map((r) =>
+            '<div class="log-item">' + chip("severity", r.response_type === "warning" ? "minor" : r.response_type === "detention" ? "moderate" : r.response_type === "suspension" ? "major" : "severe") +
+            " <strong>" + esc(r.response_type) + "</strong> — " + esc(r.description) +
+            '<div class="meta">' + fmtDateTime(r.created_at) + "</div></div>"
+          ).join("") : '<div class="helper">No response issued yet.</div>') +
+        "</div>" +
+
+        '<div class="subsection"><div class="subsection-head">Notes (' + det.notes.length + ")</div>" +
+          (det.notes.length ? det.notes.map((n) =>
+            '<div class="log-item">' + esc(n.note) + '<div class="meta">' + fmtDateTime(n.created_at) + "</div></div>"
+          ).join("") : '<div class="helper">No notes yet.</div>') +
+          '<div class="inline-form"><input id="note-input" placeholder="Add a follow-up note…" />' +
+          '<button class="secondary" id="note-submit">Add</button></div>' +
+        "</div>" +
+
+        '<div class="subsection"><div class="subsection-head">Guardian contacts (' + det.contacts.length + ")</div>" +
+          (det.contacts.length ? det.contacts.map((gc) =>
+            '<div class="log-item">' + (gc.channel ? chip("sensitivity", "confidential") : "") + " " +
+            "<strong>" + esc(gc.channel || "logged") + "</strong> — " + esc(gc.notes) +
+            '<div class="meta">' + fmtDateTime(gc.created_at) + (gc.notification_id ? " · dispatched via CommunicationService" : "") + "</div></div>"
+          ).join("") : '<div class="helper">No guardian contact logged yet.</div>') +
+          '<div class="inline-form stack">' +
+            '<select id="gc-channel"><option value="">Log only (no dispatch)</option><option value="phone_call">Phone call</option><option value="in_person">In person</option><option value="whatsapp">WhatsApp (forced to email — confidential)</option><option value="sms">SMS (forced to email — confidential)</option><option value="email">Email</option></select>' +
+            '<input id="gc-notes" placeholder="What was communicated…" />' +
+            '<button class="secondary" id="gc-submit">Log contact</button>' +
+          "</div>" +
+        "</div>" +
+
+        '<div class="subsection"><div class="subsection-head">Appeals (' + det.appeals.length + ")</div>" +
+          (det.appeals.length ? det.appeals.map((a) =>
+            '<div class="log-item">' + chip("decision", a.decision) + " " + esc(a.reason) +
+            '<div class="meta">filed ' + fmtDateTime(a.filed_at) + (a.decided_at ? " · decided " + fmtDateTime(a.decided_at) : "") + "</div>" +
+            (a.decision === "pending" ? '<div class="action-row" style="margin-top:8px;"><button class="secondary" data-appeal="' + a.id + '" data-verdict="upheld">Uphold</button><button class="secondary" data-appeal="' + a.id + '" data-verdict="denied">Deny</button></div>' : "") +
+            "</div>"
+          ).join("") : '<div class="helper">No appeal filed.</div>') +
+        "</div>" +
+      "</div>";
+
+    holder.querySelectorAll("[data-act]").forEach((btn) => {
+      btn.addEventListener("click", () => handleCaseAction(c, btn.dataset.act));
+    });
+    holder.querySelectorAll("[data-appeal]").forEach((btn) => {
+      btn.addEventListener("click", () => decideAppeal(c, btn.dataset.appeal, btn.dataset.verdict));
+    });
+    holder.querySelector("#note-submit").addEventListener("click", () => addNote(c));
+    holder.querySelector("#gc-submit").addEventListener("click", () => contactGuardian(c));
+  }
+
+  function handleCaseAction(c, act) {
+    const formHolder = document.getElementById("inline-action-form");
+    if (act === "start-investigation") return runSimpleAction(c, "/start-investigation");
+    if (act === "close") return runSimpleAction(c, "/close");
+    if (act === "reopen") return runSimpleAction(c, "/reopen");
+
+    if (act === "issue-response") {
+      formHolder.innerHTML =
+        '<div class="form-card" style="margin:10px 0 16px;">' +
+          '<div class="form-title">Issue a response</div>' +
+          '<div class="mini-form-grid">' +
+            '<div class="field"><label>Type</label><select id="resp-type">' +
+              ["warning", "detention", "suspension", "expulsion_recommendation", "other"].map((v) => '<option value="' + v + '">' + v + "</option>").join("") +
+            "</select></div>" +
+            '<div class="field full"><label>Description</label><input id="resp-desc" placeholder="What was decided" /></div>' +
+          "</div>" +
+          '<button class="secondary" id="resp-submit">Issue</button>' +
+        "</div>";
+      formHolder.querySelector("#resp-submit").addEventListener("click", async () => {
+        await postAndRefresh(c, "/responses", {
+          responseType: formHolder.querySelector("#resp-type").value,
+          description: formHolder.querySelector("#resp-desc").value.trim() || "(no detail provided)",
+          issuedBy: state.userId,
+        });
+      });
+    }
+
+    if (act === "file-appeal") {
+      formHolder.innerHTML =
+        '<div class="form-card" style="margin:10px 0 16px;">' +
+          '<div class="form-title">File an appeal</div>' +
+          '<div class="field"><label>Reason</label><input id="appeal-reason" placeholder="Why the response is being contested" /></div>' +
+          '<button class="secondary" id="appeal-submit">File appeal</button>' +
+        "</div>";
+      formHolder.querySelector("#appeal-submit").addEventListener("click", async () => {
+        await postAndRefresh(c, "/appeals", {
+          raisedBy: state.userId,
+          reason: formHolder.querySelector("#appeal-reason").value.trim() || "(no reason provided)",
+        });
+      });
+    }
+  }
+
+  async function runSimpleAction(c, path) {
+    try {
+      await api("/v1/discipline/cases/" + c.id + path, { method: "POST" });
+      await refreshCasesAndSelect(c.id);
+    } catch (e) {
+      state.discipline.error = e.message;
+      paintDiscipline(document.getElementById("main"));
+    }
+  }
+  async function postAndRefresh(c, path, body) {
+    try {
+      await api("/v1/discipline/cases/" + c.id + path, { method: "POST", body });
+      await refreshCasesAndSelect(c.id);
+    } catch (e) {
+      state.discipline.error = e.message;
+      paintDiscipline(document.getElementById("main"));
+    }
+  }
+  async function refreshCasesAndSelect(id) {
+    state.discipline.cases = await api("/v1/discipline/cases");
+    state.discipline.error = null;
+    await selectCase(id);
+    paintDiscipline(document.getElementById("main"));
+    await selectCase(id);
+  }
+
+  async function addNote(c) {
+    const input = document.getElementById("note-input");
+    const note = input.value.trim();
+    if (!note) return;
+    try {
+      await api("/v1/discipline/cases/" + c.id + "/notes", { method: "POST", body: { authorUserId: state.userId, note } });
+      await selectCase(c.id);
+    } catch (e) { state.discipline.error = e.message; paintDiscipline(document.getElementById("main")); }
+  }
+
+  async function contactGuardian(c) {
+    const channel = document.getElementById("gc-channel").value;
+    const notes = document.getElementById("gc-notes").value.trim();
+    if (!notes) return;
+    const student = state.students.find((s) => s.id === c.student_id);
+    try {
+      await api("/v1/discipline/cases/" + c.id + "/guardian-contacts", {
+        method: "POST",
+        body: {
+          recipientType: "student",
+          recipientId: c.student_id,
+          recipientName: (student ? student.first_name + "'s guardian" : "Guardian"),
+          recipientEmail: "guardian@example.test",
+          channel: channel || undefined,
+          notes,
+          contactedBy: state.userId,
+        },
+      });
+      await selectCase(c.id);
+    } catch (e) { state.discipline.error = e.message; paintDiscipline(document.getElementById("main")); }
+  }
+
+  async function decideAppeal(c, appealId, verdict) {
+    try {
+      await api("/v1/discipline/appeals/" + appealId + "/decide", {
+        method: "POST",
+        body: { decision: verdict, decidedBy: state.userId, decisionNotes: "Decided via console." },
+      });
+      await refreshCasesAndSelect(c.id);
+    } catch (e) { state.discipline.error = e.message; paintDiscipline(document.getElementById("main")); }
+  }
+
+  function recognitionFormHtml() {
+    return (
+      '<div class="form-card">' +
+        '<div class="form-title">Record positive-behaviour recognition</div>' +
+        '<div class="mini-form-grid">' +
+          '<div class="field"><label>Student</label><select id="rec-student">' +
+            state.students.map((s) => '<option value="' + s.id + '">' + esc(s.first_name + " " + s.last_name) + "</option>").join("") +
+          "</select></div>" +
+          '<div class="field"><label>Category</label><input id="rec-category" placeholder="e.g. leadership, academic_excellence" /></div>' +
+          '<div class="field full"><label>Description</label><input id="rec-desc" placeholder="What they did" /></div>' +
+        "</div>" +
+        '<button class="secondary" id="rec-submit">Record</button>' +
+      "</div>"
+    );
+  }
+  function renderRecognitionTable() {
+    if (!state.recognitions.length) return '<div class="empty-state">No recognitions recorded yet.</div>';
+    return '<div class="table-wrap"><table><thead><tr><th>Student</th><th>Category</th><th>Description</th><th>Awarded</th></tr></thead><tbody>' +
+      state.recognitions.map((r) =>
+        "<tr><td>" + esc(studentName(r.student_id)) + "</td><td>" + esc(r.category) + "</td><td>" + esc(r.description) + "</td><td>" + fmtDate(r.awarded_at) + "</td></tr>"
+      ).join("") + "</tbody></table></div>";
+  }
+  function wireRecognitionForm(main) {
+    main.querySelector("#rec-submit").addEventListener("click", async () => {
+      const body = {
+        studentId: main.querySelector("#rec-student").value,
+        category: main.querySelector("#rec-category").value.trim() || "unspecified",
+        description: main.querySelector("#rec-desc").value.trim() || "(no description provided)",
+        awardedBy: state.userId,
+      };
+      try {
+        await api("/v1/discipline/recognitions", { method: "POST", body });
+        await renderDiscipline(document.getElementById("main"));
+      } catch (e) {
+        state.discipline.error = e.message;
+        paintDiscipline(document.getElementById("main"));
+      }
+    });
+  }
+
+  /* ============================= Finance ============================= */
+  async function renderFinance(main) {
+    main.innerHTML = '<h1 class="page-title">Finance</h1><p class="page-sub">Fee structures, invoicing and manual/offline payments — read-only in this console.</p><div class="loading-state">Loading…</div>';
+    try {
+      const [invoices, payments] = await Promise.all([api("/v1/finance/invoices"), api("/v1/finance/payments")]);
+      main.innerHTML =
+        '<h1 class="page-title">Finance</h1>' +
+        '<p class="page-sub">Fee structures, invoicing and manual/offline payments — read-only in this console.</p>' +
+        '<div class="section-title">Invoices (' + invoices.length + ")</div>" +
+        (invoices.length ? '<div class="table-wrap"><table><thead><tr><th>No.</th><th>Student</th><th>Amount</th><th>Due</th><th>Status</th></tr></thead><tbody>' +
+          invoices.map((i) =>
+            "<tr><td class='num'>" + esc(i.invoice_number) + "</td><td>" + esc(studentName(i.student_id)) + "</td>" +
+            "<td class='num'>" + money(i.total_amount) + "</td><td>" + fmtDate(i.due_date) + "</td><td>" + chip("invoiceStatus", i.status) + "</td></tr>"
+          ).join("") + "</tbody></table></div>" : '<div class="empty-state">No invoices yet.</div>') +
+        '<div class="section-title">Payments (' + payments.length + ")</div>" +
+        (payments.length ? '<div class="table-wrap"><table><thead><tr><th>Student</th><th>Method</th><th>Amount</th><th>Received</th><th>Status</th></tr></thead><tbody>' +
+          payments.map((p) =>
+            "<tr><td>" + esc(studentName(p.student_id)) + "</td><td>" + esc(p.method) + "</td>" +
+            "<td class='num'>" + money(p.amount, p.currency) + "</td><td>" + fmtDate(p.received_at) + "</td><td>" + chip("invoiceStatus", p.status === "recorded" ? "posted" : p.status) + "</td></tr>"
+          ).join("") + "</tbody></table></div>" : '<div class="empty-state">No payments recorded yet.</div>');
+    } catch (e) {
+      main.innerHTML = '<h1 class="page-title">Finance</h1><div class="toast-error">' + esc(e.message) + "</div>";
+    }
+  }
+
+  /* ============================= Communication ============================= */
+  async function renderComm(main) {
+    main.innerHTML = '<h1 class="page-title">Communication</h1><p class="page-sub">Notifications and acknowledgeable reports — read-only in this console.</p><div class="loading-state">Loading…</div>';
+    try {
+      const [notifications, reports] = await Promise.all([api("/v1/communication/notifications"), api("/v1/communication/reports")]);
+      main.innerHTML =
+        '<h1 class="page-title">Communication</h1>' +
+        '<p class="page-sub">Notifications and acknowledgeable reports — read-only in this console.</p>' +
+        '<div class="section-title">Notifications (' + notifications.length + ")</div>" +
+        (notifications.length ? '<div class="table-wrap"><table><thead><tr><th>Recipient</th><th>Subject / Body</th><th>Sensitivity</th><th>Status</th></tr></thead><tbody>' +
+          notifications.map((n) =>
+            "<tr><td>" + esc(n.recipient_name) + "</td><td>" + esc((n.subject || n.body || "").slice(0, 60)) + "</td>" +
+            "<td>" + chip("sensitivity", n.sensitivity_level) + "</td><td>" + chip("notifStatus", n.status) + "</td></tr>"
+          ).join("") + "</tbody></table></div>" : '<div class="empty-state">No notifications yet.</div>') +
+        '<div class="section-title">Reports (' + reports.length + ")</div>" +
+        (reports.length ? '<div class="table-wrap"><table><thead><tr><th>Title</th><th>Deadline</th><th>Status</th></tr></thead><tbody>' +
+          reports.map((r) =>
+            "<tr><td>" + esc(r.title) + "</td><td>" + fmtDate(r.deadline) + "</td><td>" + chip("reportStatus", r.status) + "</td></tr>"
+          ).join("") + "</tbody></table></div>" : '<div class="empty-state">No reports yet.</div>');
+    } catch (e) {
+      main.innerHTML = '<h1 class="page-title">Communication</h1><div class="toast-error">' + esc(e.message) + "</div>";
+    }
+  }
+
+  /* ============================= Boot ============================= */
+  renderGate();
+})();
+</script>
+</body>
+</html>

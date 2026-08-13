@@ -1,0 +1,45 @@
+{
+  "name": "@pbsms/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PBSMS backend — implements SRS v2.1 Volume 0 (multi-tenant platform) and Volume IV (technical architecture).",
+  "scripts": {
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+    "test": "jest --passWithNoTests",
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "migrate": "psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0001_init_tenancy.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0002_admissions.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0003_attendance.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0004_assessment.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0005_grading.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0006_results.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0007_promotion_documents.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0008_finance.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0009_finance_assistance.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0010_communication.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0011_discipline.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0012_library.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0013_transport.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0014_health.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0015_inventory.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0016_authorization.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0017_score_optimistic_locking.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0018_staff_directory.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0019_guardians.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0020_teacher_assignments.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0021_tenant_lifecycle.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0022_platform_roles.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0023_impersonation.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0024_billing.sql && psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/migrations/0025_auth_completeness.sql",
+    "seed": "psql \"$MIGRATE_DATABASE_URL\" -f ../../infra/seed/seed_demo.sql"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.29",
+    "@nestjs/core": "^11.1.29",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/platform-express": "^11.1.29",
+    "argon2": "^0.40.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "dotenv": "^16.4.5",
+    "pg": "^8.12.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.24",
+    "@nestjs/testing": "^11.1.29",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.6",
+    "@typescript-eslint/eslint-plugin": "^7.16.0",
+    "@typescript-eslint/parser": "^7.16.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  }
+}

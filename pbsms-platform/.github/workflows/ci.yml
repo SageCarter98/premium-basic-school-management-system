@@ -1,0 +1,172 @@
+name: CI
+
+# Implements SRS v2.1 NFR-DEP-020's pipeline:
+#   review -> tests -> SAST/dependency scan -> build -> staging deploy ->
+#   DAST -> migration test -> acceptance -> approval -> backup -> production
+#   deploy -> smoke test -> monitoring
+#
+# This file covers the pull-request-time portion only: tests, SAST,
+# dependency scanning, build, and the migration/isolation test. Staging
+# deploy, DAST, and production deploy are environment-specific and are a
+# Phase 1 build item once real hosting (Appendix E.2) is provisioned.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run lint --workspace apps/api
+
+  dependency-scan:
+    # NFR-SEC-020: "dependency and container vulnerability scanning on
+    # every build". npm audit is the zero-config starting point; replace
+    # with Snyk/Dependabot/Grype once the team has a preference and budget.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm audit --workspace apps/api --audit-level=high
+
+  sast:
+    # NFR-SEC-020: "static application security testing (SAST) on every
+    # pull request". Semgrep's free OSS ruleset needs no account/key.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: p/typescript
+
+  unit-and-migration-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: pbsms
+          POSTGRES_PASSWORD: pbsms_ci
+          POSTGRES_DB: pbsms
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pbsms"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # DATABASE_URL/TEST_DATABASE_URL use the RESTRICTED pbsms_app role, not
+      # the pbsms role the postgres:15 service creates (that role is a
+      # superuser by default in the official image, and superusers always
+      # bypass RLS — this split exists because that exact mistake made
+      # tenant isolation silently inert; see the "RESTRICTED APPLICATION
+      # ROLE" section of infra/migrations/0001_init_tenancy.sql). Only the
+      # migration/seed steps below use MIGRATE_DATABASE_URL (the pbsms role).
+      DATABASE_URL: postgres://pbsms_app:pbsms_app_ci@localhost:5432/pbsms
+      TEST_DATABASE_URL: postgres://pbsms_app:pbsms_app_ci@localhost:5432/pbsms
+      # PLATFORM_DATABASE_URL uses pbsms_platform (0021_tenant_lifecycle.sql)
+      # — the only role that can reach tenants/plans/platform_audit_logs
+      # (TEN-005). Same CI-only-password-reset pattern as pbsms_app below.
+      PLATFORM_DATABASE_URL: postgres://pbsms_platform:pbsms_platform_ci@localhost:5432/pbsms
+      MIGRATE_DATABASE_URL: postgres://pbsms:pbsms_ci@localhost:5432/pbsms
+      JWT_SECRET: ci_only_secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply migrations (NFR-QA-030)
+        # Kept as an explicit, ordered list (not a glob) deliberately — a
+        # glob would silently pick up a future migration before its author
+        # intended it to run in CI. This list must be extended by hand
+        # every time apps/api/package.json's own `migrate` script gains a
+        # new file; caught stale here once already (only 0001-0003 were
+        # wired in while the schema had grown to 0016 — CI's isolation-
+        # suite step would have failed outright against the real schema).
+        run: |
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0001_init_tenancy.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0002_admissions.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0003_attendance.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0004_assessment.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0005_grading.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0006_results.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0007_promotion_documents.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0008_finance.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0009_finance_assistance.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0010_communication.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0011_discipline.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0012_library.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0013_transport.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0014_health.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0015_inventory.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0016_authorization.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0017_score_optimistic_locking.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0018_staff_directory.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0019_guardians.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0020_teacher_assignments.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0021_tenant_lifecycle.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0022_platform_roles.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0023_impersonation.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0024_billing.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0025_auth_completeness.sql
+      - name: Set the CI-only pbsms_app password to match TEST_DATABASE_URL/DATABASE_URL
+        # 0001_init_tenancy.sql hardcodes pbsms_app's local-dev password; CI
+        # uses a different generated postgres password for pbsms itself
+        # (pbsms_ci), so pbsms_app's password is reset here to match what
+        # DATABASE_URL/TEST_DATABASE_URL above actually expect.
+        run: psql "$MIGRATE_DATABASE_URL" -c "ALTER ROLE pbsms_app WITH PASSWORD 'pbsms_app_ci';"
+      - name: Set the CI-only pbsms_platform password to match PLATFORM_DATABASE_URL
+        run: psql "$MIGRATE_DATABASE_URL" -c "ALTER ROLE pbsms_platform WITH PASSWORD 'pbsms_platform_ci';"
+      - name: Apply demo seed (needed by the isolation e2e test)
+        run: psql "$MIGRATE_DATABASE_URL" -f infra/seed/seed_demo.sql
+      - run: npm ci
+      - name: Unit tests
+        run: npm test --workspace apps/api
+      - name: Mandatory cross-tenant isolation suite (NFR-QA-020)
+        run: npm run test:e2e --workspace apps/api
+      - name: Confirm RLS is enabled on every tenant-owned table
+        # A machine-checked version of the sanity query left as a comment
+        # at the bottom of 0001_init_tenancy.sql. If this ever returns a
+        # row, a new table was added without RLS and the build must fail.
+        # Exclusions: plans/tenants/tenant_subscriptions/platform_audit_logs
+        # (TEN-005 platform tables, exempt from tenant scoping entirely) and
+        # users/login_attempts (genuinely tenant-agnostic — neither has a
+        # tenant_id column at all: users holds identity shared across
+        # tenant and platform contexts, login_attempts predates any tenant
+        # resolution). Found this query's exclusion list had drifted out of
+        # sync with the schema (missing these last two) while verifying an
+        # unrelated migration — fixed here rather than left to fail CI on
+        # the next unrelated PR.
+        run: |
+          LEAKY_TABLES=$(psql "$MIGRATE_DATABASE_URL" -tA -c "
+            SELECT relname FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity
+            AND relname NOT IN ('plans','tenants','tenant_subscriptions','platform_audit_logs','users','login_attempts','platform_user_roles','impersonation_grants','impersonation_sensitive_approvals','platform_invoices','refresh_tokens','password_reset_tokens');
+          ")
+          if [ -n "$LEAKY_TABLES" ]; then
+            echo "::error::Tenant-owned table(s) without RLS enabled: $LEAKY_TABLES"
+            exit 1
+          fi
+
+  build:
+    needs: [lint-and-typecheck, unit-and-migration-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build --workspace apps/api

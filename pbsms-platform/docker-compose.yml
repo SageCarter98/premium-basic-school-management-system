@@ -1,0 +1,49 @@
+version: "3.9"
+
+# Local development environment only. Implements the "local" environment
+# tier from SRS v2.1 NFR-DEP-010 — separate database, storage, secrets from
+# every other environment. Never point this file's DATABASE_URL at a shared
+# or production database.
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: pbsms
+      POSTGRES_PASSWORD: pbsms_local_only
+      POSTGRES_DB: pbsms
+    ports:
+      - "5432:5432"
+    volumes:
+      - pbsms_pg_data:/var/lib/postgresql/data
+      # The official postgres image runs *files* (not subdirectories) in
+      # /docker-entrypoint-initdb.d/ in name-sorted order on first startup
+      # only (i.e. only when the data volume is first created). Mount each
+      # file individually, numbered, so migration always runs before seed.
+      - ./infra/migrations/0001_init_tenancy.sql:/docker-entrypoint-initdb.d/0001_init_tenancy.sql:ro
+      - ./infra/seed/seed_demo.sql:/docker-entrypoint-initdb.d/0002_seed_demo.sql:ro
+      # POSTGRES_USER (pbsms) becomes a Postgres superuser in this image —
+      # fine for running the migration/seed above, but the app must NOT
+      # connect as it: superusers unconditionally bypass RLS. 0001 also
+      # creates a restricted `pbsms_app` role; point DATABASE_URL at that
+      # role, not this one — see .env.example.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pbsms"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+volumes:
+  pbsms_pg_data:

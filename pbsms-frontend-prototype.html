@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PBSMS — Frontend Prototype v1.1</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B4F4A">
+<style>
+/* ==========================================================================
+   PBSMS Design Tokens — see Frontend Design Specification §4
+   Palette derived from the subject's own materials: blackboard green,
+   exercise-book manila, and the gold that already signals attainment in
+   Ghanaian schools. Gold is reserved for attainment and nothing else.
+   ========================================================================== */
+:root{
+  --pb-ink:#12211F;
+  --pb-ink-muted:#5A6663;
+  --pb-teal-900:#0B4F4A;
+  --pb-teal-600:#12726B;
+  --pb-teal-50:#E6EFEC;
+  --pb-gold:#9A6700;
+  --pb-gold-50:#FBF3E0;
+  --pb-canvas:#FAF7F0;
+  --pb-surface:#FFFFFF;
+  --pb-rule:#E3DED2;
+
+  --pb-success:#1E6B3A;
+  --pb-warning:#8A5A00;
+  --pb-danger:#A32017;
+
+  --pb-space-1:4px;  --pb-space-2:8px;  --pb-space-3:12px; --pb-space-4:16px;
+  --pb-space-5:24px; --pb-space-6:32px; --pb-space-7:48px;
+
+  --pb-radius-sm:4px; --pb-radius-md:8px; --pb-radius-lg:12px;
+
+  --pb-shadow-1:0 1px 2px rgba(18,33,31,.08);
+  --pb-shadow-2:0 4px 12px rgba(18,33,31,.10);
+  --pb-shadow-3:0 12px 32px rgba(18,33,31,.14);
+
+  --pb-ease:cubic-bezier(.2,0,0,1);
+  --pb-dur-fast:120ms; --pb-dur-base:200ms;
+
+  --pb-font-body:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --pb-font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--pb-canvas);color:var(--pb-ink);
+  font-family:var(--pb-font-body);font-size:16px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
+button{font-family:inherit;font-size:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--pb-teal-600);outline-offset:2px;border-radius:var(--pb-radius-sm)}
+.tnum{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--pb-font-mono);font-size:.9em}
+
+/* ---------- prototype chrome (not part of the product) ---------- */
+.proto-bar{
+  background:var(--pb-ink);color:#fff;padding:var(--pb-space-3) var(--pb-space-5);
+  display:flex;gap:var(--pb-space-5);align-items:center;flex-wrap:wrap;
+  position:sticky;top:0;z-index:100;
+}
+.proto-bar strong{font-size:15px;letter-spacing:.02em}
+.proto-bar .note{color:#A8B5B2;font-size:13px}
+.proto-tabs{display:flex;gap:var(--pb-space-1);flex-wrap:wrap;margin-left:auto}
+.proto-tabs button{
+  background:transparent;border:1px solid #3A4744;color:#D6DEDC;
+  padding:6px 12px;border-radius:var(--pb-radius-sm);font-size:13px;
+  transition:background var(--pb-dur-fast) var(--pb-ease);
+}
+.proto-tabs button:hover{background:#22302D}
+.proto-tabs button[aria-selected="true"]{background:#fff;color:var(--pb-ink);border-color:#fff;font-weight:600}
+.stage{padding:var(--pb-space-6) var(--pb-space-5);max-width:1180px;margin:0 auto}
+.stage h2.screen-title{font-size:23px;margin-bottom:var(--pb-space-1)}
+.stage p.screen-note{color:var(--pb-ink-muted);font-size:14px;margin:0 0 var(--pb-space-5);max-width:70ch}
+[hidden]{display:none!important}
+
+/* ---------- shared components ---------- */
+.card{background:var(--pb-surface);border:1px solid var(--pb-rule);border-radius:var(--pb-radius-md);box-shadow:var(--pb-shadow-1)}
+.btn{
+  border:1px solid transparent;border-radius:var(--pb-radius-sm);padding:10px 16px;
+  font-weight:500;transition:background var(--pb-dur-fast) var(--pb-ease);
+}
+.btn-primary{background:var(--pb-teal-900);color:#fff}
+.btn-primary:hover{background:var(--pb-teal-600)}
+.btn-primary:disabled{background:#B9C4C1;color:#6D7876;cursor:not-allowed}
+.btn-secondary{background:var(--pb-surface);border-color:var(--pb-rule);color:var(--pb-ink)}
+.btn-secondary:hover{background:var(--pb-teal-50)}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;
+  font-size:12px;font-weight:600;line-height:1.7;
+}
+.pill-success{background:#E4F0E9;color:var(--pb-success)}
+.pill-warning{background:#FBF0DC;color:var(--pb-warning)}
+.pill-danger{background:#F8E5E3;color:var(--pb-danger)}
+.pill-gold{background:var(--pb-gold-50);color:var(--pb-gold)}
+.pill-neutral{background:var(--pb-teal-50);color:var(--pb-teal-900)}
+
+/* ---------- device frames ---------- */
+.phone{
+  width:380px;max-width:100%;border:1px solid var(--pb-rule);border-radius:var(--pb-radius-lg);
+  background:var(--pb-surface);overflow:hidden;box-shadow:var(--pb-shadow-2);
+}
+.phone-head{background:var(--pb-teal-900);color:#fff;padding:var(--pb-space-3) var(--pb-space-4)}
+.two-up{display:flex;gap:var(--pb-space-6);flex-wrap:wrap;align-items:flex-start}
+
+/* ---------- SyncLedger (the signature component, spec §8.2) ---------- */
+.sync{
+  display:flex;align-items:center;gap:var(--pb-space-2);
+  padding:10px var(--pb-space-4);font-size:13px;font-weight:500;
+  border-bottom:1px solid var(--pb-rule);
+}
+.sync-offline{background:#FBF0DC;color:var(--pb-warning)}
+.sync-syncing{background:var(--pb-teal-50);color:var(--pb-teal-900)}
+.sync-done{background:#E4F0E9;color:var(--pb-success)}
+.sync .glyph{font-size:15px;line-height:1}
+.sync button{
+  margin-left:auto;background:transparent;border:1px solid currentColor;color:inherit;
+  padding:3px 10px;border-radius:var(--pb-radius-sm);font-size:12px;font-weight:600;
+}
+
+/* ---------- register (spec §8.1) ---------- */
+.reg-row{padding:var(--pb-space-3) var(--pb-space-4);border-bottom:1px solid var(--pb-rule)}
+.reg-top{display:flex;align-items:center;gap:var(--pb-space-3)}
+.reg-name{font-weight:500;flex:1;font-size:15px}
+.seg{display:flex;gap:4px}
+.seg button{
+  min-width:38px;height:38px;border:1px solid var(--pb-rule);background:var(--pb-surface);
+  border-radius:var(--pb-radius-sm);font-size:13px;font-weight:600;color:var(--pb-ink-muted);
+  transition:all var(--pb-dur-fast) var(--pb-ease);
+}
+.seg button[aria-pressed="true"]{background:var(--pb-teal-900);border-color:var(--pb-teal-900);color:#fff}
+.seg button.abs[aria-pressed="true"]{background:var(--pb-danger);border-color:var(--pb-danger)}
+.seg button.late[aria-pressed="true"]{background:var(--pb-warning);border-color:var(--pb-warning)}
+.reg-state{font-size:12px;margin-top:6px;display:flex;align-items:center;gap:5px}
+.state-local{color:var(--pb-warning)}
+.state-synced{color:var(--pb-success)}
+
+/* ---------- data table ---------- */
+table.data{width:100%;border-collapse:collapse;background:var(--pb-surface);font-size:14px}
+table.data th{
+  text-align:left;padding:10px var(--pb-space-3);border-bottom:2px solid var(--pb-rule);
+  font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--pb-ink-muted);font-weight:600;
+}
+table.data td{padding:11px var(--pb-space-3);border-bottom:1px solid var(--pb-rule)}
+table.data tbody tr:hover{background:var(--pb-teal-50)}
+
+/* ---------- publication gate (spec §8.4) ---------- */
+.check{display:flex;gap:var(--pb-space-3);padding:var(--pb-space-3) 0;border-bottom:1px solid var(--pb-rule);align-items:flex-start}
+.check .glyph{font-weight:700;line-height:1.4}
+.check.ok .glyph{color:var(--pb-success)}
+.check.blocked .glyph{color:var(--pb-warning)}
+.check .body{flex:1}
+.check .sub{font-size:13px;color:var(--pb-ink-muted);margin-top:2px}
+
+/* ---------- swatches ---------- */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--pb-space-3)}
+.sw{border:1px solid var(--pb-rule);border-radius:var(--pb-radius-md);overflow:hidden;background:var(--pb-surface)}
+.sw .chip{height:60px}
+.sw .meta{padding:var(--pb-space-2) var(--pb-space-3);font-size:12px}
+.sw .meta code{font-family:var(--pb-font-mono);color:var(--pb-ink-muted);font-size:11px}
+
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--pb-space-3)}
+.kpi .card{padding:var(--pb-space-4)}
+.kpi .label{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--pb-ink-muted);font-weight:600}
+.kpi .fig{font-size:28px;font-weight:600;margin-top:6px}
+.kpi .sub{font-size:13px;color:var(--pb-ink-muted)}
+
+.banner-support{
+  background:#4A1410;color:#fff;padding:var(--pb-space-3) var(--pb-space-4);
+  border-radius:var(--pb-radius-md);display:flex;gap:var(--pb-space-4);align-items:center;flex-wrap:wrap;
+}
+.banner-support .t{font-weight:700;letter-spacing:.06em;font-size:13px}
+.banner-support .d{font-size:13px;color:#E8C9C5}
+
+.legend{font-size:13px;color:var(--pb-ink-muted);margin-top:var(--pb-space-4);padding-top:var(--pb-space-3);border-top:1px solid var(--pb-rule)}
+
+/* ---------- breadcrumbs (spec §6.1) ---------- */
+.crumbs{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--pb-ink-muted);margin-bottom:var(--pb-space-4)}
+.crumbs a{color:var(--pb-teal-600);text-decoration:none;font-weight:500}
+.crumbs a:hover{text-decoration:underline}
+.crumbs .sep{color:var(--pb-rule)}
+.crumbs .current{color:var(--pb-ink);font-weight:600}
+
+/* ---------- states: loading / empty / restricted (spec §8.12) ---------- */
+.skel{background:linear-gradient(90deg,#EDE8DB 25%,#F5F1E6 37%,#EDE8DB 63%);background-size:400% 100%;
+  animation:skel-shine 1.4s ease infinite;border-radius:var(--pb-radius-sm)}
+@keyframes skel-shine{0%{background-position:100% 0}100%{background-position:-100% 0}}
+.empty-state, .restricted-state{
+  text-align:center;padding:var(--pb-space-7) var(--pb-space-5);color:var(--pb-ink-muted);
+}
+.empty-state h3, .restricted-state h3{color:var(--pb-ink);font-size:17px;margin-bottom:6px}
+.empty-state p, .restricted-state p{font-size:14px;max-width:44ch;margin:0 auto var(--pb-space-4)}
+.restricted-state{background:var(--pb-teal-50);border-radius:var(--pb-radius-md)}
+
+/* ---------- data-saver toggle (spec §9.3) ---------- */
+.saver-row{display:flex;align-items:center;justify-content:space-between;padding:var(--pb-space-3) var(--pb-space-4);border-bottom:1px solid var(--pb-rule);font-size:13px}
+.saver-toggle{position:relative;width:38px;height:22px;border-radius:999px;background:var(--pb-rule);border:none;cursor:pointer;flex-shrink:0}
+.saver-toggle::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform var(--pb-dur-fast) var(--pb-ease);box-shadow:var(--pb-shadow-1)}
+.saver-toggle[aria-pressed="true"]{background:var(--pb-teal-900)}
+.saver-toggle[aria-pressed="true"]::after{transform:translateX(16px)}
+</style>
+</head>
+<body>
+
+<div class="proto-bar">
+  <strong>PBSMS · Frontend Prototype</strong>
+  <span class="note">v1.1 — audited against SRS v2.1 Ch. 34 &amp; 42</span>
+  <div class="proto-tabs" role="tablist">
+    <button role="tab" aria-selected="true"  data-screen="tokens">Design system</button>
+    <button role="tab" aria-selected="false" data-screen="register">Register (teacher)</button>
+    <button role="tab" aria-selected="false" data-screen="scores">Score entry (offline)</button>
+    <button role="tab" aria-selected="false" data-screen="publish">Publication gate</button>
+    <button role="tab" aria-selected="false" data-screen="students">Student list</button>
+    <button role="tab" aria-selected="false" data-screen="states">States</button>
+    <button role="tab" aria-selected="false" data-screen="parent">Parent view</button>
+    <button role="tab" aria-selected="false" data-screen="platform">Platform console</button>
+  </div>
+</div>
+
+<!-- ===================== DESIGN SYSTEM ===================== -->
+<section class="stage" data-panel="tokens">
+  <h2 class="screen-title">Design system</h2>
+  <p class="screen-note">Blackboard green, exercise-book manila, and the gold that already means attainment in Ghanaian schools. Gold appears on grades and settled accounts and nowhere else — if it spreads to buttons and headers it stops carrying meaning.</p>
+
+  <h3 style="margin-bottom:var(--pb-space-3)">Colour</h3>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:#12211F"></div><div class="meta"><strong>Ink</strong><br><code>--pb-ink · #12211F</code></div></div>
+    <div class="sw"><div class="chip" style="background:#0B4F4A"></div><div class="meta"><strong>Teal 900</strong><br><code>--pb-teal-900 · #0B4F4A</code></div></div>
+    <div class="sw"><div class="chip" style="background:#12726B"></div><div class="meta"><strong>Teal 600</strong><br><code>--pb-teal-600 · #12726B</code></div></div>
+    <div class="sw"><div class="chip" style="background:#9A6700"></div><div class="meta"><strong>Gold</strong><br><code>--pb-gold · #9A6700</code></div></div>
+    <div class="sw"><div class="chip" style="background:#FAF7F0;border-bottom:1px solid #E3DED2"></div><div class="meta"><strong>Canvas</strong><br><code>--pb-canvas · #FAF7F0</code></div></div>
+    <div class="sw"><div class="chip" style="background:#1E6B3A"></div><div class="meta"><strong>Success</strong><br><code>--pb-success · #1E6B3A</code></div></div>
+    <div class="sw"><div class="chip" style="background:#8A5A00"></div><div class="meta"><strong>Warning</strong><br><code>--pb-warning · #8A5A00</code></div></div>
+    <div class="sw"><div class="chip" style="background:#A32017"></div><div class="meta"><strong>Danger</strong><br><code>--pb-danger · #A32017</code></div></div>
+  </div>
+
+  <h3 style="margin:var(--pb-space-6) 0 var(--pb-space-3)">Status — never colour alone</h3>
+  <div class="card" style="padding:var(--pb-space-4);display:flex;gap:var(--pb-space-3);flex-wrap:wrap">
+    <span class="pill pill-success">✓ Saved to school</span>
+    <span class="pill pill-warning">◍ On this phone</span>
+    <span class="pill pill-danger">✕ Could not save</span>
+    <span class="pill pill-gold">★ Grade A · Excellent</span>
+    <span class="pill pill-neutral">◷ Awaiting approval</span>
+  </div>
+  <p class="legend">Each state pairs a colour with a glyph <em>and</em> a word, so it survives greyscale printing and colour-vision differences (WCAG 1.4.1). Report cards get printed in black and white constantly — a grade that only reads as "green" would be lost.</p>
+
+  <h3 style="margin:var(--pb-space-6) 0 var(--pb-space-3)">Figures &amp; identifiers</h3>
+  <div class="card" style="padding:var(--pb-space-4)">
+    <table class="data">
+      <thead><tr><th>Student</th><th>Admission no.</th><th>Maths</th><th>English</th><th>Balance (GH₵)</th></tr></thead>
+      <tbody>
+        <tr><td>Ama Mensah</td><td class="mono">SUN-2026-001</td><td class="tnum">84</td><td class="tnum">77</td><td class="tnum">450.00</td></tr>
+        <tr><td>Kofi Boateng</td><td class="mono">SUN-2026-014</td><td class="tnum">9</td><td class="tnum">100</td><td class="tnum">1,250.00</td></tr>
+        <tr><td>Yaa Owusu</td><td class="mono">SUN-2026-107</td><td class="tnum">68</td><td class="tnum">8</td><td class="tnum">0.00</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="legend">Tabular figures keep scores and money in true columns — 9 and 100 line up, so an outlier is visible by shape before it is read. Identifiers use monospace because they get read aloud and checked against paper receipts, where a transposed digit is the common error.</p>
+</section>
+
+<!-- ===================== REGISTER ===================== -->
+<section class="stage" data-panel="register" hidden>
+  <h2 class="screen-title">Daily register — Teacher Field App</h2>
+  <p class="screen-note">The highest-frequency screen in the system, used in a classroom on a personal Android phone with unreliable connectivity. Tap the statuses — the sync ledger responds. Everything here works with the network off.</p>
+
+  <div class="two-up">
+    <div class="phone">
+      <div class="phone-head">
+        <div style="display:flex;align-items:center;gap:var(--pb-space-3)">
+          <span aria-hidden="true">←</span>
+          <strong style="flex:1;font-size:15px">JHS 2A · Tue 11 Aug</strong>
+        </div>
+      </div>
+
+      <div class="sync sync-offline" id="ledger" role="status" aria-live="polite">
+        <span class="glyph" aria-hidden="true">◍</span>
+        <span id="ledger-text">Working offline · 2 marks on this phone</span>
+        <button type="button">View</button>
+      </div>
+
+      <div id="register"></div>
+
+      <div style="padding:var(--pb-space-4)">
+        <div style="font-size:13px;color:var(--pb-ink-muted);margin-bottom:var(--pb-space-3)">
+          <span id="marked-count">2</span> of 5 marked
+        </div>
+        <button class="btn btn-primary" style="width:100%" id="submit-btn">Submit when back online</button>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:280px;max-width:420px">
+      <div class="card" style="padding:var(--pb-space-4)">
+        <h3 style="font-size:15px;margin-bottom:var(--pb-space-3)">Why it looks like this</h3>
+        <ul style="margin:0;padding-left:1.1em;font-size:14px;color:var(--pb-ink-muted);line-height:1.7">
+          <li><strong style="color:var(--pb-ink)">Five states, one tap.</strong> Present, Absent, Late, Excused, Sick as a segmented control — not a dropdown, not a modal.</li>
+          <li><strong style="color:var(--pb-ink)">Every row states its own truth.</strong> "On this phone" and "saved to school" are different sentences. The interface always uses the true one.</li>
+          <li><strong style="color:var(--pb-ink)">The button never lies.</strong> Offline it reads "Submit when back online", because it will queue, not send.</li>
+          <li><strong style="color:var(--pb-ink)">44px targets, 56px rows.</strong> One-handed use, standing up, in a room of children.</li>
+        </ul>
+      </div>
+      <div class="card" style="padding:var(--pb-space-4);margin-top:var(--pb-space-4);background:var(--pb-teal-50);border-color:#C5D8D3">
+        <h3 style="font-size:14px;margin-bottom:6px">Requirement traced</h3>
+        <p style="margin:0;font-size:13px;color:var(--pb-teal-900)">
+          FR-ATT-010 (offline capture) · FR-ATT-011 (conflict rule) · FR-ATT-020 (five statuses) ·
+          FR-UX-020 / FR-UX-030 (queue + honest state) · WCAG 2.5.5 (target size)
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PUBLICATION GATE ===================== -->
+<section class="stage" data-panel="publish" hidden>
+  <h2 class="screen-title">Results publication gate — Staff Console</h2>
+  <p class="screen-note">FR-RES-020 sets five conditions for publishing results. Most approval interfaces present a disabled button and leave you guessing. This one shows the live checklist, names what is blocking, and links straight to the fix.</p>
+
+  <div class="card" style="padding:var(--pb-space-5);max-width:640px">
+    <h3 style="font-size:19px">Publish results</h3>
+    <p style="color:var(--pb-ink-muted);font-size:14px;margin:4px 0 var(--pb-space-4)">JHS 2A · Term 2 · 2026/2027</p>
+
+    <div class="check ok"><span class="glyph" aria-hidden="true">✓</span><div class="body">All 9 subjects approved</div></div>
+    <div class="check ok"><span class="glyph" aria-hidden="true">✓</span><div class="body">Class teacher review complete<div class="sub">Kwame Asante · 9 Aug, 14:20</div></div></div>
+    <div class="check ok"><span class="glyph" aria-hidden="true">✓</span><div class="body">Headmaster approval recorded<div class="sub">Grace Adjei · 10 Aug, 09:05</div></div></div>
+    <div class="check blocked">
+      <span class="glyph" aria-hidden="true">⚠</span>
+      <div class="body">
+        2 students missing Social Studies scores
+        <div class="sub">Ama Mensah · Kofi Boateng</div>
+      </div>
+      <button class="btn btn-secondary" style="padding:6px 12px;font-size:13px">Resolve</button>
+    </div>
+    <div class="check ok"><span class="glyph" aria-hidden="true">✓</span><div class="body">Report template available<div class="sub">GES Standard · Basic/JHS</div></div></div>
+
+    <div style="margin-top:var(--pb-space-5);display:flex;gap:var(--pb-space-3);align-items:center;flex-wrap:wrap">
+      <button class="btn btn-primary" disabled>Publish results</button>
+      <span style="font-size:13px;color:var(--pb-warning)">Blocked — 2 students are missing scores</span>
+    </div>
+  </div>
+
+  <p class="legend">Once published, a result is never overwritten (FR-RES-030). Reopening is a separate, audited action requiring a reason — so the interface treats publishing as consequential, with the cost of the action stated before it is taken, not after.</p>
+</section>
+
+<!-- ===================== STUDENT LIST ===================== -->
+<section class="stage" data-panel="students" hidden>
+  <h2 class="screen-title">Student list — Staff Console</h2>
+  <p class="screen-note">The desktop surface is unapologetically dense. Office users on laptops want tables, filters and bulk actions — the same restraint that serves a teacher on a phone would waste their screen and their time.</p>
+
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="#">Students</a><span class="sep">›</span><span class="current">JHS 2A</span>
+  </nav>
+
+  <div style="display:flex;gap:var(--pb-space-3);margin-bottom:var(--pb-space-4);flex-wrap:wrap;align-items:center">
+    <span class="pill pill-neutral">Sunrise Basic School</span>
+    <span class="pill pill-neutral">Main Campus</span>
+    <span class="pill pill-neutral">2026/2027</span>
+    <span class="pill pill-neutral">Term 2</span>
+    <button class="btn btn-secondary" style="margin-left:auto;padding:8px 14px;font-size:14px">Export</button>
+    <button class="btn btn-primary" style="padding:8px 14px;font-size:14px">Add student</button>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <table class="data">
+      <thead>
+        <tr><th>Name</th><th>Admission no.</th><th>Class</th><th>Attendance</th><th>Balance (GH₵)</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Ama Mensah</td><td class="mono">SUN-2026-001</td><td>JHS 2A</td><td class="tnum">96%</td><td class="tnum">450.00</td><td><span class="pill pill-success">Active</span></td></tr>
+        <tr><td>Kofi Boateng</td><td class="mono">SUN-2026-014</td><td>JHS 2A</td><td class="tnum">81%</td><td class="tnum">1,250.00</td><td><span class="pill pill-warning">Arrears</span></td></tr>
+        <tr><td>Yaa Owusu</td><td class="mono">SUN-2026-107</td><td>Basic 5</td><td class="tnum">99%</td><td class="tnum">0.00</td><td><span class="pill pill-success">Active</span></td></tr>
+        <tr><td>Kwabena Asare</td><td class="mono">SUN-2025-088</td><td>JHS 3B</td><td class="tnum">74%</td><td class="tnum">300.00</td><td><span class="pill pill-danger">Follow up</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="legend">Fixed since v1.0: the context switcher is now four-part — school, campus, year, term, not three — and a breadcrumb sits above it. The most common data-entry error in school software is a teacher entering scores against last term (or, for a multi-campus tenant, the wrong campus) — so the active period and place are never more than a glance away.</p>
+</section>
+
+<!-- ===================== PARENT ===================== -->
+<section class="stage" data-panel="parent" hidden>
+  <h2 class="screen-title">Parent view</h2>
+  <p class="screen-note">A guardian arrives from a WhatsApp link on a metered connection. Three questions — how is my child doing, what do I owe, is anything wrong — answered in that order, in under 150KB.</p>
+
+  <div class="two-up">
+    <div class="phone">
+      <div class="phone-head">
+        <div style="font-size:13px;opacity:.85">Sunrise Basic School</div>
+        <div style="display:flex;gap:var(--pb-space-3);margin-top:var(--pb-space-2)">
+          <button style="background:#fff;color:var(--pb-teal-900);border:none;padding:5px 14px;border-radius:999px;font-size:13px;font-weight:600">Ama</button>
+          <button style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);padding:5px 14px;border-radius:999px;font-size:13px">Kwesi</button>
+        </div>
+      </div>
+
+      <div style="padding:var(--pb-space-4);border-bottom:1px solid var(--pb-rule);background:var(--pb-gold-50)">
+        <div style="font-size:12px;font-weight:600;color:var(--pb-gold);text-transform:uppercase;letter-spacing:.05em">Term 2 results are ready</div>
+        <div style="font-size:19px;font-weight:600;margin:6px 0 var(--pb-space-3)">Ama placed 4th of 32</div>
+        <button class="btn btn-primary" style="width:100%">View report card</button>
+      </div>
+
+      <div style="padding:var(--pb-space-4);border-bottom:1px solid var(--pb-rule)">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--pb-ink-muted);font-weight:600">Balance</div>
+        <div class="tnum" style="font-size:33px;font-weight:700;margin:4px 0">GH₵ 450.00</div>
+        <div style="font-size:13px;color:var(--pb-warning);margin-bottom:var(--pb-space-3)">Due 30 August</div>
+        <div style="display:flex;gap:var(--pb-space-2)">
+          <button class="btn btn-primary" style="flex:1">Pay now</button>
+          <button class="btn btn-secondary" style="flex:1">See statement</button>
+        </div>
+      </div>
+
+      <div class="saver-row">
+        <span>Data saver <span style="color:var(--pb-ink-muted)">— fewer images, no auto-loaded attachments</span></span>
+        <button class="saver-toggle" id="saver-toggle" role="switch" aria-checked="false" aria-pressed="false" aria-label="Data saver mode"></button>
+      </div>
+
+      <div style="padding:var(--pb-space-4)">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--pb-ink-muted);font-weight:600">Attendance this term</div>
+        <div class="tnum" style="font-size:28px;font-weight:600;margin:4px 0">96%</div>
+        <div style="font-size:13px;color:var(--pb-ink-muted)">Present 44 · Absent 2 · Late 1</div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:280px;max-width:420px">
+      <div class="card" style="padding:var(--pb-space-4)">
+        <h3 style="font-size:15px;margin-bottom:var(--pb-space-3)">What is deliberately missing</h3>
+        <ul style="margin:0;padding-left:1.1em;font-size:14px;color:var(--pb-ink-muted);line-height:1.7">
+          <li>No sidebar, no dashboard grid, no KPI cards.</li>
+          <li>No app install required — this is a link that opens.</li>
+          <li>No webfont. Body text uses the phone's own font, which costs nothing to download and renders instantly.</li>
+          <li>Body text never smaller than 16px. Guardians span every age and eyesight.</li>
+        </ul>
+      </div>
+      <div class="card" style="padding:var(--pb-space-4);margin-top:var(--pb-space-4);background:var(--pb-teal-50);border-color:#C5D8D3">
+        <h3 style="font-size:14px;margin-bottom:6px">Requirement traced</h3>
+        <p style="margin:0;font-size:13px;color:var(--pb-teal-900)">
+          FR-STU-060 (linked children only) · FR-RES-040 (published results only) ·
+          FR-PAY-010 (pay via Ghanaian rails) · FR-UX-040 (low data) · NFR-PERF-020 (2.5s on 3G)
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PLATFORM ===================== -->
+<section class="stage" data-panel="platform" hidden>
+  <h2 class="screen-title">Platform console — support session</h2>
+  <p class="screen-note">PBSMS staff working inside a customer's account. TEN-021 requires impersonation to be time-boxed, ticket-linked and visible to the school in real time — so the interface makes it impossible to forget where you are.</p>
+
+  <div class="banner-support" style="margin-bottom:var(--pb-space-5)">
+    <span class="t">■ SUPPORT SESSION</span>
+    <span>Sunrise Basic School</span>
+    <span class="d">Ticket #4821 · expires in 47 min · read-only</span>
+    <span class="d">Visible in the school's own audit log</span>
+    <button class="btn btn-secondary" style="margin-left:auto;padding:6px 14px;font-size:13px">End session now</button>
+  </div>
+
+  <div class="kpi" style="margin-bottom:var(--pb-space-5)">
+    <div class="card"><div class="label">Active students</div><div class="fig tnum">312</div><div class="sub">Metered this term</div></div>
+    <div class="card"><div class="label">Plan</div><div class="fig" style="font-size:19px">Standard</div><div class="sub">Termly billing</div></div>
+    <div class="card"><div class="label">Status</div><div class="fig" style="font-size:19px"><span class="pill pill-success">Active</span></div><div class="sub">Since 12 Jan 2026</div></div>
+    <div class="card"><div class="label">Schools</div><div class="fig tnum">1</div><div class="sub">1 campus</div></div>
+  </div>
+
+  <div class="card" style="padding:var(--pb-space-4)">
+    <h3 style="font-size:15px;margin-bottom:var(--pb-space-3)">Blocked during support sessions</h3>
+    <div style="display:flex;gap:var(--pb-space-3);flex-wrap:wrap">
+      <button class="btn btn-primary" disabled>Reverse payment</button>
+      <button class="btn btn-primary" disabled>Export student data</button>
+      <button class="btn btn-primary" disabled>Change permissions</button>
+    </div>
+    <p style="margin:var(--pb-space-3) 0 0;font-size:13px;color:var(--pb-ink-muted)">
+      These require a second platform approver (four-eyes, TEN-021). They stay visible and disabled with the reason named — hiding them would leave a support engineer guessing why the product seems broken.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== OFFLINE SCORE ENTRY (fixes v1.0 gap — FR-UX-020) ===================== -->
+<section class="stage" data-panel="scores" hidden>
+  <h2 class="screen-title">Score entry — Teacher Field App, offline</h2>
+  <p class="screen-note">FR-UX-020 requires attendance <em>and</em> score entry to be equally offline-capable. v1.0 only built and prototyped the register. This reuses the same SyncLedger and the same honest-state language — tap the steppers.</p>
+
+  <div class="two-up">
+    <div class="phone">
+      <div class="phone-head">
+        <div style="display:flex;align-items:center;gap:var(--pb-space-3)">
+          <span aria-hidden="true">←</span>
+          <strong style="flex:1;font-size:15px">Maths · Mid-term · JHS 2A</strong>
+        </div>
+      </div>
+
+      <div class="sync sync-offline" id="score-ledger" role="status" aria-live="polite">
+        <span class="glyph" aria-hidden="true">◍</span>
+        <span id="score-ledger-text">Working offline · 1 score on this phone</span>
+        <button type="button">View</button>
+      </div>
+
+      <div id="score-grid"></div>
+
+      <div style="padding:var(--pb-space-4)">
+        <div style="font-size:13px;color:var(--pb-ink-muted);margin-bottom:var(--pb-space-3)">
+          <span id="score-count">1</span> of 3 scored
+        </div>
+        <button class="btn btn-primary" style="width:100%" id="score-submit-btn">Submit when back online</button>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:280px;max-width:420px">
+      <div class="card" style="padding:var(--pb-space-4)">
+        <h3 style="font-size:15px;margin-bottom:var(--pb-space-3)">Same model, different input shape</h3>
+        <ul style="margin:0;padding-left:1.1em;font-size:14px;color:var(--pb-ink-muted);line-height:1.7">
+          <li>A stepper, not a spreadsheet — correct for a thumb, not a mouse. The Staff Console keeps the desktop grid.</li>
+          <li>Tap the number to open the device's own numeric keypad for direct entry.</li>
+          <li>Bounds (0–100 here) are enforced the same way on both surfaces, server-side.</li>
+          <li>One SyncLedger, one vocabulary — a teacher learns "on this phone" vs "saved to school" once, not twice.</li>
+        </ul>
+      </div>
+      <div class="card" style="padding:var(--pb-space-4);margin-top:var(--pb-space-4);background:var(--pb-teal-50);border-color:#C5D8D3">
+        <h3 style="font-size:14px;margin-bottom:6px">Requirement traced</h3>
+        <p style="margin:0;font-size:13px;color:var(--pb-teal-900)">FR-UX-020 (offline score entry) · FR-ASM-030 (bounds at input) · FR-ASM-040 (submitted lock) — Frontend Spec §8.11</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== STATES (fixes v1.0 gap — SRS 34.5) ===================== -->
+<section class="stage" data-panel="states" hidden>
+  <h2 class="screen-title">Loading, empty &amp; restricted states</h2>
+  <p class="screen-note">34.5 names six required states. v1.0 demonstrated success, error and offline elsewhere in this prototype and left these three as component names only. Here they are, specified — Frontend Spec §8.12.</p>
+
+  <h3 style="margin-bottom:var(--pb-space-3)">Loading — skeleton, not a spinner, for anything list-shaped</h3>
+  <div class="card" style="padding:var(--pb-space-4);margin-bottom:var(--pb-space-6)">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="skel" style="height:16px;width:70%"></div>
+      <div class="skel" style="height:16px;width:45%"></div>
+      <div class="skel" style="height:16px;width:60%"></div>
+      <div class="skel" style="height:16px;width:38%"></div>
+    </div>
+  </div>
+
+  <h3 style="margin-bottom:var(--pb-space-3)">Empty — an invitation to act, not an apology</h3>
+  <div class="card empty-state" style="margin-bottom:var(--pb-space-6)">
+    <h3>No applications yet</h3>
+    <p>Applications will appear here once a parent submits one, or you can add one directly.</p>
+    <button class="btn btn-primary">Add application manually</button>
+  </div>
+
+  <h3 style="margin-bottom:var(--pb-space-3)">Restricted — names what's restricted and who to ask, never a bare 403</h3>
+  <div class="restricted-state">
+    <h3>You don't have access to this record</h3>
+    <p>Health records are restricted to staff with the Health Officer role. Ask your administrator if you need access.</p>
+  </div>
+</section>
+
+<script>
+/* ---------- prototype tab switching ---------- */
+const tabs = document.querySelectorAll('.proto-tabs button');
+const panels = document.querySelectorAll('[data-panel]');
+tabs.forEach(tab => tab.addEventListener('click', () => {
+  tabs.forEach(t => t.setAttribute('aria-selected', String(t === tab)));
+  panels.forEach(p => { p.hidden = p.dataset.panel !== tab.dataset.screen; });
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}));
+
+/* ---------- register: the SyncLedger demo (spec §8.1, §8.2) ---------- */
+const STATUSES = [
+  {code:'P', label:'Present'},
+  {code:'A', label:'Absent',  cls:'abs'},
+  {code:'L', label:'Late',    cls:'late'},
+  {code:'E', label:'Excused'},
+  {code:'S', label:'Sick'}
+];
+
+const students = [
+  {id:1, name:'Ama Mensah',     mark:'P', sync:'synced'},
+  {id:2, name:'Kofi Boateng',   mark:'A', sync:'local'},
+  {id:3, name:'Yaa Owusu',      mark:null, sync:null},
+  {id:4, name:'Kwabena Asare',  mark:null, sync:null},
+  {id:5, name:'Efua Sarpong',   mark:null, sync:null}
+];
+
+function renderRegister(){
+  const host = document.getElementById('register');
+  if(!host) return;
+  host.innerHTML = students.map(s => `
+    <div class="reg-row">
+      <div class="reg-top">
+        <span class="reg-name">${s.name}</span>
+        <div class="seg" role="group" aria-label="Attendance for ${s.name}">
+          ${STATUSES.map(st => `
+            <button type="button"
+                    class="${st.cls || ''}"
+                    aria-pressed="${s.mark === st.code}"
+                    aria-label="${st.label}"
+                    data-student="${s.id}" data-mark="${st.code}">${st.code}</button>
+          `).join('')}
+        </div>
+      </div>
+      ${s.sync ? `<div class="reg-state ${s.sync === 'synced' ? 'state-synced' : 'state-local'}">
+          <span aria-hidden="true">${s.sync === 'synced' ? '✓' : '◍'}</span>
+          <span>${s.sync === 'synced' ? 'saved to school' : 'on this phone'}</span>
+        </div>` : ''}
+    </div>
+  `).join('');
+
+  host.querySelectorAll('button[data-mark]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const s = students.find(x => x.id === Number(btn.dataset.student));
+      s.mark = btn.dataset.mark;
+      s.sync = 'local';           // never claims server persistence — FR-UX-030
+      renderRegister();
+      updateLedger();
+    });
+  });
+}
+
+function updateLedger(){
+  const local  = students.filter(s => s.sync === 'local').length;
+  const marked = students.filter(s => s.mark).length;
+
+  const text = document.getElementById('ledger-text');
+  const count = document.getElementById('marked-count');
+  const submit = document.getElementById('submit-btn');
+  if(!text) return;
+
+  text.textContent = local > 0
+    ? `Working offline · ${local} mark${local === 1 ? '' : 's'} on this phone`
+    : 'All marks saved to school';
+
+  const ledger = document.getElementById('ledger');
+  ledger.className = local > 0 ? 'sync sync-offline' : 'sync sync-done';
+  ledger.querySelector('.glyph').textContent = local > 0 ? '◍' : '✓';
+
+  count.textContent = marked;
+  submit.textContent = local > 0 ? 'Submit when back online' : 'Submit register';
+}
+
+renderRegister();
+updateLedger();
+
+/* ---------- offline score entry: same pattern as the register (spec §8.11) ---------- */
+const scores = [
+  {id: 1, name: 'Ama Mensah',    value: 84, sync: 'local'},
+  {id: 2, name: 'Kofi Boateng',  value: 100, sync: 'synced'},
+  {id: 3, name: 'Yaa Owusu',     value: null, sync: null},
+];
+
+function renderScores(){
+  const host = document.getElementById('score-grid');
+  if(!host) return;
+  host.innerHTML = scores.map(s => `
+    <div class="reg-row">
+      <div class="reg-top">
+        <span class="reg-name">${s.name}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" data-score="${s.id}" data-delta="-5" aria-label="Decrease score for ${s.name}"
+                  style="width:32px;height:32px;border:1px solid var(--pb-rule);background:#fff;border-radius:var(--pb-radius-sm);font-weight:700">−</button>
+          <span class="tnum" style="min-width:34px;text-align:center;font-weight:600" aria-live="polite">${s.value ?? '—'}</span>
+          <button type="button" data-score="${s.id}" data-delta="5" aria-label="Increase score for ${s.name}"
+                  style="width:32px;height:32px;border:1px solid var(--pb-rule);background:#fff;border-radius:var(--pb-radius-sm);font-weight:700">+</button>
+          <span style="font-size:12px;color:var(--pb-ink-muted)">/ 100</span>
+        </div>
+      </div>
+      ${s.sync ? `<div class="reg-state ${s.sync === 'synced' ? 'state-synced' : 'state-local'}">
+          <span aria-hidden="true">${s.sync === 'synced' ? '✓' : '◍'}</span>
+          <span>${s.sync === 'synced' ? 'saved to school' : 'on this phone'}</span>
+        </div>` : ''}
+    </div>
+  `).join('');
+
+  host.querySelectorAll('button[data-score]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const s = scores.find(x => x.id === Number(btn.dataset.score));
+      const delta = Number(btn.dataset.delta);
+      const current = s.value ?? 50;
+      s.value = Math.max(0, Math.min(100, current + delta)); // FR-ASM-030: bounds enforced at input
+      s.sync = 'local'; // FR-UX-030: never claims server persistence
+      renderScores();
+      updateScoreLedger();
+    });
+  });
+}
+
+function updateScoreLedger(){
+  const local = scores.filter(s => s.sync === 'local').length;
+  const scored = scores.filter(s => s.value !== null).length;
+
+  const text = document.getElementById('score-ledger-text');
+  if(!text) return;
+  text.textContent = local > 0
+    ? `Working offline · ${local} score${local === 1 ? '' : 's'} on this phone`
+    : 'All scores saved to school';
+
+  const ledger = document.getElementById('score-ledger');
+  ledger.className = local > 0 ? 'sync sync-offline' : 'sync sync-done';
+  ledger.querySelector('.glyph').textContent = local > 0 ? '◍' : '✓';
+
+  document.getElementById('score-count').textContent = scored;
+  document.getElementById('score-submit-btn').textContent = local > 0 ? 'Submit when back online' : 'Submit scores';
+}
+
+renderScores();
+updateScoreLedger();
+
+/* ---------- data-saver toggle (spec §9.3) ---------- */
+const saverToggle = document.getElementById('saver-toggle');
+if (saverToggle) {
+  saverToggle.addEventListener('click', () => {
+    const on = saverToggle.getAttribute('aria-pressed') !== 'true';
+    saverToggle.setAttribute('aria-pressed', String(on));
+    saverToggle.setAttribute('aria-checked', String(on));
+  });
+}
+
+/* ---------- service worker registration (spec §9.2) ----------
+   Will only register on https or localhost — opening this file directly
+   as file:// will not install it. See sw.js and Frontend Design Spec
+   §9.2 for why, and for how to actually see it activate. */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {
+      // Silently ignored in this prototype — a production build would
+      // surface registration failures to logging, not to the user.
+    });
+  });
+}
+</script>
+</body>
+</html>

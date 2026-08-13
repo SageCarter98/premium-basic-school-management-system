@@ -21,9 +21,11 @@
  * impossible, including under concurrency.
  */
 
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDatabaseService } from '../../common/database/tenant-database.service';
 import { TenantContextStore } from '../../common/tenant/tenant-context';
+import { TeacherAssignmentsService } from '../teacher-assignments/teacher-assignments.service';
+import { ACADEMIC_ADMIN } from '../../common/auth/role-groups';
 import { CreateStudentResultDto } from './dto/create-student-result.dto';
 import { ReturnResultDto } from './dto/return-result.dto';
 import { ReopenResultDto } from './dto/reopen-result.dto';
@@ -104,7 +106,10 @@ function isPgError(err: unknown): err is { code: string } {
 
 @Injectable()
 export class ResultsService {
-  constructor(private readonly db: TenantDatabaseService) {}
+  constructor(
+    private readonly db: TenantDatabaseService,
+    private readonly teacherAssignments: TeacherAssignmentsService,
+  ) {}
 
   async create(input: CreateStudentResultDto): Promise<StudentResult> {
     const { userId } = TenantContextStore.current();
@@ -191,10 +196,29 @@ export class ResultsService {
   }
 
   async submit(id: string): Promise<StudentResult> {
-    const { userId } = TenantContextStore.current();
+    const { userId, roles } = TenantContextStore.current();
     const result = await this.findOne(id);
     if (!['draft', 'corrected'].includes(result.status)) {
       throw new ConflictException(`Cannot submit result ${id}: it is '${result.status}', not draft/corrected`);
+    }
+
+    // Chapter 13.3 "assigned students" scope, class grain — same
+    // ACADEMIC_ADMIN-override shape as FR-ASM-020's score entry and
+    // attendance.service.ts's sync(). A subject teacher submits their
+    // own class's result; a coordinator/headmaster can submit on behalf
+    // of any class.
+    const isAcademicAdmin = roles.some((r) => (ACADEMIC_ADMIN as string[]).includes(r));
+    if (!isAcademicAdmin) {
+      const assigned = await this.teacherAssignments.hasAnyActiveAssignmentForClass(
+        userId,
+        result.class_id,
+        result.academic_year_id,
+      );
+      if (!assigned) {
+        throw new ForbiddenException(
+          `You do not have an active teacher assignment for class ${result.class_id}`,
+        );
+      }
     }
     const items = await this.findItems(id);
     if (items.length === 0) {

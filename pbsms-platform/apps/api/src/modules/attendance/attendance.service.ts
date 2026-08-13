@@ -15,6 +15,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDatabaseService } from '../../common/database/tenant-database.service';
 import { TenantContextStore } from '../../common/tenant/tenant-context';
+import { TeacherAssignmentsService } from '../teacher-assignments/teacher-assignments.service';
+import { ACADEMIC_ADMIN } from '../../common/auth/role-groups';
 import { SyncAttendanceEntryDto } from './dto/sync-attendance.dto';
 
 export interface AttendanceRecord {
@@ -52,24 +54,59 @@ export type SyncEntryOutcome =
   | { outcome: 'updated'; entry: SyncAttendanceEntryDto; record: AttendanceRecord }
   | { outcome: 'idempotent_replay'; entry: SyncAttendanceEntryDto; record: AttendanceRecord }
   | { outcome: 'superseded'; entry: SyncAttendanceEntryDto; record: AttendanceRecord }
-  | { outcome: 'conflict'; entry: SyncAttendanceEntryDto; conflictId: string };
+  | { outcome: 'conflict'; entry: SyncAttendanceEntryDto; conflictId: string }
+  | { outcome: 'forbidden'; entry: SyncAttendanceEntryDto; reason: string };
 
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly db: TenantDatabaseService) {}
+  constructor(
+    private readonly db: TenantDatabaseService,
+    private readonly teacherAssignments: TeacherAssignmentsService,
+  ) {}
 
   /** FR-ATT-010: the one entry point both a connected UI (array of one) and
    * a future offline queue (a real batch) call. */
   async sync(entries: SyncAttendanceEntryDto[]): Promise<SyncEntryOutcome[]> {
-    const { userId } = TenantContextStore.current();
+    const { userId, roles } = TenantContextStore.current();
+    // Chapter 13.3 "Assigned students" scope: computed once per batch, not
+    // per entry — an ACADEMIC_ADMIN-tier caller (coordinator/headmaster)
+    // overrides class-assignment scoping the same way FR-ASM-020's score
+    // entry already does; a plain teacher does not.
+    const isAcademicAdmin = roles.some((r) => (ACADEMIC_ADMIN as string[]).includes(r));
     const results: SyncEntryOutcome[] = [];
     for (const entry of entries) {
-      results.push(await this.applyEntry(entry, userId));
+      results.push(await this.applyEntry(entry, userId, isAcademicAdmin));
     }
     return results;
   }
 
-  private async applyEntry(entry: SyncAttendanceEntryDto, userId: string): Promise<SyncEntryOutcome> {
+  private async applyEntry(
+    entry: SyncAttendanceEntryDto,
+    userId: string,
+    isAcademicAdmin: boolean,
+  ): Promise<SyncEntryOutcome> {
+    if (!isAcademicAdmin) {
+      const classRows = await this.db.query<{ academic_year_id: string }>(
+        `select academic_year_id from classes where id = $1`,
+        [entry.classId],
+      );
+      if (classRows.length === 0) {
+        return { outcome: 'forbidden', entry, reason: `Class ${entry.classId} not found` };
+      }
+      const assigned = await this.teacherAssignments.hasAnyActiveAssignmentForClass(
+        userId,
+        entry.classId,
+        classRows[0].academic_year_id,
+      );
+      if (!assigned) {
+        return {
+          outcome: 'forbidden',
+          entry,
+          reason: `You do not have an active teacher assignment for class ${entry.classId}`,
+        };
+      }
+    }
+
     const session = entry.session ?? 'full_day';
     // A directly-connected client has no meaningful device/server clock
     // skew to record, so this defaults to server-receipt time. An offline

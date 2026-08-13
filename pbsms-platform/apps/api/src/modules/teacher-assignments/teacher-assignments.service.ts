@@ -128,6 +128,25 @@ export class TeacherAssignmentsService {
     return rows.length > 0;
   }
 
+  /** Chapter 13.3's "Assigned students" scope, applied at CLASS grain
+   * (not a specific subject) — for write paths like attendance marking
+   * and result submission where the check is "does this teacher teach
+   * ANY subject in this class," not "this exact class+subject" the way
+   * FR-ASM-020's score-entry check is. This schema has no separate
+   * "Class Teacher" role distinct from a subject assignment
+   * (0020_teacher_assignments.sql's header already documents that
+   * deferral) — any active assignment to the class, regardless of
+   * subject, is treated as sufficient claim to act on it at this grain. */
+  async hasAnyActiveAssignmentForClass(teacherId: string, classId: string, academicYearId: string): Promise<boolean> {
+    const rows = await this.db.query<{ hit: number }>(
+      `select 1 as hit from teacher_assignments
+       where teacher_id = $1 and class_id = $2 and academic_year_id = $3 and status = 'active'
+       limit 1`,
+      [teacherId, classId, academicYearId],
+    );
+    return rows.length > 0;
+  }
+
   private async assertIsTeacher(userId: string): Promise<void> {
     const rows = await this.db.query<{ hit: number }>(
       `select 1 as hit from tenant_users where user_id = $1 and role_code = 'teacher' limit 1`,

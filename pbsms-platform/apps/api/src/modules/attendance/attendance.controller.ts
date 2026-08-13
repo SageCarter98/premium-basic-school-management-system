@@ -9,7 +9,12 @@ import { ACADEMIC_STAFF, ACADEMIC_ADMIN } from '../../common/auth/role-groups';
 /** attendance.controller.ts — SRS Chapter 18. Teachers mark/correct their
  * own attendance day to day (ACADEMIC_STAFF); resolving an offline-sync
  * conflict (FR-ATT-011's different-user-surfaced-for-reconciliation case)
- * is an oversight function reserved for ACADEMIC_ADMIN. */
+ * is an oversight function reserved for ACADEMIC_ADMIN. Chapter 13.3
+ * "assigned students" scope is enforced inside sync()/applyEntry() itself
+ * (a plain teacher can only mark attendance for a class they hold an
+ * active teacher_assignments row for; ACADEMIC_ADMIN overrides), not
+ * here — this only gates by role, same layering FR-ASM-020's score entry
+ * already uses. */
 @Controller('v1/attendance')
 export class AttendanceController {
   constructor(private readonly attendance: AttendanceService) {}

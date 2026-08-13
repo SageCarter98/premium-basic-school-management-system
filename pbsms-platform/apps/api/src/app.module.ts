@@ -29,6 +29,7 @@ import { TeacherAssignmentsModule } from './modules/teacher-assignments/teacher-
 import { PlatformStaffModule } from './modules/platform-staff/platform-staff.module';
 import { ImpersonationModule } from './modules/impersonation/impersonation.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { DelegationsModule } from './modules/delegations/delegations.module';
 
 @Controller()
 class HealthController {
@@ -69,6 +70,7 @@ class HealthController {
     PlatformStaffModule,
     ImpersonationModule,
     BillingModule,
+    DelegationsModule,
   ],
   controllers: [HealthController],
 })

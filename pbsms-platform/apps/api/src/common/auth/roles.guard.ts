@@ -25,6 +25,7 @@ import { PG_POOL } from '../database/tenant-database.service';
 import { PLATFORM_POOL } from '../database/database.module';
 import { writeAuditLog } from '../audit/write-audit-log';
 import { writePlatformAuditLog } from '../audit/write-platform-audit-log';
+import { hasActiveDelegatedRole } from './check-delegation';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -34,7 +35,7 @@ export class RolesGuard implements CanActivate {
     @Inject(PLATFORM_POOL) private readonly platformPool: Pool,
   ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredRoles = this.reflector.getAllAndOverride<string[] | undefined>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -47,7 +48,16 @@ export class RolesGuard implements CanActivate {
     if (!requiredRoles || requiredRoles.length === 0) return true;
 
     const ctx = TenantContextStore.current();
-    const allowed = ctx.roles.some((r) => requiredRoles.includes(r));
+    // Chapter 13.4: a caller's own role_codes are checked first (the
+    // common case, no extra query); only if that fails do we check for
+    // an active delegation covering one of the required roles — an
+    // impersonation session (ctx.impersonationGrantId set) has no
+    // tenant_users identity to delegate FROM/TO, so it's skipped there
+    // for that case, not because delegation itself is impersonation-aware.
+    const ownRoleAllowed = ctx.roles.some((r) => requiredRoles.includes(r));
+    const allowed =
+      ownRoleAllowed ||
+      (!ctx.impersonationGrantId && (await hasActiveDelegatedRole(this.pool, ctx.tenantId, ctx.userId, requiredRoles)));
     if (!allowed) {
       // A guard rejection never reaches AuditLogInterceptor (Nest's
       // pipeline runs Guards before Interceptors) — this write is the

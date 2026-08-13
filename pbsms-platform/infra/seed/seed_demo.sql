@@ -77,7 +77,13 @@ insert into users (id, email, password_hash, full_name) values
    'Sunrise Teacher'),
   ('99999999-0000-0000-0000-000000000004', 'accountant@sunrise.pbsms.test',
    '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
-   'Sunrise Accountant');
+   'Sunrise Accountant'),
+  -- Second Golden Gate user (0026_delegation.sql needs a real distinct
+  -- recipient in the SAME tenant as its delegator — Golden Gate had only
+  -- one seeded user, admin@goldengate, before this).
+  ('99999999-0000-0000-0000-000000000010', 'teacher@goldengate.pbsms.test',
+   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   'Golden Gate Teacher');
 
 -- Chapter 13/33 (authorization Pass 1): 'accountant' is a distinct,
 -- lower-tier role from 'headmaster' specifically so RolesGuard's
@@ -92,7 +98,8 @@ insert into tenant_users (id, tenant_id, user_id, role_code) values
   ('80000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-000000000003', 'teacher'),
   ('80000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-000000000001', 'headmaster'),
   ('80000000-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-000000000004', 'accountant'),
-  ('80000000-0000-0000-0000-000000000004', '22222222-2222-2222-2222-222222222222', '99999999-0000-0000-0000-000000000002', 'proprietor');
+  ('80000000-0000-0000-0000-000000000004', '22222222-2222-2222-2222-222222222222', '99999999-0000-0000-0000-000000000002', 'proprietor'),
+  ('80000000-0000-0000-0000-000000000005', '22222222-2222-2222-2222-222222222222', '99999999-0000-0000-0000-000000000010', 'teacher');
 
 -- Schools
 insert into schools (id, tenant_id, name, code) values
@@ -254,6 +261,20 @@ insert into teacher_assignments (id, tenant_id, teacher_id, class_id, subject_id
    '99999999-0000-0000-0000-000000000002', 'dddddddd-0000-0000-0000-000000000002',
    '55555555-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-000000000002',
    '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+-- Role delegations (0026_delegation.sql, Chapter 13.4) — headmaster
+-- delegating to teacher@sunrise (already active — starts_at in the
+-- past); Golden Gate's uses the second seeded user above specifically
+-- so this table has a real recipient distinct from its delegator.
+insert into role_delegations (id, tenant_id, delegator_id, recipient_id, role_codes, reason, starts_at, ends_at, created_by) values
+  ('93000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000003',
+   array['headmaster'], 'Headmaster on leave', now() - interval '1 day', now() + interval '7 days',
+   '99999999-0000-0000-0000-000000000001'),
+  ('93000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000010',
+   array['proprietor'], 'Proprietor travelling', now() - interval '1 day', now() + interval '7 days',
+   '99999999-0000-0000-0000-000000000002');
 
 -- Grading (0005_grading.sql) — one 'active', full [0,100]-coverage
 -- numerical policy per tenant (so activatePolicy()'s gap/overlap checks

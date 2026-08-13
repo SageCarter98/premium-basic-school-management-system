@@ -82,6 +82,7 @@ const TENANT_USER_IN_TENANT_A = '80000000-0000-0000-0000-000000000001'; // teach
 const GUARDIAN_IN_TENANT_A = '90000000-0000-0000-0000-000000000001'; // Ama Mensah's guardian
 const STUDENT_GUARDIAN_LINK_IN_TENANT_A = '91111111-0000-0000-0000-000000000001';
 const TEACHER_ASSIGNMENT_IN_TENANT_A = '92000000-0000-0000-0000-000000000001'; // teacher@sunrise / JHS 2A / Mathematics
+const ROLE_DELEGATION_IN_TENANT_A = '93000000-0000-0000-0000-000000000001'; // headmaster -> teacher@sunrise
 
 describe('Tenant isolation (NFR-QA-020)', () => {
   let pool: Pool;
@@ -2685,7 +2686,10 @@ describe('Tenant isolation (NFR-QA-020)', () => {
 
     it("Tenant B CANNOT see Tenant A's tenant_users rows by listing", async () => {
       const rows = await queryAsTenant(TENANT_B, 'select id from tenant_users');
-      expect(rows).toHaveLength(1); // Tenant B sees only its own proprietor membership row
+      // Tenant B sees only its own 2 rows (proprietor + the teacher added
+      // in 0026_delegation.sql's seed, for a real distinct delegation
+      // recipient) — never Tenant A's.
+      expect(rows).toHaveLength(2);
       expect(rows.find((r) => r.id === TENANT_USER_IN_TENANT_A)).toBeUndefined();
     });
 
@@ -2885,6 +2889,61 @@ describe('Tenant isolation (NFR-QA-020)', () => {
         '00000000-0000-0000-0000-000000000000',
         'select id from teacher_assignments where id = $1',
         [TEACHER_ASSIGNMENT_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('role_delegations', () => {
+    it('Tenant A can see its own role delegation', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, role_codes from role_delegations where id = $1', [
+        ROLE_DELEGATION_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].role_codes).toEqual(['headmaster']);
+    });
+
+    it("Tenant B CANNOT see Tenant A's role delegation by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from role_delegations');
+      expect(rows).toHaveLength(1); // Tenant B sees only its own delegation
+      expect(rows.find((r) => r.id === ROLE_DELEGATION_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's role delegation by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from role_delegations where id = $1', [
+        ROLE_DELEGATION_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's role delegation", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update role_delegations set reason = 'HACKED' where id = $1 returning id`,
+        [ROLE_DELEGATION_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ reason: string }>(
+        TENANT_A,
+        'select reason from role_delegations where id = $1',
+        [ROLE_DELEGATION_IN_TENANT_A],
+      );
+      expect(check[0].reason).toBe('Headmaster on leave');
+    });
+
+    it('A session with NO tenant context set sees zero role_delegations rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from role_delegations where id = $1', [
+        ROLE_DELEGATION_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero role_delegations rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from role_delegations where id = $1',
+        [ROLE_DELEGATION_IN_TENANT_A],
       );
       expect(rows).toHaveLength(0);
     });

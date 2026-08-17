@@ -79,6 +79,12 @@ jobs:
       # — the only role that can reach tenants/plans/platform_audit_logs
       # (TEN-005). Same CI-only-password-reset pattern as pbsms_app below.
       PLATFORM_DATABASE_URL: postgres://pbsms_platform:pbsms_platform_ci@localhost:5432/pbsms
+      # WORKER_DATABASE_URL uses pbsms_worker (0027_background_jobs.sql,
+      # Phase D) — has zero plain table grants, only EXECUTE on the three
+      # queue functions. Not exercised by any CI step yet (see the
+      # password-reset step below), defined here so it's ready the moment
+      # a future e2e test needs it, same as every other role's URL here.
+      WORKER_DATABASE_URL: postgres://pbsms_worker:pbsms_worker_ci@localhost:5432/pbsms
       MIGRATE_DATABASE_URL: postgres://pbsms:pbsms_ci@localhost:5432/pbsms
       JWT_SECRET: ci_only_secret
     steps:
@@ -121,6 +127,10 @@ jobs:
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0024_billing.sql
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0025_auth_completeness.sql
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0026_delegation.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0027_background_jobs.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0028_analytics.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0029_data_protection.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0030_nacca_curriculum.sql
       - name: Set the CI-only pbsms_app password to match TEST_DATABASE_URL/DATABASE_URL
         # 0001_init_tenancy.sql hardcodes pbsms_app's local-dev password; CI
         # uses a different generated postgres password for pbsms itself
@@ -129,6 +139,15 @@ jobs:
         run: psql "$MIGRATE_DATABASE_URL" -c "ALTER ROLE pbsms_app WITH PASSWORD 'pbsms_app_ci';"
       - name: Set the CI-only pbsms_platform password to match PLATFORM_DATABASE_URL
         run: psql "$MIGRATE_DATABASE_URL" -c "ALTER ROLE pbsms_platform WITH PASSWORD 'pbsms_platform_ci';"
+      - name: Set the CI-only pbsms_worker password to match WORKER_DATABASE_URL
+        # 0027_background_jobs.sql (Phase D) — same reasoning as the
+        # pbsms_app/pbsms_platform steps above. No CI step currently
+        # connects as this role (the isolation suite talks to Postgres
+        # directly as pbsms_app, not through src/worker.ts), but the role
+        # exists as soon as this migration runs, so its password is reset
+        # here defensively rather than left to drift unnoticed until a
+        # future e2e test actually needs it.
+        run: psql "$MIGRATE_DATABASE_URL" -c "ALTER ROLE pbsms_worker WITH PASSWORD 'pbsms_worker_ci';"
       - name: Apply demo seed (needed by the isolation e2e test)
         run: psql "$MIGRATE_DATABASE_URL" -f infra/seed/seed_demo.sql
       - run: npm ci
@@ -154,12 +173,35 @@ jobs:
             SELECT relname FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity
-            AND relname NOT IN ('plans','tenants','tenant_subscriptions','platform_audit_logs','users','login_attempts','platform_user_roles','impersonation_grants','impersonation_sensitive_approvals','platform_invoices','refresh_tokens','password_reset_tokens');
+            AND relname NOT IN ('plans','tenants','tenant_subscriptions','platform_audit_logs','users','login_attempts','platform_user_roles','impersonation_grants','impersonation_sensitive_approvals','platform_invoices','refresh_tokens','password_reset_tokens','data_inventory','retention_policies','data_breach_incidents');
           ")
           if [ -n "$LEAKY_TABLES" ]; then
             echo "::error::Tenant-owned table(s) without RLS enabled: $LEAKY_TABLES"
             exit 1
           fi
+
+  web-a11y:
+    # NFR-ACC-020: WCAG 2.1 AA checked automatically in CI. apps/web has no
+    # real screens yet (Stage 1 of the frontend spec's own Build Order,
+    # §13) — this crawls the internal component gallery at /design-system
+    # instead, so the accessibility baseline is enforced from the first
+    # component, not retrofitted once 20 screens exist.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build --workspace apps/web
+      - name: Start apps/web and run pa11y-ci against it
+        run: |
+          npm run start --workspace apps/web &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/design-system > /dev/null && break
+            sleep 1
+          done
+          npm run a11y --workspace apps/web
 
   build:
     needs: [lint-and-typecheck, unit-and-migration-tests]

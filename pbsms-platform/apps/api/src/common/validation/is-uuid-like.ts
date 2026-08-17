@@ -1,4 +1,4 @@
-import { Matches } from 'class-validator';
+import { Matches, ValidationOptions } from 'class-validator';
 
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -13,7 +13,11 @@ const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * endpoint rejected the seed data's own ids as "must be a UUID." Real ids
  * from gen_random_uuid() are always valid v4 and still pass this — this
  * only relaxes the version/variant check, not the shape.
+ *
+ * Accepts optional ValidationOptions (e.g. `{ each: true }` for a
+ * `string[]` field) — every pre-existing call site passes none, so this
+ * stays backward compatible.
  */
-export function IsUuidLike() {
-  return Matches(UUID_SHAPE, { message: '$property must be a UUID-shaped string' });
+export function IsUuidLike(options?: ValidationOptions) {
+  return Matches(UUID_SHAPE, { message: '$property must be a UUID-shaped string', ...options });
 }

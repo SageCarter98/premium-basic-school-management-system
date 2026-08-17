@@ -103,6 +103,10 @@ That is the whole argument for Quick Start over code review as a first step.
 | Multi-tenant schema + RLS policies, **proven live** with a restricted non-owner app role | Grading, finance, results, communication, everything outside Chapter 44 Phase 2's slice |
 | Tenant-context middleware, request-scoped tenant-safe DB access with a leak-free connection lifecycle (see bug #9) | Guardian "linked children" scoping (Chapter 13.3) — blocked on guardian login/auth not existing at all (guardians are a records-only entity, no `users`/`tenant_users` row, Chapter 34 parent portal); school/campus/department/division-level scoping — blocked on staff having no recorded school/campus association at all (`tenant_users` has no `school_id`/`campus_id` column) |
 | **Chapter 13.3's "assigned students" class-level scoping — Phase C1, closed 2026-08-13**: `TeacherAssignmentsService.hasAnyActiveAssignmentForClass()` (class grain, any subject — this schema has no separate "Class Teacher" concept, 0020's own header already documented that deferral) extends FR-ASM-020's existing per-subject check to two more teacher-facing write paths: `attendance.service.ts`'s `sync()` (a per-entry `'forbidden'` outcome, not a thrown exception — sync() processes a batch independently by design, so one out-of-scope entry in a batch of 50 doesn't abort the other 49) and `results.service.ts`'s `submit()` (a straightforward `ForbiddenException`, single-item). Both keep the same `ACADEMIC_ADMIN`-tier override every other scoped check in this codebase uses. Live-HTTP verified: a teacher blocked from marking attendance / submitting a result for a class they're not assigned to, succeeding on their own assigned class, and a headmaster's admin-override succeeding on the unassigned class too | Discipline reporting deliberately stays unscoped (any teacher can report a case — Chapter 28's own documented design, a real-world modeling choice, not an oversight this pass should "fix"); the guardian/staff-campus gaps noted in the row above |
+| **Chapter 39-40 Ghana Data Protection Act & GDPR Alignment; Consent, Retention & Data Subject Rights — Phase F, closed 2026-08-14**: migration `0029_data_protection.sql` — `data_inventory`/`retention_policies`/`data_breach_incidents` (platform reference/compliance tables, no RLS, seeded with this codebase's real data categories and Chapter 40.2's schedule verbatim) and `data_subject_requests`/`consent_records` (ordinary RLS'd tenant tables — DP-030's 30-day SLA, DP-070/080's versioned consent). `modules/data-protection/`: `recordConsent()` for `communication_channel` consent also drives `CommunicationService.setPreference()` (imported, not reimplemented) so the existing send-gate reflects it immediately; `DataBreachService` is `PLATFORM_SUPER_ADMIN`-gated for writes. Deliberately NOT built: the actual destructive retention purge (definitions + a safe read-only eligibility report only, never automated deletion — the same caution this session already applied everywhere else to catastrophic/hard-to-reverse operations); DP-010/050/060 (a legal act, a documentation deliverable, and something already true by construction, respectively). Also fixed a real adjacent gap found while wiring CI: Phase D's `pbsms_worker` role had never gotten a matching CI password-reset step. Live-HTTP verified: real inventory/retention data, a consent withdrawal that correctly flipped the matching `communication_preferences` row, and the full breach-incident lifecycle (`detected`→`assessing`→`reported`→`closed`) as `platform_super_admin` | Chapter 41 (NaCCA/BECE/GES/CSSPS alignment, Phase G — now also closed, see the row below) |
+| **Chapter 41 NaCCA, BECE, GES & CSSPS Alignment — Phase G, closed 2026-08-14, closes the entire A-G plan**: migration `0030_nacca_curriculum.sql` — finally builds the real model `assessment_components.nacca_strand` had stood as a placeholder for since 0004_assessment.sql. `school_academic_settings` (tenant-level NaCCA opt-in, a new table rather than an ALTER on `schools`), `curriculum_strands`/`curriculum_sub_strands`/`curriculum_indicators` (three levels, content standards as indicator attributes rather than a fourth joinable level — documented simplification), `bece_candidates`/`bece_mock_results` (the real WAEC 1-9 grade scale, not `grading_policies`' percentage bands), `cssps_placements` (informational recording only, per the SRS's own explicit words). `assessment_components` gained one additive nullable `indicator_id` column. `modules/nacca/`: curriculum CRUD, a coverage report and standalone competency-profile endpoint (deliberately not wired into the already-tested `generateReportCard()`), BECE registration with an internally-generated index number, mock-result entry, a real best-six aggregate, class-level readiness analytics, and two GES statutory report endpoints (enrolment census, attendance returns — no new schema). Live-HTTP verified across every sub-area, including the aggregate correctly returning `null` with only 1/6 subjects graded and role gating rejecting `accountant`. 426/426 isolation suite (was 384) | Nothing — this closes the entire A-G plan; see the README's own final summary below |
+| **Chapter 14 Operational Intelligence Framework (KPI engine, executive dashboards/group roll-up, Chapter 27.1 trend analysis) — Phase E, closed 2026-08-14**: migration `0028_analytics.sql` (`kpi_definitions` — Chapter 14.2's exact metadata list; `kpi_snapshots` — computed values, `status` derived from thresholds). `data_source` is a fixed enum of four real calculators (`collection_rate`/`attendance_rate`/`academic_performance`/`outstanding_actions`, exactly Chapter 14.3's own named list) rather than an executable formula string — a documented modeling decision, not a shortcut. `modules/analytics/`: KPI CRUD + recompute (`ACADEMIC_ADMIN`), `GET /v1/analytics/group-rollup` (FR-ANL-010, `LEADERSHIP`-gated specifically since the SRS names "Proprietor/Director" exactly), `GET /v1/analytics/trends` (FR-ANL-020, year-over-year at student/class/subject/school level — 'division' excluded, no such entity exists; 'class' resolves name+school first since `class_id` is itself year-specific). A new `kpi_compute` job type reuses `AnalyticsService.recomputeKpi()` unchanged in the Phase D worker — the first proof that Phase D's infrastructure generalizes to a second module, not just background_jobs' own original four. Live-HTTP + live-worker verified: real computed collection-rate value, real per-school group roll-up numbers, role gating correctly rejecting `accountant` (double-checked after `teacher@sunrise` initially appeared to bypass it — turned out to be Phase C's own seeded delegation fixture legitimately elevating them, not a bug) | Chapter 14.4/27.1's FR-ANL-040 AI-assisted summarization — the SRS frames this as aspirational future scope with no committed provider decision, unlike WhatsApp/SMS which are blocked only on vendor credentials |
+| **Chapter 35 Background Jobs (FR-JOB-010/020/030) — Phase D, closed 2026-08-14**: migration `0027_background_jobs.sql` (`background_jobs`, `job_schedules`, both ordinary RLS'd tenant tables; a third restricted role `pbsms_worker` with ZERO plain table grants, only `EXECUTE` on `dequeue_next_job()`/`complete_job()`/`evaluate_due_schedules()`/`platform_enqueue_job()`, same defense-in-depth as `pbsms_platform`). `src/worker.ts` is a genuinely separate process — never calls `app.listen()`, so it structurally cannot serve HTTP (FR-JOB-020). `common/database/worker-tenant-connection.ts` subclasses `TenantDatabaseService` (one `private`→`protected` change, zero behaviour change) so job handlers can `new DocumentsService(workerConn, pool)` exactly as Nest would for a real request, avoiding Authorization Pass 1's `Scope.REQUEST`-outside-a-request trap entirely. Three job types built (`jobs-worker/handlers/`): `report_card_batch` (reuses `generateReportCard()`, idempotent on retry), `mass_notification` (reuses `createNotification()`+`.send()`), and `dunning_notification` — the latter is what finally closes **A4's deferred FR-BIL-040 notification half**: `billing.service.ts`'s `runDunningStep()` now calls the new `platform_enqueue_job()` for real instead of returning `notificationDeferred: true`. Two real bugs the live-worker walkthrough caught: this environment's `public` schema had lost its default `PUBLIC` `USAGE` grant during a past session's schema reset, so a brand-new role (`pbsms_worker`) silently couldn't resolve its own granted functions ("function does not exist" — indistinguishable from genuine absence at the caller); and the first version of `dequeue_next_job()` didn't return `created_by`, so every job ran as a generic system actor regardless of who requested it. Live-HTTP + live-worker verified: retry-with-backoff on a real failure (no approved results yet for the target class), a successful `mass_notification` correctly attributed to the requesting headmaster, and `platform_enqueue_job()` → worker → a real `restricted`-sensitivity notification to LEADERSHIP staff | `bulk_import` (Chapter 35.1 names it, but no import format/mapping exists anywhere in this codebase — a separate unscoped feature, excluded from `CreateJobDto` rather than accepted with no handler); Chapter 35.2's reporting/data-projection architecture (materialized views/reporting replica — no query volume yet to motivate it); general IANA timezone-aware recurrence math for `job_schedules` (a fixed calendar-interval offset from a caller-supplied anchor instead, same category of simplification as 'termly' standing in for a real terms table) |
 | **Chapter 13.4 Delegation & Conflict of Interest — Phase C2, closed 2026-08-13, completing Phase C**: migration `0026_delegation.sql` (`role_delegations` — an ordinary RLS'd tenant table, not a platform one; same-row `CHECK`s for `ends_at > starts_at`, `delegator_id <> recipient_id`, non-empty `role_codes`), `modules/delegations/`, `common/auth/check-delegation.ts`. `RolesGuard` now does a LIVE second check (not baked into the JWT — a delegation's start/end window must take effect exactly on time, unlike ordinary `role_codes` which Phase B's refresh mechanism only re-derives once an hour) whenever a caller's own role_codes don't satisfy `@Roles()`: an active, unrevoked delegation covering one of the required roles is checked via Postgres array-overlap (`&&`), same manually-scoped-connection pattern `write-audit-log.ts` already established. `DelegationsService.create()` enforces "you can only delegate a role you actually hold" against real `tenant_users` rows — a delegator can't hand off authority they don't have. The conflict-of-interest half of 13.4 ("prevent required independent review from being silently bypassed") was verified, not newly built: `finance.service.ts`'s `secondApproveAssistance()` already compares real actor ids (`first_approved_by === userId`), not roles, so a delegated approver role structurally cannot bypass that four-eyes check — confirmed by reading the code, not assumed. Live-HTTP verified end to end: delegating a role you don't hold correctly 403s; a recipient with an active delegation reaches an `ACADEMIC_ADMIN`-only endpoint their native role alone couldn't; the same recipient with NO delegation is correctly blocked; and — the property that matters most — **revoking the delegation immediately cut off that access on the very next request**, live-proven the same way Phase A3's impersonation-grant revocation was | An "overlapping-role conflict detector" as a general analysis engine — not concretely asked for beyond the one Financial-Assistance case already verified; no maximum delegation duration (Chapter 13.4 specifies none, unlike TEN-021's explicit 2-hour cap) |
 | **Tenant lifecycle state machine (Chapter 4.1, TEN-023..026) — Phase A1, closed 2026-08-13**: `modules/tenants/`, migration `0021_tenant_lifecycle.sql`. First migration to actually reach the platform tables (`tenants`/`plans`/`platform_audit_logs`) 0001 created but left unreachable — `pbsms_app` has zero grants on them by design (TEN-005), so this migration adds a second, narrowly-scoped DB role (`pbsms_platform`, mirroring `pbsms_app`'s own pattern) plus a `PLATFORM_POOL` provider (`database.module.ts`). `TenantsService.transition()` enforces the 7-state machine (trial→onboarding→active→past_due→suspended→offboarding→closed, a documented modeling decision — the SRS names the states but not a literal transition graph) inside a `BEGIN`/`FOR UPDATE`/`COMMIT` transaction, gates trial→onboarding on TEN-023 (a plan selected + a confirmed billing method or recorded free-tier exception), requires a reason on every transition, and writes an audited `platform_audit_logs` row every time. **No HTTP surface yet** — every method takes an explicit `actorId` (validated against `users.is_platform_user`) rather than pulling one from `TenantContextStore`, since there is still no authenticated platform-actor path (`tenant.middleware.ts` hard-refuses every `isPlatformUser` request pending Phase A2). Verified with a real integration test against Postgres (`test/tenant-lifecycle.e2e-spec.ts`, 9 tests, incl. a TEN-005 regression guard proving `pbsms_app` still can't read these tables) | A4 (Chapter 5 subscription/billing/metering — plan *changes*, not just initial selection); FR-ONB-010/020's guided onboarding wizard and bulk CSV import; TEN-025's on-demand data export |
 | **Platform roles + a real platform-role auth path (Chapter 3.1, TEN-020) — Phase A2, closed 2026-08-13**: migration `0022_platform_roles.sql`, `modules/platform-staff/`, `common/tenant/platform-context.ts` (`PlatformContextStore`, the platform-actor equivalent of `TenantContextStore` — deliberately separate, since a platform actor's `tenantId` is genuinely null, TEN-013), `common/auth/platform-roles.guard.ts`/`.decorator.ts` (`@PlatformRoles()`, registered globally alongside `RolesGuard`). `tenant.middleware.ts` now resolves `isPlatformUser` JWTs for real, restricted to a dedicated `/v1/platform/*` namespace (impersonating a tenant's own view is still TEN-021/A3, not built — a platform token still can't reach any ordinary tenant route, and vice versa, both directions live-verified). `platform_user_roles` holds the 4 Chapter 3.1 role codes; `PlatformStaffService.grantRole()` enforces TEN-020 via a new `is_tenant_member()` SECURITY DEFINER function — **not** a plain grant, which was tried first and found to be silently non-functional (RLS on `tenant_users` filters to zero rows for a connection that never sets `app.current_tenant`, which `pbsms_platform`'s never does — caught live by deliberately constructing a dual-membership test user, not by inspection). Also completes TEN-022's second half (`record_platform_action_in_tenant_audit()`, another SECURITY DEFINER function) — `TenantsService`'s Phase A1 writes now land in both `platform_audit_logs` AND the specific tenant's own `audit_log`, confirmed by direct query. MFA is now mandatory for platform users too (any role, not just Platform Super Admin — a scope simplification, documented as such), reusing the same bootstrap-token mechanism SEC-030 already built for tenant `LEADERSHIP` roles; `login_lookup()`/`auth_lookup_by_user_id()` drop+recreated a second time to add `platform_role_codes`. **Two real bugs the live-HTTP walkthrough caught before calling this done**: (1) the MFA-setup-required gate was checked only in the tenant-token branch, so an unenrolled platform user's setup-scoped token could reach every `/v1/platform/*` route unchecked — fixed by moving that check first, unconditionally; (2) the TEN-020 grant-silently-does-nothing bug above. Live-HTTP verified end to end: full platform-user MFA round trip, tenant create/transition/audit-trail, TEN-023's gate, role-tier gating (`onboarding_specialist`-only create vs. all-4-roles read/transition), TEN-020's rejection (only after the fix), both cross-boundary rejections (tenant token → `/v1/platform/*` and platform token → an ordinary tenant route), and role grant/revoke/double-revoke-409 | The *reverse* of TEN-020 (blocking a platform user from later being added to `tenant_users`) — no write path to protect yet, since inviting tenant staff isn't built either; revoking a platform role doesn't invalidate an already-issued JWT (no session revocation list yet — Phase B) |
@@ -122,13 +126,13 @@ That is the whole argument for Quick Start over code review as a first step.
 | **Real staff/role directory** (`modules/staff/`, migration `0018_staff_directory.sql`) — `GET /v1/staff`/`GET /v1/staff/:id` list/look up a tenant's staff by joining `users`+`tenant_users` (read-only; inviting/creating staff is a separate, bigger Phase-1 platform-onboarding concern); `isRealStaffMember()` used by Communication/Discipline/Health's guardian-contact paths and Inventory's issuance `issuedToType==='staff'` path to validate a polymorphic actor id against a real person instead of accepting any UUID. The migration also adds 131 named FK constraints from every `created_by`/`updated_by`/`approved_by`/etc. actor-identity column across the whole schema to `users(id)` (previously zero — verified by grep before writing the migration) — direct `references users(id)`, not a tenant-scoped composite key, since RLS/`RolesGuard` already enforce which tenant an actor can act in. Applying this from a genuinely fresh `migrate`+`seed` run (not just against already-seeded data) surfaced a real ordering bug: `seed_demo.sql` inserted `users`/`tenant_users` near the end of the file, after several tables that reference `created_by` — fixed by moving that block right after `tenants` | Polymorphic `recipient_id`/`issued_to_id` columns still can't be a DB-level FK even now that `'guardian'` is a real table (Postgres has no conditional FK spanning three different target tables) — validated at the application layer per-caller instead, same shape as `isRealStaffMember()`; creating/inviting staff (writing `tenant_users` rows) |
 | **Guardians as a real table** (`modules/guardians/`, migration `0019_guardians.sql`, FR-STU-020) — `guardians` (name/phone/email) + `student_guardians` (the many-to-many link, carrying the exact relationship-level flags FR-STU-020 names: `is_primary_contact`/`is_emergency_contact`/`can_pickup`/`has_finance_access`/`has_report_access`). `GuardiansService` modeled directly on `staff.service.ts`'s shape: `isRealGuardian()` mirrors `isRealStaffMember()` exactly, now wired into the same 3 places that already validated `recipientType==='staff'` (`discipline.service.ts`, `health.service.ts`, `communication.service.ts`'s `createNotification()`) — `recipientType==='guardian'` is no longer an unvalidated UUID in any of them. `student_guardians.student_id`/`guardian_id` use the tenant-scoped composite FK convention (`references students(tenant_id, id)`), not a plain single-column FK, so a same-transaction write literally cannot link a Tenant A student to a Tenant B guardian at the schema level, not just via RLS. `GET/POST /v1/guardians`, `GET/POST /v1/students/:id/guardians`, `PATCH`/`DELETE /v1/student-guardians/:id`. Live-HTTP smoke tested: created a guardian, linked to a seeded student, listed the student's guardians (ordered primary-contact-first), then confirmed `discipline`'s `guardian-contacts` endpoint accepts a real guardian id and 404s a bogus one with the new validation message | Guardian portal/login (Chapter 34 parent mobile experience, FR-STU-060) — guardians here are a records-only entity, not a `users`/`tenant_users` row, and no frontend exists for it yet; FR-STU-060's actual record-scoping enforcement ("guardians see only linked learners") — that's Chapter 13.3's broader record-relationship-scope item; notifications' `recipientName`/`Phone`/`Email` are still snapshotted at send time rather than live-joined from this table (deliberate, unchanged design — see `0010_communication.sql`'s header) |
 | **Teacher assignments as a real entity** (`modules/teacher-assignments/`, migration `0020_teacher_assignments.sql`, Chapter 17.1) — one `teacher_assignments` row per teacher+class+subject+academic-year (this schema's `academic_year_id` standing in for FR-ASM-020's "current term," since no `terms` table exists — same simplification `0004_assessment.sql` already made). `assign()` validates the teacher id against `tenant_users.role_code = 'teacher'` before inserting; `end()` flips status to `'ended'` (never deleted) with a 409 if already ended; a partial unique index blocks a duplicate *active* assignment for the same slot without forbidding co-teaching (two different teachers active on the same class+subject). `hasActiveAssignment()` is the second cross-module service call in this codebase (after discipline→communication) — `assessment.module.ts` imports `TeacherAssignmentsModule` so `upsertScore()` can enforce FR-ASM-020 for real. `GET/POST /v1/teacher-assignments`, `GET /v1/teacher-assignments/:id`, `POST /v1/teacher-assignments/:id/end` (assign/end are `ACADEMIC_ADMIN`, read is `ACADEMIC_STAFF`). Live-HTTP smoke tested end to end: a teacher denied `403` on a class-subject they're not assigned to, a headmaster's `ACADEMIC_ADMIN` override succeeding on that same unassigned slot, assigning the teacher then re-scoring successfully, ending the assignment then losing access again (`403`), double-ending correctly `409`ing, assigning a non-teacher (`accountant`) correctly `404`ing, and the pre-existing seeded assignment continuing to work throughout | Chapter 21.1's "Class Teacher" (a class-level role distinct from a class+subject assignment) — deliberately not modeled here, nothing consumes it yet; FR-ACA-040's teacher/class/room timetable-conflict detection — needs a real timetable/period/room model this schema doesn't have; Chapter 13.3's actual record-scoping (a teacher's endpoint access restricted to only their assigned classes) — this migration makes assignments real and queryable, it doesn't wire any access-control decision to them beyond the one FR-ASM-020 check |
-| The mandatory cross-tenant isolation test (NFR-QA-020), for `students`, `enrolments`, `applicants`, `attendance_records`, `subjects`, `assessment_structures`, `scores`, `grading_policies`, `grading_scale_items`, `result_candidates`, `student_results`, `student_result_items`, `tenant_branding`, `promotion_decisions`, `generated_documents`, `fee_structures`, `fee_structure_items`, `fee_instalments`, `invoices`, `invoice_items`, `payments`, `payment_allocations`, `financial_assistance`, `reversals`, `notification_templates`, `communication_preferences`, `notifications`, `notification_deliveries`, `tenant_communication_settings`, `notification_reports`, `notification_report_comments`, `discipline_cases`, `discipline_case_notes`, `discipline_case_responses`, `discipline_guardian_contacts`, `discipline_appeals`, `discipline_recognitions`, `library_items`, `library_members`, `library_loans`, `transport_routes`, `transport_stops`, `transport_vehicles`, `transport_drivers`, `transport_student_assignments`, `health_records`, `health_incidents`, `health_incident_guardian_contacts`, `medication_administration_log`, `inventory_items`, `inventory_issuances`, `inventory_alerts`, `audit_log`, `tenant_users`, `guardians`, `student_guardians`, `teacher_assignments` and `role_delegations` (357/357 passing — `audit_log`'s "cannot mutate" sub-test is a WITH CHECK insert-forgery attempt, not the usual UPDATE, since that table is append-only with no UPDATE grant for `pbsms_app` at all; `tenant_users`' describe block closes a gap that had existed since `0001_init_tenancy.sql` — RLS was live on that table from day one but it had never had its own test, only noticed once `/v1/staff` gave it a real API surface. Needed fixed ids added to its `seed_demo.sql` insert, same module-pattern rule 6 as every other table here) | The same test for `schools`/`academic-years`/`classes` and every future module — **copy the pattern, don't skip it** |
+| The mandatory cross-tenant isolation test (NFR-QA-020), for `students`, `enrolments`, `applicants`, `attendance_records`, `subjects`, `assessment_structures`, `scores`, `grading_policies`, `grading_scale_items`, `result_candidates`, `student_results`, `student_result_items`, `tenant_branding`, `promotion_decisions`, `generated_documents`, `fee_structures`, `fee_structure_items`, `fee_instalments`, `invoices`, `invoice_items`, `payments`, `payment_allocations`, `financial_assistance`, `reversals`, `notification_templates`, `communication_preferences`, `notifications`, `notification_deliveries`, `tenant_communication_settings`, `notification_reports`, `notification_report_comments`, `discipline_cases`, `discipline_case_notes`, `discipline_case_responses`, `discipline_guardian_contacts`, `discipline_appeals`, `discipline_recognitions`, `library_items`, `library_members`, `library_loans`, `transport_routes`, `transport_stops`, `transport_vehicles`, `transport_drivers`, `transport_student_assignments`, `health_records`, `health_incidents`, `health_incident_guardian_contacts`, `medication_administration_log`, `inventory_items`, `inventory_issuances`, `inventory_alerts`, `audit_log`, `tenant_users`, `guardians`, `student_guardians`, `teacher_assignments`, `role_delegations`, `background_jobs`, `job_schedules`, `kpi_definitions`, `kpi_snapshots`, `data_subject_requests`, `consent_records`, `school_academic_settings`, `curriculum_strands`, `curriculum_sub_strands`, `curriculum_indicators`, `bece_candidates`, `bece_mock_results` and `cssps_placements` (426/426 passing — `audit_log`'s "cannot mutate" sub-test is a WITH CHECK insert-forgery attempt, not the usual UPDATE, since that table is append-only with no UPDATE grant for `pbsms_app` at all; `tenant_users`' describe block closes a gap that had existed since `0001_init_tenancy.sql` — RLS was live on that table from day one but it had never had its own test, only noticed once `/v1/staff` gave it a real API surface. Needed fixed ids added to its `seed_demo.sql` insert, same module-pattern rule 6 as every other table here) | The same test for `schools`/`academic-years`/`classes` and every future module — **copy the pattern, don't skip it** |
 | A real atomic multi-statement transaction (`admissions.service.ts`'s `convert()` — FR-ADM-030), proving `TenantDatabaseService`'s request-scoped client genuinely supports `BEGIN`/`COMMIT`/`ROLLBACK` | A generic idempotency-key mechanism for sensitive operations (NFR-API-010) — `convert()`'s idempotency is narrower, state-check-based; see that method's own doc comment for exactly what it does and doesn't cover |
 | CI pipeline: lint, SAST, dependency scan, migration + isolation test | Staging/production deploy, DAST (needs real hosting — see Appendix E) |
 | Login issuing a correctly tenant-scoped JWT, now carrying `role_codes` (Chapter 13/33 Pass 1), rate-limited (5 failed attempts/15 min → 429, scoped per-account, blocks even a correct password once tripped) and MFA-capable (hand-rolled RFC 6238 TOTP — no new dependency — enroll/enable/verify endpoints, a short-lived MFA-challenge token that carries no tenant claims so it can never be used as a real access token). **MFA is now policy-enforced (SEC-030), not just mechanism-complete — closed 2026-08-12**: `LEADERSHIP` roles (proprietor/administrator/headmaster, reused from `role-groups.ts` rather than a second hardcoded list) that haven't enrolled MFA yet no longer get a full accessToken on login — they get one scoped to exactly `/v1/auth/mfa/enroll`+`/v1/auth/mfa/enable` (`tenant.middleware.ts`'s new `MFA_SETUP_PATHS` check, gated on a new `mfaSetupRequired` JWT claim), refused on every other endpoint until they complete setup; `enableMfa()` re-issues a full token on success so completing enrollment doesn't also require a second login. This is a real bootstrap path, not a bare lockout — verified live end to end (login → 401 on `/v1/staff` with the setup-only token → enroll → a real TOTP code computed by hand-porting `totp.ts`'s algorithm to a throwaway script → enable → 200 on `/v1/staff` with the re-issued token → a second login now correctly returns the MFA-challenge flow instead of setup-required; a non-mandatory role like `teacher` is unaffected, plain accessToken immediately). **SEC-020's secure reset and SEC-040's rotation/timeout/revocation — Phase B, closed 2026-08-13**: migration `0025_auth_completeness.sql` (`refresh_tokens`, `password_reset_tokens` — neither tenant-scoped, same category as `login_attempts`). Access tokens are now 1h (was a flat 8h); every full login/MFA-verify/MFA-enable issues a refresh token (30 days) alongside it. `POST /v1/auth/refresh` rotates on every use AND re-derives CURRENT roles rather than trusting stale ones from original login — and implements real reuse detection: presenting an already-rotated-away (or logged-out) token doesn't just get rejected, it revokes every other active token for that account too, live-verified (rotate once, replay the original → 401 + chain killed, then the legitimately-rotated second token ALSO 401s). `POST /v1/auth/logout` revokes one session, idempotent and silent about whether the token existed. `POST /v1/auth/password-reset/request` never reveals whether an email is registered (identical response either way, live-verified against both a real and a fake email) — real delivery is out of scope for the same reason dunning notifications are (no WhatsApp/SMS/SMTP integration yet), but token generation/hashing/expiry is fully real; `POST /v1/auth/password-reset/confirm` is single-use and revokes existing sessions on success, live-verified end to end (old password rejected, new password works, token reuse rejected) via the same "compute the secret out-of-band" technique used for TOTP testing, since the raw reset token is deliberately never returned by the request endpoint. SEC-040 literally says "session cookies" — this API has never used cookies (Bearer JWT throughout, consistent with Chapter 34's multi-client/PWA framing); refresh tokens are the Bearer-token equivalent of what that code actually asks for, a documented architectural mapping, not a literal cookie implementation | True instant access-token revocation (an already-issued access token stays valid until its own now-shorter natural expiry even after logout/rotation-kill — would need a live per-request revocation check on every endpoint, the same pattern Phase A3's impersonation grants already use narrowly; applying it globally is a bigger, separate decision, not taken on here); platform-role MFA enforcement is now real and reachable (Phase A2 opened that path) |
 | Global request validation (`class-validator` DTOs) | Full permission-aware DTOs per role |
 | **Authorization Pass 1+2 (Chapter 13 / 33.2 / 33.6) — `@Roles()` now retrofitted onto EVERY controller in this codebase, 20/20** (19 at the time of Pass 2, plus `staff.controller.ts` added since, itself born with `@Roles()` already in place): a global `RolesGuard` (`@Roles(...)` decorator) actually enforcing `tenant_users.role_code` for the first time — previously stored but read by nothing anywhere in the app; a global `AuditLogInterceptor` writing an append-only `audit_log` row (RLS'd, `pbsms_app` gets INSERT+SELECT only) for every mutating request tenant-wide, including `RolesGuard` denials specifically (a guard rejection never reaches an interceptor in Nest's pipeline — Guards run before Interceptors — so that write happens from the guard itself, not the interceptor; caught live as a real gap, not designed in from the start). Named role-tier constants in `common/auth/role-groups.ts` (`LEADERSHIP`, `ACADEMIC_ADMIN`, `TEACHING_STAFF`/`ACADEMIC_STAFF`, `ADMISSIONS_TEAM`, `LIBRARY_TEAM`, `TRANSPORT_TEAM`, `HEALTH_TEAM`, `INVENTORY_TEAM`, `ALL_STAFF`) built from Chapter 3.2's role list, composed per controller rather than hand-rolled per file; `Finance` keeps its own narrower three-tier shape (read/record/approve) since it operationalizes Chapter 33.3's "Cashier cannot approve own reversal" specifically. Pass 2 retrofitted the other 18 modules using the shared groups: broad `ALL_STAFF`/`ACADEMIC_STAFF` read access for shared reference data, `ACADEMIC_ADMIN` for structural/administrative/senior-workflow actions (publish/approve/revoke/decide), `ACADEMIC_STAFF` for day-to-day maker actions (score entry, attendance marking, submitting a result, filing a discipline note), and least-privilege single-department tiers (`LIBRARY_TEAM`/`TRANSPORT_TEAM`/`HEALTH_TEAM`/`INVENTORY_TEAM`) for Chapter 28's operational modules where the SRS names one dedicated staff role and states no broader-access requirement. Live-HTTP smoke tested across both passes: role denial/allow `403`/`200` on 7 different modules, rate-limited lockout, and a full MFA enroll→enable→login→verify round trip | Chapter 13.3's full record-relationship scope (assigned-students/linked-children/record-ownership — every retrofitted `@Roles()` here is role-tier only, e.g. a `teacher` can act on ANY class's records via these endpoints today, not just their own); Chapter 13.4 delegation/conflict-of-interest; TEN-020/021 platform-role impersonation controls |
-| A Next.js app that boots and renders its one page (bumped `next@14.2.5`→`^16.3.0` 2026-08-12 fixing 2 high-severity Next.js/postcss vulnerabilities — `npm audit fix --force`, no peer conflicts this time since `react@18.3.1` is inside `next@16`'s accepted peer range; `npm run build`/`npm run start` both live-verified, real `200` + rendered HTML) | Literally any real screen; a working `npm run lint` — Next.js removed the `next lint` subcommand in v16, and `apps/web` never had `eslint`/`eslint-config-next` installed as devDependencies either, so this script was already non-functional before the bump (not wired into CI, which only ever touches `apps/api`) — flagged here rather than quietly left broken, but building a real ESLint setup for this app is a separate, unscoped task |
+| A Next.js app that boots and renders its one page (bumped `next@14.2.5`→`^16.3.0` 2026-08-12 fixing 2 high-severity Next.js/postcss vulnerabilities — `npm audit fix --force`, no peer conflicts this time since `react@18.3.1` is inside `next@16`'s accepted peer range; `npm run build`/`npm run start` both live-verified, real `200` + rendered HTML). **Frontend Stage 1 (design tokens, base components, CI a11y gate) — closed 2026-08-14**, the first of the companion `PBSMS_Frontend_Design_Specification_v1.1.pdf`'s own §13 "Build Order" 9 stages (tokens/components first because everything else inherits from them and it's the cheapest moment to get contrast/focus/target-size right). `src/styles/tokens.css` ports the spec's §4 palette/spacing/radius/shadow/motion tokens verbatim from the reference prototype (`pbsms-frontend-prototype.html`, project root — a static, non-framework mockup, not part of this app) plus a new type scale the prototype didn't specify (documented as a judgment call, not re-derived from nothing). Five components ship: `Button`/`Card`/`Pill` (traceable to the prototype's own `.btn`/`.card`/`.pill`), and the five NFR-ACC-020 UI-state primitives — `LoadingState`/`EmptyState`/`ErrorState`/`OfflineState`/`RestrictedState` (Success is just normal content, not a wrapper). `Pill` defaults to a variant-specific glyph so status is never colour-alone (WCAG 1.4.1 — a report card printed in greyscale still has to read correctly). `Button`'s and `OfflineState`'s action button both get an explicit `min-height/width: 44px` — the prototype's own inline "View" button was smaller than that; the spec's §11 44×44 rule for phone surfaces is the binding requirement, the prototype is illustrative, so the rule won where they conflicted. New internal-only route `/design-system` renders every component — **the spec's own §12 claims a `pa11y-ci` CI job "now exists"; it did not** (verified: `.github/workflows/ci.yml` had zero `apps/web` references before this pass) — that route is what makes the claim true for real, since `pa11y-ci` needs a running URL to crawl and Stage 1 has no product screen yet. New `web-a11y` CI job builds `apps/web`, starts it, and runs `pa11y-ci` (WCAG2AA) against `/design-system`, matching the existing jobs' exact style (ubuntu-latest/setup-node@v4/node 20/npm ci at root). **Frontend Stage 2 (app shell, auth, context switcher, permission-generated nav) — closed 2026-08-14, same day.** Scoped to the Staff Console surface only (Teacher Field App/Parent View are structurally different shells, Stages 4/6). Real auth against the backend for the first time: `lib/auth-token-store.ts` (`localStorage`, not cookies — the backend is deliberately Bearer-only, no `Set-Cookie` path exists to build against) and `lib/api-client.ts` (attaches `Authorization: Bearer`, one silent refresh-and-retry on 401 via the real rotation endpoint). `/login` handles only the plain `{accessToken,refreshToken}` path — `mfaRequired`/`mfaSetupRequired` show an honest "not built yet" message rather than a fake verify step, since MFA is `LEADERSHIP`-tier only and every other role tier needs none of it. `ContextSwitcher` ships School + Academic Year only, wired to the real `GET /v1/schools`/`GET /v1/academic-years` — Campus and Term are the spec's other two elements but neither has a backing table anywhere in 27 migrations, so they're left off rather than rendered as dead dropdowns. `lib/nav-config.ts` filters a representative nav slice (Students/Classes/Assessment/Finance/Communication/Library/Settings) against real role-tier constants mirrored from `common/auth/role-groups.ts`; every item routes to a stub page (`EmptyState`, "arrives in Stage N") since no real screens exist until Stage 4. Live-verified against the real API: `teacher@sunrise`/`accountant@sunrise` logins return correctly-scoped `roleCodes`, `/v1/students` 200s for the `ALL_STAFF` tier, `/v1/schools`/`/v1/academic-years` return the exact shape the switcher expects. `pa11y-ci` (now covering `/login` too) caught one real bug — `autocomplete="username"` is invalid on a `type="email"` input per the WHATWG spec — fixed to `autocomplete="email"`; 0 errors on both pages after. Route protection is client-side (`RequireAuth`, mount-time check + redirect), not Next.js middleware, since middleware runs at the edge and can't read `localStorage`. **Not done, flagged not silently skipped**: the offline/sync layer (Stage 3) and any real product screen (Stages 4-9); visual confirmation of the responsive breakpoint collapse (§6.1.1's 3-tier CSS) and the role-based nav difference between a teacher and headmaster login — verified via API responses and code review only, since no browser-automation tool was available to actually render the pages | The offline/sync layer (Stage 3); any real product screen (Stages 4-9, ending with Platform Console); MFA sign-in UI (verify/enroll — a separate, not-yet-scoped feature); a working `npm run lint` — Next.js removed the `next lint` subcommand in v16, and `apps/web` still has no `eslint`/`eslint-config-next` installed; a separate, unscoped task, not something Stage 1's a11y work depended on or fixed |
 
 If you only build one thing to convince a skeptical technical co-founder or
 investor that the tenancy decision is sound, make it the isolation test —
@@ -355,11 +359,431 @@ See the table above for the full detail. 13.3's other two scopes
 blocked on missing prerequisites (guardian auth, staff-campus
 association) rather than attempted — flagged, not silently skipped.
 
-**Next**: the original 7-phase plan's remaining items — D (Chapter 35
-background jobs/scheduler — would also finally unlock A4's deferred
-dunning-notification piece), E (Chapter 14 KPI engine), F (Chapter 39-40
-data protection), G (Chapter 41 NaCCA). Report back and confirm before
-picking one, same completion-gate rule as every phase in this initiative.
+**Phase D (Chapter 35 background jobs/scheduler, FR-JOB-010/020/030) is now
+closed too — completed 2026-08-14.** User asked to proceed through D and
+the remaining phases directly. Chosen mechanism, confirmed with the user
+first: a Postgres-backed queue, not Redis/Bull — this environment has no
+Docker and no Redis running (only an unused `REDIS_URL`), and a plain jobs
+table + `FOR UPDATE SKIP LOCKED` polling worker needed no new
+infrastructure, matching this codebase's "avoid a new dep where avoidable"
+pattern (hand-rolled TOTP, etc.).
+
+Migration `0027_background_jobs.sql`: `background_jobs` (the queue —
+FR-JOB-030's exact fields, tenant_id/status/attempt_count/max_attempts/
+last_error, are columns) and `job_schedules` (FR-JOB-010's recurring
+definitions — one_time/daily/weekly/monthly/termly/yearly; 'event_triggered'
+deliberately has no schedule row, since there's nothing to evaluate on a
+timer for an event trigger — the triggering code enqueues directly
+instead, a documented modeling decision). A third restricted role,
+`pbsms_worker` (mirroring `pbsms_app`/`pbsms_platform`'s shape exactly),
+gets ZERO plain table grants — only `EXECUTE` on three SECURITY DEFINER
+functions (`dequeue_next_job()`, `complete_job()`, `evaluate_due_schedules()`),
+same "a plain GRANT on an RLS'd table for a role that never sets
+`app.current_tenant` silently returns nothing" lesson Phase A2 already
+established, applied proactively here rather than rediscovered. A fourth
+function, `platform_enqueue_job()`, lets `pbsms_platform`-scoped code
+enqueue a job for a specific tenant despite the same RLS bypass problem —
+this is the exact piece that finally closes **A4's documented deferral**:
+`billing.service.ts`'s `runDunningStep()` now calls it to enqueue a real
+`dunning_notification` job instead of returning `notificationDeferred:
+true`.
+
+**`src/worker.ts`** is a genuinely separate process (FR-JOB-020: "never on
+request-serving capacity") — it never calls `NestFactory.create()`/
+`app.listen()`, so it structurally cannot serve HTTP, not just by
+convention (`npm run worker` / `npm run worker:dev`, distinct from
+`start`/`start:dev`). Job handlers need to reuse existing services
+(`DocumentsService`, `CommunicationService`, ...) outside any HTTP
+request's `Scope.REQUEST` lifecycle — the exact trap that caused
+Authorization Pass 1's real bug #1. Solved via `WorkerTenantConnection`
+(`common/database/worker-tenant-connection.ts`), which subclasses
+`TenantDatabaseService` directly (one `private` → `protected` visibility
+change, zero behaviour change) rather than reimplementing its connect/SET/
+query logic — a fake `{ res: undefined }` Request makes the base class's
+HTTP-response-driven auto-release a harmless no-op, and the subclass adds
+an explicit `release()` the worker calls once a job finishes. This means
+job handlers can `new DocumentsService(workerConn, pool)` exactly as Nest
+would construct it for a real request — same class, zero duplicated
+business logic.
+
+Three job types built as the first real consumers (`jobs-worker/handlers/`):
+`report_card_batch` (reuses `DocumentsService.generateReportCard()` per
+student, idempotent on retry — excludes students who already got a card
+from a prior partial-failure attempt), `mass_notification` (reuses
+`CommunicationService.createNotification()`+`.send()` per recipient — the
+payload carries full recipient details, not just ids, since a generic
+bulk id-to-contact-info resolver across staff/guardian/student is a
+separate, unscoped feature), and `dunning_notification` (notifies every
+LEADERSHIP-tier staff member — Chapter 5 doesn't name a specific "billing
+contact" entity, a documented modeling decision). `job.created_by` flows
+into `TenantContextStore` as the acting user for real human-triggered
+jobs; only `platform_enqueue_job()`'s jobs (no human in that loop) fall
+back to a fixed system service account (`00000000-...-000000000001`,
+inserted directly in the migration, real argon2 hash of a discarded
+random value so `login_lookup()` behaves normally rather than throwing on
+a malformed hash).
+
+**Real bug found and fixed by live testing, not by inspection**: a plain
+`select * from dequeue_next_job()` as `pbsms_worker` failed with "function
+... does not exist" despite the function genuinely existing in
+`pg_proc` — this environment's `public` schema had been `DROP`/`CREATE`d
+during a past session's schema reset (0001's own documented gotcha), which
+does not restore the default `PUBLIC` `USAGE` grant, only the owner's;
+`pbsms_app`/`pbsms_platform` had this re-granted by hand in a past
+session, but the brand-new `pbsms_worker` role silently inherited nothing.
+Postgres's "can't resolve this name via your search_path" error looks
+identical to "doesn't exist" from the caller's side — same category of
+misleading failure as Phase A2's RLS-silently-returns-zero-rows lesson.
+Fixed with an explicit `grant usage on schema public to pbsms_worker;` in
+the migration itself, not left as an environment-specific workaround.
+Second, smaller bug caught by the same live pass: the first version of
+`dequeue_next_job()` didn't return `created_by`, so every job handler ran
+as the system account regardless of who actually requested it — fixed by
+adding it to the function's return set and threading it into
+`TenantContextStore`.
+
+Live-HTTP + live-worker verified end to end (not just the isolation
+suite): a `report_card_batch` job correctly retried with exponential
+backoff and a descriptive `last_error` when its target class had no
+approved results yet; a `mass_notification` job succeeded, produced a real
+`notifications` row correctly attributed to the requesting headmaster
+(`created_by`), delivery `status: 'exhausted'` matching every other
+stubbed-channel notification in this codebase; `platform_enqueue_job()`
+called directly as `pbsms_platform` correctly enqueued a
+`dunning_notification` job the worker picked up and ran, producing a real
+`restricted`-sensitivity notification to the seeded headmaster. 360/360
+isolation suite green (new `background_jobs`/`job_schedules` blocks, was
+357). **Sharp edge, environment-specific, not a product bug**: this
+session's full-schema-reset step (`DROP SCHEMA public CASCADE`) was
+blocked by this environment's permission classifier as destructive:
+verification here used an incremental migration run plus surgical cleanup
+of live-HTTP-created rows instead of the usual full reset — a real
+deviation from every prior session's discipline, flagged here rather than
+silently glossed over.
+
+**Deliberately NOT built, flagged not silently skipped**: `bulk_import`
+(one of Chapter 35.1's three named examples) — no import format/mapping
+exists anywhere in this codebase, a separate unscoped feature, so it's
+excluded from `CreateJobDto`'s allowed job types rather than accepted with
+no handler; Chapter 35.2's reporting/data-projection architecture
+(materialized views / reporting replica) — no reporting query volume
+exists yet to motivate it; general IANA timezone-aware recurrence math for
+`job_schedules` — `next_run_at` advances by a fixed calendar-interval
+offset from a caller-supplied anchor instead, same category of
+simplification as 'termly' standing in for a real terms table.
+
+**Phase E (Chapter 14 Operational Intelligence Framework — KPI engine,
+executive dashboards, group roll-up; Chapter 27.1's trend analysis) is now
+closed too — completed 2026-08-14, same session.** Migration
+`0028_analytics.sql`: `kpi_definitions` (Chapter 14.2's exact metadata
+list — code/name/responsible role/data source/target/weight/warning+
+critical thresholds/reporting frequency/supervisor/status/tenant scope)
+and `kpi_snapshots` (computed values, `status` derived from thresholds,
+not caller-supplied). `data_source` is a fixed CHECK-constrained enum of
+four real calculators (`collection_rate`, `attendance_rate`,
+`academic_performance`, `outstanding_actions` — exactly Chapter 14.3's
+own named list), not an executable formula string — building a generic
+formula-interpreter engine would be a much larger, different-shaped
+feature than what the SRS actually names, same "don't fake a general
+engine, build the concrete named cases" discipline Chapter 13.4's
+conflict-of-interest detection already established. All four calculators
+join through `students.school_id` (the same one-hop join, not three
+different shapes) except `outstanding_actions`, which is deliberately
+tenant-wide only — `notification_reports` has no school linkage at all.
+
+`modules/analytics/`: KPI CRUD + `recomputeKpi()` (ACADEMIC_ADMIN),
+`GET /v1/analytics/group-rollup` (FR-ANL-010 — LEADERSHIP-gated
+specifically, since the SRS names "the Proprietor/Director role" exactly,
+narrower than the usual ACADEMIC_ADMIN tier; live per-school aggregation,
+not a cached snapshot table), and `GET /v1/analytics/trends` (FR-ANL-020,
+year-over-year at student/class/subject/school level — 'division' is
+excluded, no such entity exists anywhere in this schema; 'class' resolves
+its name+school first since a `class_id` is itself year-specific,
+`classes`' own uniqueness is `(academic_year_id, name)`, so a true
+cross-year class trend has to match by name, not id).
+
+A new `kpi_compute` job type (`jobs-worker/handlers/kpi-compute.handler.ts`)
+is the natural cross-cutting proof that Phase D's infrastructure
+generalizes: `AnalyticsService.recomputeKpi()` reused completely unchanged
+by the worker, exactly the same `WorkerTenantConnection` pattern as
+Phase D's other three handlers — a tenant can now schedule "recompute
+this KPI every term" via `job_schedules` instead of only triggering it on
+demand.
+
+**Deliberately NOT built, flagged not silently skipped**: Chapter 14.4/
+27.1's FR-ANL-040 "AI-assisted summarization" — the SRS itself frames
+this as aspirational future scope ("Future AI features MAY..."), and
+there is no LLM/AI provider integration anywhere in this codebase to wrap
+it around, unlike WhatsApp/SMS which have a concrete FR- ask blocked only
+on vendor credentials.
+
+Verified: clean build/lint, 372/372 isolation suite (new
+`kpi_definitions`/`kpi_snapshots` blocks, was 360), and a real live-HTTP +
+live-worker walkthrough: `recomputeKpi()` on the seeded collection-rate
+KPI returned a real computed value (60.00%, `on_target` with no
+thresholds configured); the group roll-up returned real per-school
+numbers (`collectionRate: 60`, `attendanceRate: 100`,
+`academicPerformance: null` — correctly null since seed data's results
+are still draft/unpublished) plus a real `outstandingActionsCount: 1`
+matching the one seeded open `notification_reports` row; role gating
+correctly 403'd `accountant` (no LEADERSHIP/ACADEMIC_ADMIN/ACADEMIC_STAFF
+membership) on all three gated routes; a `kpi_compute` job enqueued via
+`POST /v1/jobs` was picked up by the worker and succeeded, producing a
+real new `kpi_snapshots` row. One thing this pass double-checked before
+trusting it, not assumed: `teacher@sunrise` initially appeared to bypass
+`LEADERSHIP`/`ACADEMIC_ADMIN` gating on these new routes — turned out to
+be Phase C's own seeded `role_delegations` fixture (headmaster delegating
+to that exact user) legitimately elevating them, not a new authorization
+bug; re-tested with `accountant` (no delegation) to confirm the gates
+themselves are correct. Live-HTTP-created rows (extra `kpi_snapshots`/
+`kpi_definitions`/`background_jobs`/`audit_log`) cleaned up afterward via
+targeted deletes, same discipline as Phase D — full schema reset remains
+blocked by this environment's permission classifier.
+
+**Phase F (Chapter 39-40 — Ghana Data Protection Act & GDPR Alignment;
+Consent, Retention & Data Subject Rights) is now closed too — completed
+2026-08-14, same session.** Migration `0029_data_protection.sql`: three
+platform-level reference/compliance tables (`data_inventory` — DP-020's
+lawful-basis-per-category inventory, seeded with this actual codebase's
+real data categories, not aspirational ones; `retention_policies` —
+Chapter 40.2's retention schedule transcribed verbatim; `data_breach_incidents`
+— DP-040, a company-level obligation per DP-010's own framing, not owned
+by any single tenant) and two ordinary RLS'd tenant tables
+(`data_subject_requests` — DP-030/DP-090's access/rectification/erasure
+workflow with the literal 30-day SLA; `consent_records` — DP-070/DP-080's
+versioned per-channel/biometric consent, a new row per grant/withdraw
+event, never mutated).
+
+`modules/data-protection/`: `DataProtectionService` (tenant-scoped —
+inventory/policy reads, the request workflow, consent) and
+`DataBreachService` (platform-scoped, `PLATFORM_SUPER_ADMIN`-gated for
+writes — the same "break-glass" seriousness Chapter 3.1 reserves for
+granting platform roles). `recordConsent()` is the real integration
+point: for `communication_channel` consent it writes the versioned audit
+row AND drives `CommunicationService.setPreference()` (imported, not
+reimplemented) so `send()`'s existing opt-in gate reflects the change
+immediately — `consent_records` is the new audited front door,
+`communication_preferences` stays the unchanged fast-path lookup it
+already was.
+
+**Deliberately NOT built, flagged not silently skipped** (see
+`0029_data_protection.sql`'s header for the full reasoning): DP-010
+(the company registering as a data controller with Ghana's DPC — a legal
+act, not software); DP-050/DP-060 (GDPR alignment, controller/processor
+roles — already true by construction via existing RLS/audit machinery, or
+a documentation deliverable, not a new code path); and, most
+deliberately, **the actual destructive retention purge** — this pass
+builds the retention-policy definitions and a SAFE, read-only eligibility
+report (which records are old enough to be purge-eligible, nothing
+deleted), never an automated deletion job. Permanently purging real
+student/financial/health records — or an entire closed tenant's data — is
+exactly the kind of catastrophic, hard-to-reverse operation this
+session's own environment already refuses to run casually (the DROP
+SCHEMA reset kept getting blocked by the permission classifier all
+session); building an automated purge into a background job during a
+single autonomous pass would be a real safety regression, not a
+completion.
+
+**Real, adjacent gap found and fixed while wiring `pbsms_worker` into
+CI**: Phase D's own migration (0027) created the `pbsms_worker` role, but
+`.github/workflows/ci.yml` was never updated with a matching
+`WORKER_DATABASE_URL`/password-reset step (the same pattern
+`pbsms_app`/`pbsms_platform` already have) — would have gone unnoticed
+until a future e2e test actually tried to connect as that role in CI.
+Fixed here alongside 0027-0029's own CI wiring (explicit migration list,
+`WORKER_DATABASE_URL` env var, password-reset step, and the RLS-exclusion
+list for all three new platform tables), not left as a separate ticket.
+
+Verified: clean build/lint, 384/384 isolation suite (new
+`data_subject_requests`/`consent_records` blocks, was 372), and a real
+live-HTTP walkthrough: the data inventory/retention-policy reference data
+returned real seeded rows; the retention eligibility report correctly
+returned zero (no seed data old enough to be eligible); a consent
+withdrawal correctly bumped the seeded fixture's version and flipped the
+matching `communication_preferences` row's `opted_in` to `false`,
+verified by reading that table directly, not just trusting the response;
+the full breach-incident lifecycle (`detected` → `assessing` → `reported`
+→ `closed`) walked end to end as `platform_super_admin`. One real cleanup
+lesson this pass' own smoke test caught: reverting a consent test by
+flipping `opted_in` back to `true` isn't enough when the test used a
+DIFFERENT recipient key than the seed fixture — it leaves an extra row
+behind, which `communication_preferences`' own "Tenant A sees exactly 1
+row" isolation test catches immediately; the actual fix was deleting the
+extra row, not just resetting its value.
+
+**Phase G (Chapter 41 — NaCCA, BECE, GES & CSSPS Alignment) is now closed
+too — completed 2026-08-14, same session. This closes the entire A-G
+multi-phase completion plan.** Chosen as the SRS's own explicit lowest
+priority ("if pilot demands" framing), and the last item. Migration
+`0030_nacca_curriculum.sql`: `assessment_components.nacca_strand`
+(0004_assessment.sql) had been a deliberate PLACEHOLDER column since the
+very first assessment pass, documented in that migration's own comment as
+"not the full NaCCA strand/sub-strand model, which is out of scope here"
+— this phase is that model, finally built, nearly five months after that
+placeholder was written.
+
+Seven new tables: `school_academic_settings` (the tenant-level opt-in
+flag DOM-010 requires — a new table rather than an ALTER on `schools`,
+keeping this genuinely additive and not touching the single most
+foundational table in the schema for a feature most tenants will never
+use), `curriculum_strands`/`curriculum_sub_strands`/`curriculum_indicators`
+(three levels, not the SRS text's literal four — content standards live
+as attributes ON the indicator row rather than a separate joinable
+level, a documented simplification), `bece_candidates`/`bece_mock_results`
+(DOM-040/050 — the real WAEC 1-9 grade scale, genuinely different from
+`grading_policies`' existing percentage-band model, not reused because
+it serves a different purpose), and `cssps_placements` (DOM-080,
+"informational recording, not an integration with the CSSPS system
+itself," per the SRS's own explicit words). `assessment_components`
+gained one additive nullable `indicator_id` column (NFR-DEP-030 —
+existing rows/behaviour entirely unaffected).
+
+`modules/nacca/`: curriculum CRUD, a coverage report (DOM-020 — which
+indicators have actually been scored, not merely assigned to a
+component), a standalone competency-profile endpoint (DOM-030) —
+deliberately NOT wired into `documents.service.ts`'s already-tested
+`generateReportCard()`, a documented lower-risk scope interpretation, not
+an oversight — BECE candidate registration with an internally-generated
+index number (school code + year + sequence, since this is informational
+recording like DOM-080, not a live WAEC integration), mock-result entry,
+a real best-six aggregate computation, class-level readiness analytics
+(a student's grade vs. their own class-of-candidates average), and two
+GES statutory report endpoints (enrolment census, attendance returns —
+read-only aggregations over existing tables, no new schema needed).
+
+Verified: clean build/lint, 426/426 isolation suite (7 new describe
+blocks, was 384), and a real live-HTTP walkthrough covering every
+sub-area: academic settings and strand reads, a real best-six aggregate
+correctly returning `null` with only 1 of 6 subjects graded (proving the
+"all six or no aggregate" rule, not a partial/misleading number), a real
+CSSPS placement fixture, a real GES enrolment census aggregation, role
+gating correctly rejecting `accountant` on both structural-config and
+GES-report routes, and a genuine write (a new curriculum sub-strand)
+confirmed via listing then cleaned up. **Environment note, not a product
+issue**: this pass ran alongside a separate, parallel session doing
+active frontend work (`api:dev`/`web:dev` watch-mode dev servers plus a
+`pa11y-ci` accessibility run, all visible in the process list) — the
+resulting CPU contention caused one transient double timeout on the
+suite's first three (unrelated, pre-existing) `students` tests, resolved
+by re-running with a longer per-test timeout; the 42 new Phase G tests
+passed cleanly on every attempt, including the contended ones.
+
+**The full A-G multi-phase completion plan (Platform Foundation, auth
+completeness, record-scope/delegation, background jobs, KPI/operational
+intelligence, data protection, and NaCCA/BECE/GES/CSSPS alignment) is now
+done.** Everything genuinely out of scope across all seven phases was
+deliberately deferred and documented, never silently skipped: real
+external vendor integrations (WhatsApp/SMS/payment gateways/DPC filing —
+all blocked on Appendix E's vendor-onboarding track, not engineering
+time), an automated retention-purge job (Phase F — a catastrophic,
+hard-to-reverse operation this session's own environment already refuses
+to run casually), AI-assisted summarization (Chapters 14.4/27, no
+provider decision made yet), and general IANA timezone-aware recurrence
+math (Phase D). What's left is exactly what the README's own "Doesn't
+exist yet" column across the status table above already names — report
+back to the user with this summary rather than inventing new unscoped
+work.
+
+**Post-completion audit of Phases D-G — done 2026-08-14, same session,
+prompted by the user asking to check for backlogs/loopholes.** A
+systematic pass (every new route checked for a `@Roles()`/`@PlatformRoles()`
+decorator, every new table checked for RLS, every cross-table FK checked
+for the tenant-scoped composite pattern, every SQL string-interpolation
+site checked for injection risk) found the mechanical stuff clean — but
+turned up four real, substantive gaps, all fixed and live-verified before
+calling this done:
+
+1. **`recordConsent()` silently no-opped for student subjects.**
+   `consent_records` got a correct versioned audit row for ANY subject
+   type, but the code that also drives `CommunicationService.setPreference()`
+   (so the actual send-gate reflects a withdrawal) had a stray
+   `subjectType !== 'student'` condition — meaning a student's consent
+   withdrawal was recorded as truthful history while the real delivery
+   gate (`communication_preferences`) never changed. Removed the
+   exclusion; verified live that a student consent withdrawal now
+   produces a real new `communication_preferences` row.
+2. **`assignRequest()` (data subject requests) and `createKpiDefinition()`
+   (KPI supervisor) both accepted any UUID-shaped string with no check
+   it's a real staff member** — unlike every other polymorphic-actor
+   field elsewhere in this codebase (discipline/health/communication all
+   call `StaffService.isRealStaffMember()`). Fixed both to match that
+   established pattern; verified live that a bogus assignee now 404s
+   with a clear message, a real one succeeds.
+3. **DP-030's 30-day SLA was stored (`due_date`) but never surfaced** —
+   nothing could see a request that had actually breached it. Added a
+   read-only `GET /v1/data-protection/requests/overdue` report (same
+   "safe reporting, not automated escalation" scope as the retention
+   eligibility report), registered before `requests/:id` in the
+   controller so the literal route isn't shadowed by the param route.
+4. **The single biggest find: Chapter 41's coverage-report and
+   competency-profile features were structurally unusable.** The schema
+   (`assessment_components.indicator_id`) and the read side
+   (`coverageReport()`/`competencyProfile()`) both existed, but nothing
+   in `AddAssessmentComponentDto`/`assessment.service.ts`'s
+   `addComponent()` ever accepted or wrote an `indicatorId` — there was
+   no way, through any endpoint, to actually tag a component to an
+   indicator. Every coverage/competency query would have shown
+   `assessed: false` forever, regardless of real teaching or scoring
+   activity. Added `indicatorId` (optional, validated only by the
+   existing composite FK — consistent with how every other id `addComponent()`
+   already accepts is checked) to the DTO and the insert. Live-verified
+   the complete loop end to end: tagged a real component to the seeded
+   indicator, confirmed `coverage-report` still correctly showed
+   `assessed: false` with no score yet, entered a real score for a real
+   student, and confirmed both `coverage-report` (`assessed: true`) and
+   `competency-profile` (`scored: true, passed: true`) flipped correctly.
+
+One pre-existing observation, NOT a new bug and NOT fixed (out of this
+session's scope — inherited from Chapter 26, built long before Phase D):
+`CommunicationService.createNotification()` stores whatever
+`recipientPhone`/`recipientEmail` the caller supplies directly, rather
+than looking up the recipient's real contact info from `guardians`/`staff`.
+`recipientType`/`recipientId` ARE validated against real records; the
+contact details are not cross-checked against them. This has zero
+real-world exploitability today (`dispatchToChannel()` unconditionally
+rejects every channel — nothing in this entire codebase can actually
+deliver a message to anyone yet, pending Appendix E vendor onboarding),
+but is worth fixing before any real WhatsApp/SMS/email integration goes
+live, at which point spoofed contact info paired with a validated
+recipient id would become a real problem.
+
+Re-verified after all four fixes: clean build/lint, 426/426 isolation
+suite (unchanged — none of these fixes touched a table's shape), and a
+live-HTTP walkthrough of every fix against the running server, cleaned up
+afterward the same way as every other live-HTTP pass this session.
+
+**Frontend Stage 1 (design tokens, base components, CI a11y gate) is now
+closed — completed 2026-08-14, a separate track from the backend
+phases above.** The companion `PBSMS_Frontend_Design_Specification_v1.1.pdf`
+was verified this same day to be genuinely traceable to SRS v2.1 (its own
+§7 screen inventory's FR-ID citations checked out against the real spec
+text — an initial concern about a citation mismatch turned out to be a
+`pdftotext -layout` table-extraction artifact, not a real defect, caught
+by re-extracting with true PDF word positions instead of trusting a flawed
+tool's column alignment). `apps/web` was, until this pass, a genuine
+placeholder (2 files with real code); this pass follows the spec's own
+§13 "Build Order" — Stage 1 first because the rest of the component
+library inherits from it, and contrast/focus/target-size are cheapest to
+get right before 20 screens exist. See the table above for the full
+detail.
+
+**Frontend Stage 2 (app shell, auth, context switcher, permission-generated
+nav) is now closed too — completed 2026-08-14, same day.** See the table
+above for the full detail — real login against the real backend for the
+first time, a client-side auth guard, a role-filtered nav mirroring
+`role-groups.ts`'s real constants, and a context switcher honest about
+which of the spec's four elements (School, Academic Year) actually have
+data behind them. `pa11y-ci` caught a real bug (`autocomplete="username"`
+invalid on `type="email"`), fixed and re-verified 0 errors. One process
+detour worth remembering: this session's own verification collided with a
+concurrent session's `apps/api` instance holding port 3000 — resolved by
+running an isolated instance on port 3010/3011 rather than touching the
+other session's process; if a future session sees the dev server land on
+an unexpected port, check for another live session before assuming
+something is broken. **Next**: Stage 3 (the offline/sync layer, proven
+against one real screen per the spec's own Build Order) — not started;
+report back and get direction rather than cascading into it unprompted,
+same discipline as every backend phase.
 
 **Chapter 44.2's Phase 1 gap is now closed.** Chapter 44's roadmap
 sequences Phase 1 (Platform Foundation — identity, authentication,

@@ -83,6 +83,19 @@ const GUARDIAN_IN_TENANT_A = '90000000-0000-0000-0000-000000000001'; // Ama Mens
 const STUDENT_GUARDIAN_LINK_IN_TENANT_A = '91111111-0000-0000-0000-000000000001';
 const TEACHER_ASSIGNMENT_IN_TENANT_A = '92000000-0000-0000-0000-000000000001'; // teacher@sunrise / JHS 2A / Mathematics
 const ROLE_DELEGATION_IN_TENANT_A = '93000000-0000-0000-0000-000000000001'; // headmaster -> teacher@sunrise
+const BACKGROUND_JOB_IN_TENANT_A = '94000000-0000-0000-0000-000000000001'; // queued report_card_batch job
+const JOB_SCHEDULE_IN_TENANT_A = '95000000-0000-0000-0000-000000000001'; // termly report_card_batch schedule
+const KPI_DEFINITION_IN_TENANT_A = '96000000-0000-0000-0000-000000000001'; // collection-rate KPI
+const KPI_SNAPSHOT_IN_TENANT_A = '96100000-0000-0000-0000-000000000001'; // Q1 2026 snapshot
+const DATA_SUBJECT_REQUEST_IN_TENANT_A = '97000000-1000-0000-0000-000000000001'; // Ama Mensah's guardian access request
+const CONSENT_RECORD_IN_TENANT_A = '97000000-2000-0000-0000-000000000001'; // Ama Mensah's guardian SMS consent
+const SCHOOL_ACADEMIC_SETTINGS_IN_TENANT_A = 'a1000000-0000-0000-0000-000000000001'; // Sunrise: NaCCA opted in
+const CURRICULUM_STRAND_IN_TENANT_A = 'a2000000-0000-0000-0000-000000000001'; // Mathematics / Number
+const CURRICULUM_SUB_STRAND_IN_TENANT_A = 'a3000000-0000-0000-0000-000000000001'; // Number and Numeration
+const CURRICULUM_INDICATOR_IN_TENANT_A = 'a4000000-0000-0000-0000-000000000001'; // B7.1.1.1.1
+const BECE_CANDIDATE_IN_TENANT_A = 'a5000000-0000-0000-0000-000000000001'; // Ama Mensah, SUN-20262027-0001
+const BECE_MOCK_RESULT_IN_TENANT_A = 'a6000000-0000-0000-0000-000000000001'; // Mock 1 2026 Mathematics, grade 3
+const CSSPS_PLACEMENT_IN_TENANT_A = 'a7000000-0000-0000-0000-000000000001'; // Ama Mensah's CSSPS choices
 
 describe('Tenant isolation (NFR-QA-020)', () => {
   let pool: Pool;
@@ -2944,6 +2957,717 @@ describe('Tenant isolation (NFR-QA-020)', () => {
         '00000000-0000-0000-0000-000000000000',
         'select id from role_delegations where id = $1',
         [ROLE_DELEGATION_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('background_jobs', () => {
+    it('Tenant A can see its own background job', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, job_type from background_jobs where id = $1', [
+        BACKGROUND_JOB_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].job_type).toBe('report_card_batch');
+    });
+
+    it("Tenant B CANNOT see Tenant A's background job by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from background_jobs');
+      expect(rows).toHaveLength(1); // Tenant B sees only its own job
+      expect(rows.find((r) => r.id === BACKGROUND_JOB_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's background job by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from background_jobs where id = $1', [
+        BACKGROUND_JOB_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's background job", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update background_jobs set status = 'succeeded' where id = $1 returning id`,
+        [BACKGROUND_JOB_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ status: string }>(
+        TENANT_A,
+        'select status from background_jobs where id = $1',
+        [BACKGROUND_JOB_IN_TENANT_A],
+      );
+      expect(check[0].status).toBe('queued');
+    });
+
+    it('A session with NO tenant context set sees zero background_jobs rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from background_jobs where id = $1', [
+        BACKGROUND_JOB_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero background_jobs rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from background_jobs where id = $1',
+        [BACKGROUND_JOB_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('job_schedules', () => {
+    it('Tenant A can see its own job schedule', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, frequency from job_schedules where id = $1', [
+        JOB_SCHEDULE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].frequency).toBe('termly');
+    });
+
+    it("Tenant B CANNOT see Tenant A's job schedule by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from job_schedules');
+      expect(rows).toHaveLength(1); // Tenant B sees only its own schedule
+      expect(rows.find((r) => r.id === JOB_SCHEDULE_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's job schedule by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from job_schedules where id = $1', [
+        JOB_SCHEDULE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's job schedule", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update job_schedules set is_active = false where id = $1 returning id`,
+        [JOB_SCHEDULE_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ is_active: boolean }>(
+        TENANT_A,
+        'select is_active from job_schedules where id = $1',
+        [JOB_SCHEDULE_IN_TENANT_A],
+      );
+      expect(check[0].is_active).toBe(true);
+    });
+
+    it('A session with NO tenant context set sees zero job_schedules rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from job_schedules where id = $1', [
+        JOB_SCHEDULE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero job_schedules rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from job_schedules where id = $1',
+        [JOB_SCHEDULE_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('kpi_definitions', () => {
+    it('Tenant A can see its own KPI definition', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, code from kpi_definitions where id = $1', [
+        KPI_DEFINITION_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].code).toBe('collection-rate');
+    });
+
+    it("Tenant B CANNOT see Tenant A's KPI definition by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from kpi_definitions');
+      expect(rows).toHaveLength(1); // Tenant B sees only its own definition
+      expect(rows.find((r) => r.id === KPI_DEFINITION_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's KPI definition by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from kpi_definitions where id = $1', [
+        KPI_DEFINITION_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's KPI definition", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update kpi_definitions set status = 'inactive' where id = $1 returning id`,
+        [KPI_DEFINITION_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ status: string }>(
+        TENANT_A,
+        'select status from kpi_definitions where id = $1',
+        [KPI_DEFINITION_IN_TENANT_A],
+      );
+      expect(check[0].status).toBe('active');
+    });
+
+    it('A session with NO tenant context set sees zero kpi_definitions rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from kpi_definitions where id = $1', [
+        KPI_DEFINITION_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero kpi_definitions rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from kpi_definitions where id = $1',
+        [KPI_DEFINITION_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('kpi_snapshots', () => {
+    it('Tenant A can see its own KPI snapshot', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, value from kpi_snapshots where id = $1', [
+        KPI_SNAPSHOT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].value).toBe('75.00');
+    });
+
+    it("Tenant B CANNOT see Tenant A's KPI snapshot by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from kpi_snapshots');
+      expect(rows).toHaveLength(1); // Tenant B sees only its own snapshot
+      expect(rows.find((r) => r.id === KPI_SNAPSHOT_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's KPI snapshot by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from kpi_snapshots where id = $1', [
+        KPI_SNAPSHOT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's KPI snapshot", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update kpi_snapshots set status = 'critical' where id = $1 returning id`,
+        [KPI_SNAPSHOT_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ status: string }>(
+        TENANT_A,
+        'select status from kpi_snapshots where id = $1',
+        [KPI_SNAPSHOT_IN_TENANT_A],
+      );
+      expect(check[0].status).toBe('warning');
+    });
+
+    it('A session with NO tenant context set sees zero kpi_snapshots rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from kpi_snapshots where id = $1', [
+        KPI_SNAPSHOT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero kpi_snapshots rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from kpi_snapshots where id = $1',
+        [KPI_SNAPSHOT_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('data_subject_requests', () => {
+    it('Tenant A can see its own data subject request', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, request_type from data_subject_requests where id = $1', [
+        DATA_SUBJECT_REQUEST_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].request_type).toBe('access');
+    });
+
+    it("Tenant B CANNOT see Tenant A's data subject request by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from data_subject_requests');
+      expect(rows).toHaveLength(1); // Tenant B sees only its own request
+      expect(rows.find((r) => r.id === DATA_SUBJECT_REQUEST_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's data subject request by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from data_subject_requests where id = $1', [
+        DATA_SUBJECT_REQUEST_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's data subject request", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update data_subject_requests set status = 'fulfilled' where id = $1 returning id`,
+        [DATA_SUBJECT_REQUEST_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ status: string }>(
+        TENANT_A,
+        'select status from data_subject_requests where id = $1',
+        [DATA_SUBJECT_REQUEST_IN_TENANT_A],
+      );
+      expect(check[0].status).toBe('received');
+    });
+
+    it('A session with NO tenant context set sees zero data_subject_requests rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from data_subject_requests where id = $1', [
+        DATA_SUBJECT_REQUEST_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero data_subject_requests rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from data_subject_requests where id = $1',
+        [DATA_SUBJECT_REQUEST_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('consent_records', () => {
+    it('Tenant A can see its own consent record', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, channel from consent_records where id = $1', [
+        CONSENT_RECORD_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].channel).toBe('sms');
+    });
+
+    it("Tenant B CANNOT see Tenant A's consent record by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from consent_records');
+      expect(rows).toHaveLength(1); // Tenant B sees only its own consent record
+      expect(rows.find((r) => r.id === CONSENT_RECORD_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's consent record by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from consent_records where id = $1', [
+        CONSENT_RECORD_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's consent record", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update consent_records set granted = false where id = $1 returning id`,
+        [CONSENT_RECORD_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ granted: boolean }>(
+        TENANT_A,
+        'select granted from consent_records where id = $1',
+        [CONSENT_RECORD_IN_TENANT_A],
+      );
+      expect(check[0].granted).toBe(true);
+    });
+
+    it('A session with NO tenant context set sees zero consent_records rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from consent_records where id = $1', [
+        CONSENT_RECORD_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero consent_records rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from consent_records where id = $1',
+        [CONSENT_RECORD_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('school_academic_settings', () => {
+    it('Tenant A can see its own academic settings row', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, uses_nacca_curriculum from school_academic_settings where id = $1', [
+        SCHOOL_ACADEMIC_SETTINGS_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].uses_nacca_curriculum).toBe(true);
+    });
+
+    it("Tenant B CANNOT see Tenant A's academic settings row by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from school_academic_settings');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === SCHOOL_ACADEMIC_SETTINGS_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's academic settings row by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from school_academic_settings where id = $1', [
+        SCHOOL_ACADEMIC_SETTINGS_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's academic settings row", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update school_academic_settings set uses_nacca_curriculum = false where id = $1 returning id`,
+        [SCHOOL_ACADEMIC_SETTINGS_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ uses_nacca_curriculum: boolean }>(
+        TENANT_A,
+        'select uses_nacca_curriculum from school_academic_settings where id = $1',
+        [SCHOOL_ACADEMIC_SETTINGS_IN_TENANT_A],
+      );
+      expect(check[0].uses_nacca_curriculum).toBe(true);
+    });
+
+    it('A session with NO tenant context set sees zero school_academic_settings rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from school_academic_settings where id = $1', [
+        SCHOOL_ACADEMIC_SETTINGS_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero school_academic_settings rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from school_academic_settings where id = $1',
+        [SCHOOL_ACADEMIC_SETTINGS_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('curriculum_strands', () => {
+    it('Tenant A can see its own curriculum strand', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, code from curriculum_strands where id = $1', [
+        CURRICULUM_STRAND_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].code).toBe('NUM');
+    });
+
+    it("Tenant B CANNOT see Tenant A's curriculum strand by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from curriculum_strands');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === CURRICULUM_STRAND_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's curriculum strand by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from curriculum_strands where id = $1', [
+        CURRICULUM_STRAND_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's curriculum strand", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update curriculum_strands set name = 'HACKED' where id = $1 returning id`,
+        [CURRICULUM_STRAND_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ name: string }>(TENANT_A, 'select name from curriculum_strands where id = $1', [
+        CURRICULUM_STRAND_IN_TENANT_A,
+      ]);
+      expect(check[0].name).toBe('Number');
+    });
+
+    it('A session with NO tenant context set sees zero curriculum_strands rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from curriculum_strands where id = $1', [
+        CURRICULUM_STRAND_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero curriculum_strands rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from curriculum_strands where id = $1',
+        [CURRICULUM_STRAND_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('curriculum_sub_strands', () => {
+    it('Tenant A can see its own curriculum sub-strand', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, code from curriculum_sub_strands where id = $1', [
+        CURRICULUM_SUB_STRAND_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].code).toBe('NUM-1');
+    });
+
+    it("Tenant B CANNOT see Tenant A's curriculum sub-strand by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from curriculum_sub_strands');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === CURRICULUM_SUB_STRAND_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's curriculum sub-strand by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from curriculum_sub_strands where id = $1', [
+        CURRICULUM_SUB_STRAND_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's curriculum sub-strand", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update curriculum_sub_strands set name = 'HACKED' where id = $1 returning id`,
+        [CURRICULUM_SUB_STRAND_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ name: string }>(
+        TENANT_A,
+        'select name from curriculum_sub_strands where id = $1',
+        [CURRICULUM_SUB_STRAND_IN_TENANT_A],
+      );
+      expect(check[0].name).toBe('Number and Numeration');
+    });
+
+    it('A session with NO tenant context set sees zero curriculum_sub_strands rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from curriculum_sub_strands where id = $1', [
+        CURRICULUM_SUB_STRAND_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero curriculum_sub_strands rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from curriculum_sub_strands where id = $1',
+        [CURRICULUM_SUB_STRAND_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('curriculum_indicators', () => {
+    it('Tenant A can see its own curriculum indicator', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, indicator_code from curriculum_indicators where id = $1', [
+        CURRICULUM_INDICATOR_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].indicator_code).toBe('B7.1.1.1.1');
+    });
+
+    it("Tenant B CANNOT see Tenant A's curriculum indicator by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from curriculum_indicators');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === CURRICULUM_INDICATOR_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's curriculum indicator by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from curriculum_indicators where id = $1', [
+        CURRICULUM_INDICATOR_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's curriculum indicator", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update curriculum_indicators set indicator_text = 'HACKED' where id = $1 returning id`,
+        [CURRICULUM_INDICATOR_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ indicator_text: string }>(
+        TENANT_A,
+        'select indicator_text from curriculum_indicators where id = $1',
+        [CURRICULUM_INDICATOR_IN_TENANT_A],
+      );
+      expect(check[0].indicator_text).toBe('Round numbers to the nearest 10, 100 or 1000');
+    });
+
+    it('A session with NO tenant context set sees zero curriculum_indicators rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from curriculum_indicators where id = $1', [
+        CURRICULUM_INDICATOR_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero curriculum_indicators rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from curriculum_indicators where id = $1',
+        [CURRICULUM_INDICATOR_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('bece_candidates', () => {
+    it('Tenant A can see its own BECE candidate', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, index_number from bece_candidates where id = $1', [
+        BECE_CANDIDATE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].index_number).toBe('SUN-20262027-0001');
+    });
+
+    it("Tenant B CANNOT see Tenant A's BECE candidate by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from bece_candidates');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === BECE_CANDIDATE_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's BECE candidate by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from bece_candidates where id = $1', [
+        BECE_CANDIDATE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's BECE candidate", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update bece_candidates set registration_status = 'withdrawn' where id = $1 returning id`,
+        [BECE_CANDIDATE_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ registration_status: string }>(
+        TENANT_A,
+        'select registration_status from bece_candidates where id = $1',
+        [BECE_CANDIDATE_IN_TENANT_A],
+      );
+      expect(check[0].registration_status).toBe('registered');
+    });
+
+    it('A session with NO tenant context set sees zero bece_candidates rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from bece_candidates where id = $1', [
+        BECE_CANDIDATE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero bece_candidates rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from bece_candidates where id = $1',
+        [BECE_CANDIDATE_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('bece_mock_results', () => {
+    it('Tenant A can see its own BECE mock result', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, grade from bece_mock_results where id = $1', [
+        BECE_MOCK_RESULT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].grade).toBe(3);
+    });
+
+    it("Tenant B CANNOT see Tenant A's BECE mock result by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from bece_mock_results');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === BECE_MOCK_RESULT_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's BECE mock result by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from bece_mock_results where id = $1', [
+        BECE_MOCK_RESULT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's BECE mock result", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update bece_mock_results set grade = 9 where id = $1 returning id`,
+        [BECE_MOCK_RESULT_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ grade: number }>(TENANT_A, 'select grade from bece_mock_results where id = $1', [
+        BECE_MOCK_RESULT_IN_TENANT_A,
+      ]);
+      expect(check[0].grade).toBe(3);
+    });
+
+    it('A session with NO tenant context set sees zero bece_mock_results rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from bece_mock_results where id = $1', [
+        BECE_MOCK_RESULT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero bece_mock_results rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from bece_mock_results where id = $1',
+        [BECE_MOCK_RESULT_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('cssps_placements', () => {
+    it('Tenant A can see its own CSSPS placement', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, choices from cssps_placements where id = $1', [
+        CSSPS_PLACEMENT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].choices).toEqual(['Achimota School', 'Presec Legon']);
+    });
+
+    it("Tenant B CANNOT see Tenant A's CSSPS placement by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from cssps_placements');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === CSSPS_PLACEMENT_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's CSSPS placement by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from cssps_placements where id = $1', [
+        CSSPS_PLACEMENT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's CSSPS placement", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update cssps_placements set placement_outcome = 'HACKED' where id = $1 returning id`,
+        [CSSPS_PLACEMENT_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ placement_outcome: string | null }>(
+        TENANT_A,
+        'select placement_outcome from cssps_placements where id = $1',
+        [CSSPS_PLACEMENT_IN_TENANT_A],
+      );
+      expect(check[0].placement_outcome).toBeNull();
+    });
+
+    it('A session with NO tenant context set sees zero cssps_placements rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from cssps_placements where id = $1', [
+        CSSPS_PLACEMENT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero cssps_placements rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from cssps_placements where id = $1',
+        [CSSPS_PLACEMENT_IN_TENANT_A],
       );
       expect(rows).toHaveLength(0);
     });

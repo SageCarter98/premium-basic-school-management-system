@@ -15,17 +15,19 @@
  *
  * FR-BIL-040 (dunning): runDunningStep() does the REAL half — it
  * transitions the tenant's actual status via TenantsService (past_due /
- * suspended, both genuinely real since Phase A1) — but does NOT send the
- * "notified... by email and WhatsApp" half. That needs a platform-context
- * request to write into a SPECIFIC tenant's CommunicationService, which
- * requires TenantDatabaseService (Scope.REQUEST, tied to an actual
- * incoming HTTP request's lifecycle) — manually constructing one outside
- * Nest's DI is exactly the trap that caused Authorization Pass 1's real
- * bug #1 (a Scope.REQUEST provider silently unresolved when
- * constructor-injected into a global enhancer). Deliberately not
- * attempted here; a real fix needs either Phase D's job infrastructure or
- * a dedicated platform-to-tenant notification bridge, not a workaround
- * bolted onto this pass.
+ * suspended, both genuinely real since Phase A1) — AND, as of Phase D
+ * (Chapter 35 background jobs), the notification half too: it calls
+ * platform_enqueue_job() to enqueue a 'dunning_notification' job for the
+ * specific tenant, which src/worker.ts's dequeue loop picks up and runs
+ * via dunning-notification.handler.ts. That handler builds its own
+ * WorkerTenantConnection rather than touching Nest's Scope.REQUEST DI at
+ * all — the exact trap that made a direct call from here unsafe (a
+ * Scope.REQUEST provider silently unresolved when constructor-injected
+ * into a global enhancer, Authorization Pass 1's real bug #1). Real
+ * delivery is still blocked on Appendix E vendor onboarding (WhatsApp/SMS/
+ * email are all stubbed as not-implemented, same as every other
+ * notification in this codebase) — but the dispatch mechanism itself is
+ * now real, not deferred.
  *
  * FR-BIL-050 (revenue report): MRR and per-period invoiced/paid/overdue
  * totals are real, computed from live data. True churn/expansion cohort
@@ -220,9 +222,10 @@ export class BillingService {
     return result.rows[0];
   }
 
-  /** FR-BIL-040's real half — see this file's header for what's
-   * deliberately NOT done here (the notification dispatch). */
-  async runDunningStep(actorId: string, tenantId: string, reason: string): Promise<{ tenantStatus: string; notificationDeferred: true }> {
+  /** FR-BIL-040 — both halves are real as of Phase D: the status
+   * transition (below) and, now, the notification dispatch via
+   * platform_enqueue_job() — see this file's header for how. */
+  async runDunningStep(actorId: string, tenantId: string, reason: string): Promise<{ tenantStatus: string; notificationJobId: string }> {
     const overdueRows = await this.pool.query<{ hit: number }>(
       `select 1 as hit from platform_invoices where tenant_id = $1 and status = 'overdue' limit 1`,
       [tenantId],
@@ -239,12 +242,18 @@ export class BillingService {
 
     const updated = await this.tenants.transition(tenantId, actorId, { toStatus: nextStatus, reason });
 
+    const jobRows = await this.pool.query<{ platform_enqueue_job: string }>(
+      `select platform_enqueue_job($1, 'dunning_notification', $2)`,
+      [tenantId, JSON.stringify({ tenantStatus: nextStatus, reason })],
+    );
+    const notificationJobId = jobRows.rows[0].platform_enqueue_job;
+
     await this.pool.query(
       `insert into platform_audit_logs (actor_id, tenant_id, action, detail) values ($1, $2, 'dunning_step', $3)`,
-      [actorId, tenantId, JSON.stringify({ toStatus: nextStatus, reason, notificationDeferred: true })],
+      [actorId, tenantId, JSON.stringify({ toStatus: nextStatus, reason, notificationJobId })],
     );
 
-    return { tenantStatus: updated.status, notificationDeferred: true };
+    return { tenantStatus: updated.status, notificationJobId };
   }
 
   async revenueReport(periodStart: string, periodEnd: string) {

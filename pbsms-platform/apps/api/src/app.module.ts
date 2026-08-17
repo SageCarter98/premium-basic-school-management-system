@@ -30,6 +30,10 @@ import { PlatformStaffModule } from './modules/platform-staff/platform-staff.mod
 import { ImpersonationModule } from './modules/impersonation/impersonation.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { DelegationsModule } from './modules/delegations/delegations.module';
+import { JobsModule } from './modules/jobs/jobs.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { DataProtectionModule } from './modules/data-protection/data-protection.module';
+import { NaccaModule } from './modules/nacca/nacca.module';
 
 @Controller()
 class HealthController {
@@ -71,6 +75,10 @@ class HealthController {
     ImpersonationModule,
     BillingModule,
     DelegationsModule,
+    JobsModule,
+    AnalyticsModule,
+    DataProtectionModule,
+    NaccaModule,
   ],
   controllers: [HealthController],
 })

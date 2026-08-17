@@ -816,6 +816,147 @@ insert into audit_log (id, tenant_id, actor_user_id, actor_role_codes, action, m
    '99999999-0000-0000-0000-000000000002', array['proprietor'], 'create', 'POST', '/v1/finance/payments', 201);
 
 -- ============================================================================
+-- Chapter 35 (Phase D, 0027_background_jobs.sql) fixtures — one queued
+-- background_jobs row and one active job_schedules row per tenant, fixed
+-- ids for the isolation suite's direct-id-lookup tests. next_run_at is
+-- deliberately in the future so a casual `npm run worker:dev` during
+-- manual testing doesn't immediately consume this fixture.
+-- ============================================================================
+
+insert into background_jobs (id, tenant_id, job_type, payload, status, created_by, updated_by) values
+  ('94000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'report_card_batch',
+   jsonb_build_object('classId', 'dddddddd-0000-0000-0000-000000000001', 'academicYearId', 'cccccccc-0000-0000-0000-000000000001'),
+   'queued', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('94000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'report_card_batch',
+   jsonb_build_object('classId', 'dddddddd-0000-0000-0000-000000000002', 'academicYearId', 'cccccccc-0000-0000-0000-000000000002'),
+   'queued', '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into job_schedules (id, tenant_id, job_type, payload_template, frequency, next_run_at, created_by, updated_by) values
+  ('95000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'report_card_batch',
+   jsonb_build_object('classId', 'dddddddd-0000-0000-0000-000000000001', 'academicYearId', 'cccccccc-0000-0000-0000-000000000001'),
+   'termly', now() + interval '30 days', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('95000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'report_card_batch',
+   jsonb_build_object('classId', 'dddddddd-0000-0000-0000-000000000002', 'academicYearId', 'cccccccc-0000-0000-0000-000000000002'),
+   'termly', now() + interval '30 days', '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+-- ============================================================================
+-- Chapter 14 (Phase E, 0028_analytics.sql) fixtures — one active
+-- tenant-wide KPI definition and one snapshot per tenant, fixed ids for
+-- the isolation suite's direct-id-lookup tests.
+-- ============================================================================
+
+insert into kpi_definitions
+  (id, tenant_id, code, name, responsible_role, data_source, reporting_frequency, supervisor_user_id, created_by, updated_by) values
+  ('96000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'collection-rate', 'Fee Collection Rate', 'accountant', 'collection_rate', 'termly',
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('96000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'collection-rate', 'Fee Collection Rate', 'accountant', 'collection_rate', 'termly',
+   '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into kpi_snapshots (id, tenant_id, kpi_definition_id, period_start, period_end, value, status, created_by) values
+  ('96100000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   '96000000-0000-0000-0000-000000000001', '2026-01-01', '2026-03-31', 75.00, 'warning', '99999999-0000-0000-0000-000000000001'),
+  ('96100000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   '96000000-0000-0000-0000-000000000002', '2026-01-01', '2026-03-31', 90.00, 'on_target', '99999999-0000-0000-0000-000000000002');
+
+-- ============================================================================
+-- Chapter 39-40 (Phase F, 0029_data_protection.sql) fixtures — one
+-- received data-subject request and one granted consent record per
+-- tenant, fixed ids for the isolation suite's direct-id-lookup tests.
+-- data_inventory/retention_policies/data_breach_incidents are platform
+-- reference tables (no RLS, same category as `plans`) — seeded directly
+-- inside 0029_data_protection.sql itself, not here.
+-- ============================================================================
+
+insert into data_subject_requests
+  (id, tenant_id, request_type, subject_type, subject_id, requester_name, due_date, created_by, updated_by) values
+  ('97000000-1000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'access', 'guardian', '90000000-0000-0000-0000-000000000001', 'Ama Mensah''s guardian',
+   now() + interval '30 days', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('97000000-1000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'access', 'student', 'eeeeeeee-0000-0000-0000-000000000002', 'Ama Owusu''s guardian',
+   now() + interval '30 days', '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into consent_records
+  (id, tenant_id, subject_type, subject_id, consent_type, channel, granted, version, recorded_by) values
+  ('97000000-2000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'guardian', '90000000-0000-0000-0000-000000000001', 'communication_channel', 'sms', true, 1,
+   '99999999-0000-0000-0000-000000000001'),
+  ('97000000-2000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'guardian', '90000000-0000-0000-0000-000000000002', 'communication_channel', 'sms', true, 1,
+   '99999999-0000-0000-0000-000000000002');
+
+-- ============================================================================
+-- Chapter 41 (Phase G, 0030_nacca_curriculum.sql) fixtures — one row per
+-- new table per tenant, fixed ids for the isolation suite's
+-- direct-id-lookup tests.
+-- ============================================================================
+
+insert into school_academic_settings (id, tenant_id, school_id, uses_nacca_curriculum, created_by, updated_by) values
+  ('a1000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'aaaaaaaa-0000-0000-0000-000000000001', true,
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a1000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'bbbbbbbb-0000-0000-0000-000000000001', false,
+   '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into curriculum_strands (id, tenant_id, subject_id, name, code, created_by, updated_by) values
+  ('a2000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   '55555555-0000-0000-0000-000000000001', 'Number', 'NUM',
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a2000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   '55555555-0000-0000-0000-000000000002', 'Number', 'NUM',
+   '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into curriculum_sub_strands (id, tenant_id, strand_id, name, code, created_by, updated_by) values
+  ('a3000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'a2000000-0000-0000-0000-000000000001', 'Number and Numeration', 'NUM-1',
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a3000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'a2000000-0000-0000-0000-000000000002', 'Number and Numeration', 'NUM-1',
+   '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into curriculum_indicators
+  (id, tenant_id, sub_strand_id, content_standard_code, content_standard_text, indicator_code, indicator_text, created_by, updated_by) values
+  ('a4000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'a3000000-0000-0000-0000-000000000001', 'B7.1.1.1', 'Demonstrate understanding of place value',
+   'B7.1.1.1.1', 'Round numbers to the nearest 10, 100 or 1000',
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a4000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'a3000000-0000-0000-0000-000000000002', 'B7.1.1.1', 'Demonstrate understanding of place value',
+   'B7.1.1.1.1', 'Round numbers to the nearest 10, 100 or 1000',
+   '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into bece_candidates (id, tenant_id, student_id, academic_year_id, index_number, created_by, updated_by) values
+  ('a5000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'eeeeeeee-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'SUN-20262027-0001',
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a5000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'eeeeeeee-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-000000000002', 'GGPJHS-20262027-0001',
+   '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into bece_mock_results (id, tenant_id, bece_candidate_id, exam_session, subject_name, grade, score_percentage, created_by) values
+  ('a6000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'a5000000-0000-0000-0000-000000000001', 'Mock 1 2026', 'Mathematics', 3, 68.00,
+   '99999999-0000-0000-0000-000000000001'),
+  ('a6000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'a5000000-0000-0000-0000-000000000002', 'Mock 1 2026', 'Mathematics', 2, 74.00,
+   '99999999-0000-0000-0000-000000000002');
+
+insert into cssps_placements (id, tenant_id, student_id, choices, created_by, updated_by) values
+  ('a7000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'eeeeeeee-0000-0000-0000-000000000001', array['Achimota School', 'Presec Legon'],
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a7000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'eeeeeeee-0000-0000-0000-000000000002', array['Wesley Girls'],
+   '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+-- ============================================================================
 -- PROOF OF ISOLATION — run these manually after seeding
 -- ============================================================================
 -- As Tenant A, you should see exactly one student (Ama Mensah):

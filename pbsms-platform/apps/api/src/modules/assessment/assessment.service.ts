@@ -63,6 +63,7 @@ export interface AssessmentComponent {
   weight: string;
   max_score: string;
   nacca_strand: string | null;
+  indicator_id: string | null;
 }
 
 export interface Score {
@@ -155,8 +156,8 @@ export class AssessmentService {
     }
     const rows = await this.db.query<AssessmentComponent>(
       `insert into assessment_components
-         (tenant_id, assessment_structure_id, component_type, weight, max_score, nacca_strand)
-       values (current_tenant_id(), $1, $2, $3, $4, $5)
+         (tenant_id, assessment_structure_id, component_type, weight, max_score, nacca_strand, indicator_id)
+       values (current_tenant_id(), $1, $2, $3, $4, $5, $6)
        returning *`,
       [
         structureId,
@@ -164,6 +165,7 @@ export class AssessmentService {
         input.weight,
         input.maxScore ?? 100,
         input.naccaStrand ?? null,
+        input.indicatorId ?? null,
       ],
     );
     return rows[0];

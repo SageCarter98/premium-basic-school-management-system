@@ -76,7 +76,11 @@ export class TenantDatabaseService {
     return client;
   }
 
-  private releaseClient(): void {
+  /** protected, not private: WorkerTenantConnection (worker-tenant-connection.ts)
+   * subclasses this to call release explicitly once a background job
+   * finishes, since there is no HTTP response 'finish'/'close' event to
+   * hook for a worker-executed job — see that file's header for why. */
+  protected releaseClient(): void {
     if (!this.client || this.released) return;
     this.released = true;
     const client = this.client;

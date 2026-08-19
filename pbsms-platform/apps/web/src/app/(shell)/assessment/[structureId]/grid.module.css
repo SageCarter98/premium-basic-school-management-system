@@ -1,0 +1,90 @@
+.wrapper {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--pb-text-small);
+}
+
+.table th,
+.table td {
+  padding: var(--pb-space-2);
+  border-bottom: 1px solid var(--pb-rule);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.studentCol {
+  position: sticky;
+  left: 0;
+  background: var(--pb-surface);
+  min-width: 160px;
+  font-weight: 500;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  gap: var(--pb-space-1);
+}
+
+.scoreInput {
+  width: 64px;
+  min-height: 36px;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  padding: 0 var(--pb-space-2);
+  text-align: right;
+}
+
+.scoreInputError {
+  border-color: var(--pb-danger);
+}
+
+.missingBtn {
+  min-width: 28px;
+  min-height: 28px;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  background: var(--pb-surface);
+  color: var(--pb-ink-muted);
+  font-size: var(--pb-text-caption);
+  font-weight: 700;
+}
+
+.missingBtnActive {
+  background: var(--pb-warning-bg);
+  color: var(--pb-warning);
+  border-color: var(--pb-warning);
+}
+
+.cellError {
+  color: var(--pb-danger);
+  font-size: var(--pb-text-caption);
+  display: block;
+}
+
+.savedTick {
+  color: var(--pb-success);
+  font-size: var(--pb-text-caption);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--pb-space-3);
+  margin-bottom: var(--pb-space-3);
+  flex-wrap: wrap;
+}
+
+.lockedBanner {
+  background: var(--pb-warning-bg);
+  color: var(--pb-warning);
+  padding: var(--pb-space-3);
+  border-radius: var(--pb-radius-md);
+  margin-bottom: var(--pb-space-3);
+  font-size: var(--pb-text-small);
+}

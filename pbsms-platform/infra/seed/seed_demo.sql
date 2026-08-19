@@ -83,7 +83,25 @@ insert into users (id, email, password_hash, full_name) values
   -- one seeded user, admin@goldengate, before this).
   ('99999999-0000-0000-0000-000000000010', 'teacher@goldengate.pbsms.test',
    '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
-   'Golden Gate Teacher');
+   'Golden Gate Teacher'),
+  -- Stage 8 (frontend): LIBRARY_TEAM/TRANSPORT_TEAM/HEALTH_TEAM/
+  -- INVENTORY_TEAM are each [...LEADERSHIP, <specialist role>] — before
+  -- this, the only way to exercise those 4 modules' actual tiers was the
+  -- MFA-gated headmaster account, same reasoning as accountant@sunrise's
+  -- own addition above (Authorization Pass 1) for making a role tier
+  -- distinguishable via live-HTTP testing without needing MFA.
+  ('99999999-0000-0000-0000-000000000006', 'librarian@sunrise.pbsms.test',
+   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   'Sunrise Librarian'),
+  ('99999999-0000-0000-0000-000000000007', 'transport@sunrise.pbsms.test',
+   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   'Sunrise Transport Officer'),
+  ('99999999-0000-0000-0000-000000000008', 'health@sunrise.pbsms.test',
+   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   'Sunrise Health Officer'),
+  ('99999999-0000-0000-0000-000000000009', 'storekeeper@sunrise.pbsms.test',
+   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   'Sunrise Storekeeper');
 
 -- Chapter 13/33 (authorization Pass 1): 'accountant' is a distinct,
 -- lower-tier role from 'headmaster' specifically so RolesGuard's
@@ -99,7 +117,11 @@ insert into tenant_users (id, tenant_id, user_id, role_code) values
   ('80000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-000000000001', 'headmaster'),
   ('80000000-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-000000000004', 'accountant'),
   ('80000000-0000-0000-0000-000000000004', '22222222-2222-2222-2222-222222222222', '99999999-0000-0000-0000-000000000002', 'proprietor'),
-  ('80000000-0000-0000-0000-000000000005', '22222222-2222-2222-2222-222222222222', '99999999-0000-0000-0000-000000000010', 'teacher');
+  ('80000000-0000-0000-0000-000000000005', '22222222-2222-2222-2222-222222222222', '99999999-0000-0000-0000-000000000010', 'teacher'),
+  ('80000000-0000-0000-0000-000000000006', '11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-000000000006', 'librarian'),
+  ('80000000-0000-0000-0000-000000000007', '11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-000000000007', 'transport_officer'),
+  ('80000000-0000-0000-0000-000000000008', '11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-000000000008', 'health_officer'),
+  ('80000000-0000-0000-0000-000000000009', '11111111-1111-1111-1111-111111111111', '99999999-0000-0000-0000-000000000009', 'storekeeper');
 
 -- Schools
 insert into schools (id, tenant_id, name, code) values
@@ -158,6 +180,16 @@ insert into student_guardians
    'eeeeeeee-0000-0000-0000-000000000002', '90000000-0000-0000-0000-000000000002', 'mother',
    true, true, true, true, true,
    '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+-- Stage 6 (Parent View, 0031_guardian_access.sql). token_hash is a fixed
+-- fixture value, not a real sha256 of any actual token — this row exists
+-- for the isolation suite's direct-id-lookup assertions, not for live
+-- login (a real grant is always minted via POST /v1/guardians/:id/
+-- access-links, which returns the one-time raw token itself).
+insert into guardian_access_grants (id, tenant_id, guardian_id, token_hash, expires_at, created_by) values
+  ('92222222-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   '90000000-0000-0000-0000-000000000001', 'seed-fixture-hash-not-a-real-token-0000000000000000000000000001',
+   now() + interval '90 days', '99999999-0000-0000-0000-000000000001');
 
 -- Fixed ids (rather than letting gen_random_uuid() assign them) so the
 -- tenant-isolation e2e suite can do a direct-id-lookup test against a known
@@ -444,6 +476,31 @@ insert into invoice_items (id, tenant_id, invoice_id, description, amount) value
    'd5555555-0000-0000-0000-000000000002', 'Tuition', 800),
   ('d6666666-0000-0000-0000-000000000004', '22222222-2222-2222-2222-222222222222',
    'd5555555-0000-0000-0000-000000000002', 'Feeding', 200);
+
+-- FR-FEE-040. Fixed ids exist purely for the isolation suite's direct-id-
+-- lookup tests, same reasoning as every fixture above. The seeded invoices
+-- (due 2027-01-15) aren't actually overdue yet as of this seed's fictional
+-- "today", so applyPenalty()'s grace-period check can never fire against
+-- them out of the box — deliberate, same "ready to exercise, not
+-- pre-exhausted" posture as the rest of this file; a real overdue scenario
+-- is created live (a fresh invoice with a past due_date) when exercising
+-- this path, not baked into the seed.
+insert into fee_penalty_rules
+    (id, tenant_id, fee_structure_id, name, grace_period_days, amount_type, amount, cap_amount, frequency, created_by, updated_by) values
+  ('d9999999-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'd0000000-0000-0000-0000-000000000001', 'Late payment surcharge', 7, 'fixed', 50, 200, 'weekly',
+   '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('d9999999-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'd0000000-0000-0000-0000-000000000002', 'Late payment surcharge', 7, 'fixed', 50, 200, 'weekly',
+   '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into fee_penalty_charges (id, tenant_id, invoice_id, penalty_rule_id, amount, applied_by, reason) values
+  ('da000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'd5555555-0000-0000-0000-000000000001', 'd9999999-0000-0000-0000-000000000001', 50,
+   '99999999-0000-0000-0000-000000000001', 'seed fixture'),
+  ('da000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'd5555555-0000-0000-0000-000000000002', 'd9999999-0000-0000-0000-000000000002', 50,
+   '99999999-0000-0000-0000-000000000002', 'seed fixture');
 
 insert into payments (id, tenant_id, student_id, method, provider_reference, amount, received_by, created_by, updated_by) values
   ('d7777777-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',

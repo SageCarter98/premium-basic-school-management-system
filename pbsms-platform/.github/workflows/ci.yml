@@ -131,6 +131,8 @@ jobs:
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0028_analytics.sql
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0029_data_protection.sql
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0030_nacca_curriculum.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0031_guardian_access.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0032_fee_penalties.sql
       - name: Set the CI-only pbsms_app password to match TEST_DATABASE_URL/DATABASE_URL
         # 0001_init_tenancy.sql hardcodes pbsms_app's local-dev password; CI
         # uses a different generated postgres password for pbsms itself
@@ -181,11 +183,17 @@ jobs:
           fi
 
   web-a11y:
-    # NFR-ACC-020: WCAG 2.1 AA checked automatically in CI. apps/web has no
-    # real screens yet (Stage 1 of the frontend spec's own Build Order,
-    # §13) — this crawls the internal component gallery at /design-system
-    # instead, so the accessibility baseline is enforced from the first
-    # component, not retrofitted once 20 screens exist.
+    # NFR-ACC-020: WCAG 2.1 AA checked automatically in CI, enforced from
+    # the first component (Stage 1) rather than retrofitted once 20
+    # screens exist (frontend spec §13 Build Order). Crawls the internal
+    # component gallery (/design-system), the login screen (Stage 2), all
+    # four Teacher Field App screens (Stage 4), the five Stage 5 Staff
+    # Console screens (students, academic structure, assessment, grading,
+    # results), and Stage 6's Parent Home — unauthenticated in this job
+    # (no API server here), so each Staff/Teacher route renders its
+    # client-side RequireAuth redirect and /parent renders its "no valid
+    # token" error state, rather than real content; still real DOM the
+    # gate checks either way.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

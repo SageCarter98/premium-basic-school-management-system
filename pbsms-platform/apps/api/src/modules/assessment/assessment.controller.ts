@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AssessmentService } from './assessment.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { CreateAssessmentStructureDto } from './dto/create-assessment-structure.dto';
@@ -40,8 +40,12 @@ export class AssessmentController {
 
   @Roles(...ACADEMIC_STAFF)
   @Get('structures')
-  findAllStructures() {
-    return this.assessment.findAllStructures();
+  findAllStructures(
+    @Query('classId') classId?: string,
+    @Query('subjectId') subjectId?: string,
+    @Query('academicYearId') academicYearId?: string,
+  ) {
+    return this.assessment.findAllStructures({ classId, subjectId, academicYearId });
   }
 
   @Roles(...ACADEMIC_STAFF)

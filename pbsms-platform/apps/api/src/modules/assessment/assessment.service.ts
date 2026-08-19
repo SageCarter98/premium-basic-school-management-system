@@ -127,9 +127,26 @@ export class AssessmentService {
     return rows[0];
   }
 
-  async findAllStructures(): Promise<AssessmentStructure[]> {
+  async findAllStructures(
+    filter: { classId?: string; subjectId?: string; academicYearId?: string } = {},
+  ): Promise<AssessmentStructure[]> {
+    const conditions = ['deleted_at is null'];
+    const params: string[] = [];
+    if (filter.classId) {
+      params.push(filter.classId);
+      conditions.push(`class_id = $${params.length}`);
+    }
+    if (filter.subjectId) {
+      params.push(filter.subjectId);
+      conditions.push(`subject_id = $${params.length}`);
+    }
+    if (filter.academicYearId) {
+      params.push(filter.academicYearId);
+      conditions.push(`academic_year_id = $${params.length}`);
+    }
     return this.db.query<AssessmentStructure>(
-      `select * from assessment_structures where deleted_at is null order by created_at desc`,
+      `select * from assessment_structures where ${conditions.join(' and ')} order by created_at desc`,
+      params,
     );
   }
 

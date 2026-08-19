@@ -3,6 +3,7 @@ import { GuardiansService } from './guardians.service';
 import { CreateGuardianDto } from './dto/create-guardian.dto';
 import { LinkGuardianDto } from './dto/link-guardian.dto';
 import { UpdateGuardianLinkDto } from './dto/update-guardian-link.dto';
+import { CreateAccessGrantDto } from './dto/create-access-grant.dto';
 import { Roles } from '../../common/auth/roles.decorator';
 import { ALL_STAFF, ACADEMIC_ADMIN } from '../../common/auth/role-groups';
 
@@ -59,5 +60,30 @@ export class GuardiansController {
   @Delete('student-guardians/:linkId')
   unlink(@Param('linkId') linkId: string) {
     return this.guardians.unlink(linkId);
+  }
+
+  // ---------------------------------------------------------------------
+  // Stage 6 (Parent View) access links — ACADEMIC_ADMIN only, same tier
+  // as every other guardian-write action. The raw token is present in
+  // createAccessGrant()'s response body exactly once; listAccessGrants()
+  // never returns it (nor the hash) — see guardians.service.ts.
+  // ---------------------------------------------------------------------
+
+  @Roles(...ACADEMIC_ADMIN)
+  @Post('guardians/:guardianId/access-links')
+  createAccessGrant(@Param('guardianId') guardianId: string, @Body() body: CreateAccessGrantDto) {
+    return this.guardians.createAccessGrant(guardianId, body.expiresInDays);
+  }
+
+  @Roles(...ACADEMIC_ADMIN)
+  @Get('guardians/:guardianId/access-links')
+  listAccessGrants(@Param('guardianId') guardianId: string) {
+    return this.guardians.listAccessGrants(guardianId);
+  }
+
+  @Roles(...ACADEMIC_ADMIN)
+  @Post('guardian-access-links/:id/revoke')
+  revokeAccessGrant(@Param('id') id: string) {
+    return this.guardians.revokeAccessGrant(id);
   }
 }

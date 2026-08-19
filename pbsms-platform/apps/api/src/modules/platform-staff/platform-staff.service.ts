@@ -39,6 +39,23 @@ export interface PlatformUserRole {
 export class PlatformStaffService {
   constructor(@Inject(PLATFORM_POOL) private readonly pool: Pool) {}
 
+  /** Stage 9 addition — see platform-staff.controller.ts's header.
+   * Read-only; grant/revoke's own userId-first shape is unchanged. */
+  async listAllPlatformUsers(): Promise<
+    { id: string; email: string; full_name: string; role_codes: string[] }[]
+  > {
+    const result = await this.pool.query<{ id: string; email: string; full_name: string; role_codes: string[] }>(
+      `select u.id, u.email, u.full_name,
+              coalesce(array_agg(pur.role_code) filter (where pur.role_code is not null), '{}') as role_codes
+       from users u
+       left join platform_user_roles pur on pur.user_id = u.id and pur.revoked_at is null
+       where u.is_platform_user = true
+       group by u.id, u.email, u.full_name
+       order by u.full_name`,
+    );
+    return result.rows;
+  }
+
   async grantRole(actorId: string, targetUserId: string, roleCode: string): Promise<PlatformUserRole> {
     const userRows = await this.pool.query<{ is_platform_user: boolean }>(
       `select is_platform_user from users where id = $1`,

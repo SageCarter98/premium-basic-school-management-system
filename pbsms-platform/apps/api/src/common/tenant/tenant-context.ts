@@ -41,6 +41,17 @@ export interface TenantContext {
    * AuditLogInterceptor (dual-logs to platform_audit_logs too) and
    * ImpersonationSensitiveActionGuard (TEN-021's four-eyes gate). */
   impersonationGrantId?: string;
+  /** Set only for a Stage 6 Parent View request (tenant.middleware.ts's
+   * PARENT_PATH_PREFIX branch) — the real guardians.id this request is
+   * acting as. `userId` on such a request is deliberately the fixed
+   * system-service-account id (worker.ts's SYSTEM_ACTOR_ID), NOT this
+   * value: audit_log.actor_user_id carries a hard FK to users(id)
+   * (0018_staff_directory.sql), and a guardian has no `users` row at all
+   * — putting a raw guardianId in `userId` would make any accidental
+   * audit-logged write on this path (there are none today; ParentController
+   * is GET-only) fail with an FK violation instead of the real error.
+   * ParentViewService reads THIS field for its own queries, never userId. */
+  guardianId?: string;
 }
 
 const storage = new AsyncLocalStorage<TenantContext>();

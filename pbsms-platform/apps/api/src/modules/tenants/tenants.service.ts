@@ -163,6 +163,29 @@ export class TenantsService {
     return result.rows;
   }
 
+  /** Stage 9 addition — see tenants.controller.ts's header. The spec's
+   * "Platform audit log" screen (§7.1) means the cross-tenant view; this
+   * table already existed and every platform-mutating method here already
+   * writes to it, only a general read was missing. */
+  async listAllAuditLog(filter: { tenantId?: string; action?: string }): Promise<PlatformAuditLogEntry[]> {
+    const conditions: string[] = [];
+    const params: string[] = [];
+    if (filter.tenantId) {
+      params.push(filter.tenantId);
+      conditions.push(`tenant_id = $${params.length}`);
+    }
+    if (filter.action) {
+      params.push(filter.action);
+      conditions.push(`action = $${params.length}`);
+    }
+    const where = conditions.length > 0 ? `where ${conditions.join(' and ')}` : '';
+    const result = await this.pool.query<PlatformAuditLogEntry>(
+      `select * from platform_audit_logs ${where} order by created_at desc limit 200`,
+      params,
+    );
+    return result.rows;
+  }
+
   /** The lifecycle state machine itself. BEGIN/FOR UPDATE/COMMIT, same
    * shape as admissions.service.ts's convert() — validates against the
    * row's current state and flips it atomically, so a concurrent

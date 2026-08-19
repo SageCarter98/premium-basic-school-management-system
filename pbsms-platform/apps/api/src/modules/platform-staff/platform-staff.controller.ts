@@ -15,6 +15,16 @@ import { PlatformContextStore } from '../../common/tenant/platform-context';
 export class PlatformStaffController {
   constructor(private readonly platformStaff: PlatformStaffService) {}
 
+  // Stage 9 addition: grantRole()/listRoles() both require an
+  // already-known userId, but nothing anywhere lists WHICH users are
+  // platform users in the first place — the spec's "Users & roles" screen
+  // had no way to populate a picker.
+  @PlatformRoles(...PLATFORM_ALL)
+  @Get()
+  listAll() {
+    return this.platformStaff.listAllPlatformUsers();
+  }
+
   @PlatformRoles(...PLATFORM_SUPER_ADMIN)
   @Post(':userId/roles')
   grantRole(@Param('userId') userId: string, @Body() body: GrantPlatformRoleDto) {

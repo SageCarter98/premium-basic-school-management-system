@@ -1,0 +1,61 @@
+.page {
+  max-width: 1024px;
+  margin: 0 auto;
+  padding: var(--pb-space-6) var(--pb-space-5);
+}
+
+.notice {
+  background: var(--pb-teal-900);
+  color: #fff;
+  padding: var(--pb-space-3) var(--pb-space-4);
+  border-radius: var(--pb-radius-md);
+  margin-bottom: var(--pb-space-6);
+  font-size: var(--pb-text-small);
+}
+
+.section {
+  margin-bottom: var(--pb-space-7);
+}
+
+.section h2 {
+  margin-bottom: var(--pb-space-3);
+}
+
+.row {
+  display: flex;
+  gap: var(--pb-space-3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--pb-space-3);
+}
+
+.swatch {
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-md);
+  overflow: hidden;
+  background: var(--pb-surface);
+}
+
+.swatchChip {
+  height: 60px;
+}
+
+.swatchMeta {
+  padding: var(--pb-space-2) var(--pb-space-3);
+  font-size: var(--pb-text-caption);
+}
+
+.cardPadded {
+  padding: var(--pb-space-4);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pb-space-4);
+}

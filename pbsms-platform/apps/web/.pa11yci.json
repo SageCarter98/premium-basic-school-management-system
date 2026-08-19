@@ -1,0 +1,34 @@
+{
+  "defaults": {
+    "standard": "WCAG2AA",
+    "timeout": 30000,
+    "chromeLaunchConfig": {
+      "headless": "new",
+      "args": ["--no-sandbox"]
+    }
+  },
+  "urls": [
+    "http://localhost:3000/design-system",
+    "http://localhost:3000/login",
+    "http://localhost:3000/teacher",
+    "http://localhost:3000/teacher/register",
+    "http://localhost:3000/teacher/scores",
+    "http://localhost:3000/teacher/more",
+    "http://localhost:3000/students",
+    "http://localhost:3000/classes",
+    "http://localhost:3000/assessment",
+    "http://localhost:3000/grading",
+    "http://localhost:3000/results",
+    "http://localhost:3000/finance",
+    "http://localhost:3000/communication",
+    "http://localhost:3000/analytics",
+    "http://localhost:3000/library",
+    "http://localhost:3000/transport",
+    "http://localhost:3000/health",
+    "http://localhost:3000/discipline",
+    "http://localhost:3000/inventory",
+    "http://localhost:3000/compliance",
+    "http://localhost:3000/curriculum",
+    "http://localhost:3000/parent"
+  ]
+}

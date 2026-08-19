@@ -1,0 +1,109 @@
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pb-space-2);
+  margin-bottom: var(--pb-space-3);
+}
+
+.select {
+  min-height: 44px;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  padding: 0 var(--pb-space-2);
+  background: var(--pb-surface);
+  color: var(--pb-ink);
+  font-size: var(--pb-text-body);
+}
+
+.summaryLine {
+  color: var(--pb-ink-muted);
+  font-size: var(--pb-text-small);
+  margin: 0 0 var(--pb-space-3);
+}
+
+/* One student per screen SECTION (spec §8.11), not literal pagination —
+   a scrollable list of cards, same row shape as the register but with a
+   stepper instead of a segmented control. */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pb-space-2);
+  padding: var(--pb-space-3) 0;
+  border-bottom: 1px solid var(--pb-rule);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.studentName {
+  font-weight: 500;
+}
+
+.syncCaption {
+  font-size: var(--pb-text-caption);
+  color: var(--pb-ink-muted);
+}
+
+.stepperRow {
+  display: flex;
+  align-items: center;
+  gap: var(--pb-space-2);
+}
+
+.stepperBtn {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  background: var(--pb-surface);
+  color: var(--pb-teal-900);
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.stepperInput {
+  width: 72px;
+  min-height: 44px;
+  text-align: center;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  font-size: var(--pb-text-body);
+}
+
+.outOf {
+  color: var(--pb-ink-muted);
+  font-size: var(--pb-text-small);
+}
+
+.missingToggle {
+  min-height: 44px;
+  padding: 0 var(--pb-space-3);
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  background: var(--pb-surface);
+  color: var(--pb-ink);
+  font-size: var(--pb-text-small);
+}
+
+.missingToggleActive {
+  background: var(--pb-warning-bg);
+  color: var(--pb-warning);
+  border-color: var(--pb-warning);
+}
+
+.missingReasonInput {
+  min-height: 44px;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  padding: 0 var(--pb-space-3);
+  font-size: var(--pb-text-small);
+}
+
+.footer {
+  margin-top: var(--pb-space-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pb-space-3);
+}

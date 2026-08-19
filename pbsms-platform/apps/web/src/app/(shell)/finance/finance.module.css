@@ -1,0 +1,147 @@
+.tabBar {
+  display: flex;
+  gap: var(--pb-space-1);
+  overflow-x: auto;
+  margin-bottom: var(--pb-space-4);
+  border-bottom: 1px solid var(--pb-rule);
+}
+
+.tabBtn {
+  min-height: 44px;
+  padding: 0 var(--pb-space-3);
+  border: none;
+  background: transparent;
+  color: var(--pb-ink-muted);
+  font-size: var(--pb-text-small);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tabBtnActive {
+  color: var(--pb-teal-900);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--pb-teal-900);
+}
+
+.listRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--pb-space-3);
+  padding: var(--pb-space-2) 0;
+  border-bottom: 1px solid var(--pb-rule);
+  font-size: var(--pb-text-small);
+}
+
+.listRow:last-child {
+  border-bottom: none;
+}
+
+.formRow {
+  display: flex;
+  gap: var(--pb-space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--pb-space-3);
+  align-items: center;
+}
+
+.select,
+.textInput {
+  min-height: 44px;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  padding: 0 var(--pb-space-3);
+  font-size: var(--pb-text-body);
+  flex: 1;
+  min-width: 140px;
+}
+
+.checklistItem {
+  display: flex;
+  align-items: center;
+  gap: var(--pb-space-2);
+  padding: var(--pb-space-2) 0;
+  font-size: var(--pb-text-small);
+}
+
+.checkOk {
+  color: var(--pb-success);
+}
+
+.checkFail {
+  color: var(--pb-danger);
+}
+
+.detailPanel {
+  padding: var(--pb-space-3) var(--pb-space-4);
+  background: var(--pb-canvas);
+  font-size: var(--pb-text-small);
+}
+
+.detailSection {
+  margin-bottom: var(--pb-space-4);
+}
+
+.detailSection:last-child {
+  margin-bottom: 0;
+}
+
+.detailSectionTitle {
+  font-weight: 700;
+  margin-bottom: var(--pb-space-2);
+}
+
+.hint {
+  color: var(--pb-ink-muted);
+  font-size: var(--pb-text-caption);
+  margin: 0 0 var(--pb-space-2);
+}
+
+.allocRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--pb-space-2);
+  padding: var(--pb-space-1) 0;
+}
+
+.allocInput {
+  min-height: 40px;
+  width: 110px;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  padding: 0 var(--pb-space-2);
+  font-size: var(--pb-text-body);
+  text-align: right;
+}
+
+.remainderBar {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 700;
+  padding: var(--pb-space-2) 0;
+  margin-top: var(--pb-space-2);
+  border-top: 1px solid var(--pb-rule);
+}
+
+.remainderZero {
+  color: var(--pb-success);
+}
+
+.remainderOpen {
+  color: var(--pb-ink-muted);
+}
+
+.receiptBox {
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  padding: var(--pb-space-3);
+  background: var(--pb-surface);
+}
+
+.actionRow {
+  display: flex;
+  gap: var(--pb-space-2);
+  flex-wrap: wrap;
+  margin-top: var(--pb-space-2);
+}

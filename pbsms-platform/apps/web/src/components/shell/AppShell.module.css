@@ -1,0 +1,13 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.content {
+  padding: var(--pb-space-5) var(--pb-space-4);
+}

@@ -17,7 +17,8 @@
  * behavior discipline's contactGuardian()->CommunicationService call is).
  */
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { randomBytes, createHash } from 'node:crypto';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDatabaseService } from '../../common/database/tenant-database.service';
 import { TenantContextStore } from '../../common/tenant/tenant-context';
 
@@ -27,6 +28,17 @@ export interface Guardian {
   full_name: string;
   phone: string | null;
   email: string | null;
+}
+
+export interface GuardianAccessGrant {
+  id: string;
+  tenant_id: string;
+  guardian_id: string;
+  created_at: string;
+  created_by: string | null;
+  expires_at: string;
+  revoked_at: string | null;
+  last_used_at: string | null;
 }
 
 export interface StudentGuardianLink {
@@ -170,6 +182,55 @@ export class GuardiansService {
     if (rows.length === 0) {
       throw new NotFoundException(`Guardian link ${linkId} not found`);
     }
+  }
+
+  /**
+   * Stage 6 (Parent View, spec §6.3/§8.6): mints a link a staff member
+   * shares with a guardian directly (WhatsApp, email, printed — this
+   * deliberately does NOT wire into communication.service.ts's automated
+   * sends; that integration is a separate, larger scope, confirmed with
+   * the user before building this). The raw token is returned to the
+   * caller exactly once — only its sha256 hash is ever persisted, same
+   * "never store the literal secret" rule refresh_tokens/
+   * password_reset_tokens already follow (0025_auth_completeness.sql).
+   */
+  async createAccessGrant(
+    guardianId: string,
+    expiresInDays = 90,
+  ): Promise<{ grant: GuardianAccessGrant; token: string }> {
+    await this.findOne(guardianId); // 404s if not a real guardian in this tenant
+    const { userId } = TenantContextStore.current();
+    const token = randomBytes(32).toString('base64url');
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
+    const rows = await this.db.query<GuardianAccessGrant>(
+      `insert into guardian_access_grants (tenant_id, guardian_id, token_hash, expires_at, created_by)
+       values (current_tenant_id(), $1, $2, $3, $4)
+       returning id, tenant_id, guardian_id, created_at, created_by, expires_at, revoked_at, last_used_at`,
+      [guardianId, tokenHash, expiresAt, userId],
+    );
+    return { grant: rows[0], token };
+  }
+
+  async listAccessGrants(guardianId: string): Promise<GuardianAccessGrant[]> {
+    return this.db.query<GuardianAccessGrant>(
+      `select id, tenant_id, guardian_id, created_at, created_by, expires_at, revoked_at, last_used_at
+       from guardian_access_grants where guardian_id = $1 order by created_at desc`,
+      [guardianId],
+    );
+  }
+
+  async revokeAccessGrant(grantId: string): Promise<GuardianAccessGrant> {
+    const rows = await this.db.query<GuardianAccessGrant>(
+      `update guardian_access_grants set revoked_at = now()
+       where id = $1 and revoked_at is null
+       returning id, tenant_id, guardian_id, created_at, created_by, expires_at, revoked_at, last_used_at`,
+      [grantId],
+    );
+    if (rows.length === 0) {
+      throw new ConflictException(`Grant ${grantId} not found or already revoked`);
+    }
+    return rows[0];
   }
 
   private async assertStudentExists(studentId: string): Promise<void> {

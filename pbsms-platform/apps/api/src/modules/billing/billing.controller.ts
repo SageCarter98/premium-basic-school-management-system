@@ -16,6 +16,24 @@ import { PlatformContextStore } from '../../common/tenant/platform-context';
 export class BillingController {
   constructor(private readonly billing: BillingService) {}
 
+  // Stage 9 additions — the spec's "Plan & pricing configuration" and
+  // "Metering & usage" Platform Console screens had no read endpoint to
+  // populate them from at all (plans stay seed-configured, no CRUD, per
+  // this file's own header; count_active_students() existed only as an
+  // internal helper inside generateInvoice()). Both are thin, read-only
+  // wraps of data/functions that already existed — no new mechanism.
+  @PlatformRoles(...PLATFORM_ALL)
+  @Get('plans')
+  listPlans() {
+    return this.billing.listPlans();
+  }
+
+  @PlatformRoles(...PLATFORM_ALL)
+  @Get('metering')
+  metering() {
+    return this.billing.metering();
+  }
+
   @PlatformRoles(...PLATFORM_BILLING)
   @Post('tenants/:tenantId/plan')
   assignPlan(@Param('tenantId') tenantId: string, @Body() body: AssignPlanDto) {

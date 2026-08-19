@@ -47,6 +47,8 @@ const INVOICE_IN_TENANT_A = 'd5555555-0000-0000-0000-000000000001';
 const INVOICE_ITEM_IN_TENANT_A = 'd6666666-0000-0000-0000-000000000001';
 const PAYMENT_IN_TENANT_A = 'd7777777-0000-0000-0000-000000000001';
 const PAYMENT_ALLOCATION_IN_TENANT_A = 'd8888888-0000-0000-0000-000000000001';
+const FEE_PENALTY_RULE_IN_TENANT_A = 'd9999999-0000-0000-0000-000000000001';
+const FEE_PENALTY_CHARGE_IN_TENANT_A = 'da000000-0000-0000-0000-000000000001';
 const FINANCIAL_ASSISTANCE_IN_TENANT_A = 'e0000000-0000-0000-0000-000000000001';
 const REVERSAL_IN_TENANT_A = 'e2222222-0000-0000-0000-000000000001';
 const NOTIFICATION_TEMPLATE_IN_TENANT_A = 'f0000000-0000-0000-0000-000000000001';
@@ -81,6 +83,7 @@ const AUDIT_LOG_IN_TENANT_A = '7fffffff-0000-0000-0000-000000000001';
 const TENANT_USER_IN_TENANT_A = '80000000-0000-0000-0000-000000000001'; // teacher@sunrise's membership row
 const GUARDIAN_IN_TENANT_A = '90000000-0000-0000-0000-000000000001'; // Ama Mensah's guardian
 const STUDENT_GUARDIAN_LINK_IN_TENANT_A = '91111111-0000-0000-0000-000000000001';
+const GUARDIAN_ACCESS_GRANT_IN_TENANT_A = '92222222-0000-0000-0000-000000000001'; // Ama Mensah's guardian's Parent View link
 const TEACHER_ASSIGNMENT_IN_TENANT_A = '92000000-0000-0000-0000-000000000001'; // teacher@sunrise / JHS 2A / Mathematics
 const ROLE_DELEGATION_IN_TENANT_A = '93000000-0000-0000-0000-000000000001'; // headmaster -> teacher@sunrise
 const BACKGROUND_JOB_IN_TENANT_A = '94000000-0000-0000-0000-000000000001'; // queued report_card_batch job
@@ -1117,6 +1120,105 @@ describe('Tenant isolation (NFR-QA-020)', () => {
 
     it('A session with an unknown/garbage tenant id sees zero invoice item rows', async () => {
       const rows = await queryAsTenant('00000000-0000-0000-0000-000000000000', 'select id from invoice_items');
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('fee_penalty_rules', () => {
+    it('Tenant A can see its own penalty rule', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, name, frequency from fee_penalty_rules');
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe(FEE_PENALTY_RULE_IN_TENANT_A);
+      expect(rows[0].frequency).toBe('weekly');
+    });
+
+    it("Tenant B CANNOT see Tenant A's penalty rule by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from fee_penalty_rules');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === FEE_PENALTY_RULE_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's penalty rule by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from fee_penalty_rules where id = $1', [
+        FEE_PENALTY_RULE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's penalty rule", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update fee_penalty_rules set status = 'inactive' where id = $1 returning id`,
+        [FEE_PENALTY_RULE_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ status: string }>(
+        TENANT_A,
+        'select status from fee_penalty_rules where id = $1',
+        [FEE_PENALTY_RULE_IN_TENANT_A],
+      );
+      expect(check[0].status).toBe('active');
+    });
+
+    it('A session with NO tenant context set sees zero penalty rule rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from fee_penalty_rules');
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero penalty rule rows', async () => {
+      const rows = await queryAsTenant('00000000-0000-0000-0000-000000000000', 'select id from fee_penalty_rules');
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('fee_penalty_charges', () => {
+    it('Tenant A can see its own penalty charge', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, amount from fee_penalty_charges');
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe(FEE_PENALTY_CHARGE_IN_TENANT_A);
+      expect(Number(rows[0].amount)).toBe(50);
+    });
+
+    it("Tenant B CANNOT see Tenant A's penalty charge by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from fee_penalty_charges');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === FEE_PENALTY_CHARGE_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's penalty charge by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from fee_penalty_charges where id = $1', [
+        FEE_PENALTY_CHARGE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's penalty charge", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update fee_penalty_charges set amount = 999999 where id = $1 returning id`,
+        [FEE_PENALTY_CHARGE_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ amount: string }>(
+        TENANT_A,
+        'select amount from fee_penalty_charges where id = $1',
+        [FEE_PENALTY_CHARGE_IN_TENANT_A],
+      );
+      expect(Number(check[0].amount)).toBe(50);
+    });
+
+    it('A session with NO tenant context set sees zero penalty charge rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from fee_penalty_charges');
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero penalty charge rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from fee_penalty_charges',
+      );
       expect(rows).toHaveLength(0);
     });
   });
@@ -2847,6 +2949,61 @@ describe('Tenant isolation (NFR-QA-020)', () => {
         '00000000-0000-0000-0000-000000000000',
         'select id from student_guardians where id = $1',
         [STUDENT_GUARDIAN_LINK_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('guardian_access_grants', () => {
+    it('Tenant A can see its own access grant', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, guardian_id from guardian_access_grants where id = $1', [
+        GUARDIAN_ACCESS_GRANT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].guardian_id).toBe(GUARDIAN_IN_TENANT_A);
+    });
+
+    it("Tenant B CANNOT see Tenant A's access grant by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from guardian_access_grants');
+      expect(rows).toHaveLength(0); // Tenant B has never minted one
+      expect(rows.find((r) => r.id === GUARDIAN_ACCESS_GRANT_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's access grant by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from guardian_access_grants where id = $1', [
+        GUARDIAN_ACCESS_GRANT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's access grant", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update guardian_access_grants set revoked_at = now() where id = $1 returning id`,
+        [GUARDIAN_ACCESS_GRANT_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ revoked_at: string | null }>(
+        TENANT_A,
+        'select revoked_at from guardian_access_grants where id = $1',
+        [GUARDIAN_ACCESS_GRANT_IN_TENANT_A],
+      );
+      expect(check[0].revoked_at).toBeNull();
+    });
+
+    it('A session with NO tenant context set sees zero access grant rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from guardian_access_grants where id = $1', [
+        GUARDIAN_ACCESS_GRANT_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero access grant rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from guardian_access_grants where id = $1',
+        [GUARDIAN_ACCESS_GRANT_IN_TENANT_A],
       );
       expect(rows).toHaveLength(0);
     });

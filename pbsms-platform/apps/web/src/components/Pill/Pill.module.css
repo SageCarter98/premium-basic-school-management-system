@@ -1,0 +1,35 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--pb-text-caption);
+  font-weight: 600;
+  line-height: 1.7;
+}
+
+.success {
+  background: var(--pb-success-bg);
+  color: var(--pb-success);
+}
+
+.warning {
+  background: var(--pb-warning-bg);
+  color: var(--pb-warning);
+}
+
+.danger {
+  background: var(--pb-danger-bg);
+  color: var(--pb-danger);
+}
+
+.gold {
+  background: var(--pb-gold-50);
+  color: var(--pb-gold);
+}
+
+.neutral {
+  background: var(--pb-teal-50);
+  color: var(--pb-teal-900);
+}

@@ -1,0 +1,102 @@
+/* Spec §6.3/§8.6: no sidebar, no dashboard grid, no KPI cards. Capped to a
+   one-handed-width column like the Teacher Field App, for the same
+   "metered Android, low-cost device" target audience. */
+.layout {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: var(--pb-canvas);
+  padding-bottom: var(--pb-space-6);
+}
+
+.header {
+  background: var(--pb-teal-900);
+  color: #fff;
+  padding: var(--pb-space-4);
+}
+
+.schoolName {
+  font-weight: 700;
+  font-size: var(--pb-text-h3);
+}
+
+.childSwitcher {
+  display: flex;
+  gap: var(--pb-space-2);
+  margin-top: var(--pb-space-3);
+  overflow-x: auto;
+}
+
+.childTab {
+  min-height: 44px;
+  padding: 0 var(--pb-space-4);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: #fff;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.childTabActive {
+  background: #fff;
+  color: var(--pb-teal-900);
+  font-weight: 700;
+}
+
+.content {
+  padding: var(--pb-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pb-space-4);
+}
+
+.cardTitle {
+  font-weight: 700;
+  margin-bottom: var(--pb-space-2);
+}
+
+.balanceAmount {
+  font-size: var(--pb-text-h2);
+  font-weight: 700;
+}
+
+.balanceDue {
+  color: var(--pb-ink-muted);
+  font-size: var(--pb-text-small);
+  margin-bottom: var(--pb-space-3);
+}
+
+.attendanceRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.attendancePercent {
+  font-size: var(--pb-text-h2);
+  font-weight: 700;
+  color: var(--pb-success);
+}
+
+.attendanceBreakdown {
+  color: var(--pb-ink-muted);
+  font-size: var(--pb-text-small);
+  margin-top: var(--pb-space-2);
+}
+
+.actionRow {
+  display: flex;
+  gap: var(--pb-space-2);
+  margin-top: var(--pb-space-3);
+}
+
+.dataSaverRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pb-space-2);
+  font-size: var(--pb-text-caption);
+  color: var(--pb-ink-muted);
+  padding: 0 var(--pb-space-4);
+}

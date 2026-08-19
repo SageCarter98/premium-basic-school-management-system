@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { TransitionTenantDto } from './dto/transition-tenant.dto';
@@ -28,6 +28,18 @@ export class TenantsController {
   @Get()
   findAll() {
     return this.tenants.findAll();
+  }
+
+  // Registered before ':id' — same "a literal segment must be matched
+  // before a param route can shadow it" reasoning
+  // data-protection.controller.ts's 'requests/overdue' already
+  // documented. Stage 9 addition: the spec's "Platform audit log" screen
+  // had no cross-tenant read at all — only the per-tenant audit-trail
+  // below existed.
+  @PlatformRoles(...PLATFORM_ALL)
+  @Get('audit-log')
+  auditLog(@Query('tenantId') tenantId?: string, @Query('action') action?: string) {
+    return this.tenants.listAllAuditLog({ tenantId, action });
   }
 
   @PlatformRoles(...PLATFORM_ALL)

@@ -32,12 +32,29 @@ export interface Enrolment {
 export class EnrolmentsService {
   constructor(private readonly db: TenantDatabaseService) {}
 
-  async findAll(): Promise<Enrolment[]> {
+  async findAll(
+    filter: { studentId?: string; academicYearId?: string; classId?: string } = {},
+  ): Promise<Enrolment[]> {
+    const conditions = ['deleted_at is null'];
+    const params: string[] = [];
+    if (filter.studentId) {
+      params.push(filter.studentId);
+      conditions.push(`student_id = $${params.length}`);
+    }
+    if (filter.academicYearId) {
+      params.push(filter.academicYearId);
+      conditions.push(`academic_year_id = $${params.length}`);
+    }
+    if (filter.classId) {
+      params.push(filter.classId);
+      conditions.push(`class_id = $${params.length}`);
+    }
     return this.db.query<Enrolment>(
       `select id, tenant_id, student_id, academic_year_id, class_id, status, start_date, end_date
        from enrolments
-       where deleted_at is null
+       where ${conditions.join(' and ')}
        order by start_date desc`,
+      params,
     );
   }
 

@@ -33,14 +33,40 @@ export interface Student {
 export class StudentsService {
   constructor(private readonly db: TenantDatabaseService) {}
 
-  async findAll(): Promise<Student[]> {
+  async findAll(filter: { schoolId?: string; classId?: string; academicYearId?: string } = {}): Promise<Student[]> {
     // No tenant_id in this query. RLS supplies it. This is intentional —
     // see the file header above before "fixing" this by adding one back.
+    //
+    // classId/academicYearId have no column on `students` itself — a
+    // student's class is a fact about their *enrolment*, not their
+    // identity record (Ch.33-34's permanent-identity-vs-yearly-enrolment
+    // model, same reason enrolments is a separate table at all) — so those
+    // two filters go through an EXISTS against `enrolments` rather than a
+    // WHERE column on this table.
+    const conditions = ['deleted_at is null'];
+    const params: string[] = [];
+    if (filter.schoolId) {
+      params.push(filter.schoolId);
+      conditions.push(`school_id = $${params.length}`);
+    }
+    if (filter.classId || filter.academicYearId) {
+      const enrolmentConditions = ['enrolments.student_id = students.id', 'enrolments.deleted_at is null'];
+      if (filter.classId) {
+        params.push(filter.classId);
+        enrolmentConditions.push(`enrolments.class_id = $${params.length}`);
+      }
+      if (filter.academicYearId) {
+        params.push(filter.academicYearId);
+        enrolmentConditions.push(`enrolments.academic_year_id = $${params.length}`);
+      }
+      conditions.push(`exists (select 1 from enrolments where ${enrolmentConditions.join(' and ')})`);
+    }
     return this.db.query<Student>(
       `select id, tenant_id, school_id, admission_no, first_name, last_name, status
        from students
-       where deleted_at is null
+       where ${conditions.join(' and ')}
        order by last_name, first_name`,
+      params,
     );
   }
 

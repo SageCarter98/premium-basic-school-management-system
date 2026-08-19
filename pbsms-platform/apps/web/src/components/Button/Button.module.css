@@ -1,0 +1,40 @@
+.btn {
+  border: 1px solid transparent;
+  border-radius: var(--pb-radius-sm);
+  padding: 10px 16px;
+  min-height: 44px;
+  min-width: 44px;
+  font-weight: 500;
+  font-size: var(--pb-text-body);
+  transition: background var(--pb-dur-fast) var(--pb-ease);
+}
+
+.primary {
+  background: var(--pb-teal-900);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--pb-teal-600);
+}
+
+.primary:disabled {
+  background: #B9C4C1;
+  color: #6D7876;
+  cursor: not-allowed;
+}
+
+.secondary {
+  background: var(--pb-surface);
+  border-color: var(--pb-rule);
+  color: var(--pb-ink);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--pb-teal-50);
+}
+
+.secondary:disabled {
+  color: var(--pb-ink-muted);
+  cursor: not-allowed;
+}

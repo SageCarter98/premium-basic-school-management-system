@@ -1,0 +1,95 @@
+/*
+ * Design tokens — PBSMS Frontend Design Specification v1.1, §4.
+ * Ported from the prototype (pbsms-frontend-prototype.html) into real,
+ * versioned code. Palette: blackboard green, exercise-book manila, and the
+ * gold that already signals attainment in Ghanaian schools — gold stays on
+ * grades/settled accounts only, never buttons or chrome.
+ */
+:root {
+  /* Color — text/ink */
+  --pb-ink: #12211F;
+  --pb-ink-muted: #5A6663;
+
+  /* Color — brand */
+  --pb-teal-900: #0B4F4A;
+  --pb-teal-600: #12726B;
+  --pb-teal-50: #E6EFEC;
+
+  /* Color — gold, attainment only */
+  /*
+   * #9A6700 (the prototype's literal value) is 4.4:1 on --pb-gold-50 —
+   * fails WCAG AA's 4.5:1 for normal text, caught live by this stage's own
+   * pa11y-ci gate on the Pill component. Darkened 5% to #926100 (4.83:1),
+   * a barely perceptible shift that keeps the same gold rather than
+   * changing the background tint everywhere else it's used.
+   */
+  --pb-gold: #926100;
+  --pb-gold-50: #FBF3E0;
+
+  /* Color — surfaces */
+  --pb-canvas: #FAF7F0;
+  --pb-surface: #FFFFFF;
+  --pb-rule: #E3DED2;
+
+  /* Color — semantic */
+  --pb-success: #1E6B3A;
+  --pb-success-bg: #E4F0E9;
+  --pb-warning: #8A5A00;
+  --pb-warning-bg: #FBF0DC;
+  --pb-danger: #A32017;
+  --pb-danger-bg: #F8E5E3;
+
+  /* Spacing (4px base scale) */
+  --pb-space-1: 4px;
+  --pb-space-2: 8px;
+  --pb-space-3: 12px;
+  --pb-space-4: 16px;
+  --pb-space-5: 24px;
+  --pb-space-6: 32px;
+  --pb-space-7: 48px;
+
+  /* Radius */
+  --pb-radius-sm: 4px;
+  --pb-radius-md: 8px;
+  --pb-radius-lg: 12px;
+
+  /* Elevation */
+  --pb-shadow-1: 0 1px 2px rgba(18, 33, 31, .08);
+  --pb-shadow-2: 0 4px 12px rgba(18, 33, 31, .10);
+  --pb-shadow-3: 0 12px 32px rgba(18, 33, 31, .14);
+
+  /* Motion */
+  --pb-ease: cubic-bezier(.2, 0, 0, 1);
+  --pb-dur-fast: 120ms;
+  --pb-dur-base: 200ms;
+
+  /* Type families */
+  --pb-font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --pb-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /*
+   * Type scale — Stage 1 addition, not present in the prototype (which only
+   * fixes 16px/1.5 body text). Derived to match the prototype's existing
+   * heading weight (600) and letter-spacing; a judgment call to reconcile
+   * against the full spec's §4 if it turns out to specify different sizes.
+   */
+  --pb-text-h1: 28px;
+  --pb-text-h1-line: 1.2;
+  --pb-text-h2: 22px;
+  --pb-text-h2-line: 1.25;
+  --pb-text-h3: 18px;
+  --pb-text-h3-line: 1.3;
+  --pb-text-body: 16px;
+  --pb-text-body-line: 1.5;
+  --pb-text-small: 14px;
+  --pb-text-small-line: 1.5;
+  --pb-text-caption: 12px;
+  --pb-text-caption-line: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --pb-dur-fast: 0.01ms;
+    --pb-dur-base: 0.01ms;
+  }
+}

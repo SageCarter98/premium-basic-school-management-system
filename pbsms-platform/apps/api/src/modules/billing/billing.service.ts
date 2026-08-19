@@ -77,6 +77,32 @@ export class BillingService {
     private readonly tenants: TenantsService,
   ) {}
 
+  /** Stage 9 addition — see billing.controller.ts's header. Plans are
+   * seed-configured (no create/edit UI, unchanged), this only makes the
+   * existing rows readable so assignPlan() callers can pick one by name
+   * instead of a blind UUID. */
+  async listPlans(): Promise<{ id: string; code: string; name: string; billing_basis: string; flat_fee_amount: string | null; per_student_rate: string | null; currency: string }[]> {
+    const result = await this.pool.query(
+      `select id, code, name, billing_basis, flat_fee_amount, per_student_rate, currency from plans order by name`,
+    );
+    return result.rows;
+  }
+
+  /** Stage 9 addition — see billing.controller.ts's header. A live
+   * cross-tenant read of count_active_students(), the same function
+   * generateInvoice() already uses internally, exposed for display only
+   * (no side effect, no invoice created). "per period" from the spec's
+   * screen inventory doesn't apply here — this is a live headcount, not a
+   * historical snapshot; a documented simplification, not an omission. */
+  async metering(): Promise<{ tenant_id: string; name: string; active_student_count: number }[]> {
+    const result = await this.pool.query(
+      `select t.id as tenant_id, t.name, count_active_students(t.id) as active_student_count
+       from tenants t
+       order by t.name`,
+    );
+    return result.rows;
+  }
+
   async assignPlan(
     actorId: string,
     tenantId: string,

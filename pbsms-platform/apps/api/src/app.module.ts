@@ -25,6 +25,7 @@ import { HealthModule } from './modules/health/health.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { GuardiansModule } from './modules/guardians/guardians.module';
+import { ParentViewModule } from './modules/parent-view/parent-view.module';
 import { TeacherAssignmentsModule } from './modules/teacher-assignments/teacher-assignments.module';
 import { PlatformStaffModule } from './modules/platform-staff/platform-staff.module';
 import { ImpersonationModule } from './modules/impersonation/impersonation.module';
@@ -70,6 +71,7 @@ class HealthController {
     InventoryModule,
     StaffModule,
     GuardiansModule,
+    ParentViewModule,
     TeacherAssignmentsModule,
     PlatformStaffModule,
     ImpersonationModule,

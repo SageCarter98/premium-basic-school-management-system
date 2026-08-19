@@ -1,0 +1,89 @@
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--pb-surface);
+  border-right: 1px solid var(--pb-rule);
+  padding: var(--pb-space-4) 0;
+  overflow-y: auto;
+}
+
+.group {
+  margin-bottom: var(--pb-space-4);
+}
+
+.groupLabel {
+  font-size: var(--pb-text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--pb-ink-muted);
+  padding: 0 var(--pb-space-4);
+  margin-bottom: var(--pb-space-2);
+}
+
+.item {
+  display: block;
+  padding: 10px var(--pb-space-4);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: var(--pb-text-small);
+  color: var(--pb-ink);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+}
+
+.item:hover {
+  background: var(--pb-teal-50);
+}
+
+.itemActive {
+  background: var(--pb-teal-50);
+  border-left-color: var(--pb-teal-900);
+  font-weight: 600;
+}
+
+/* §6.1.1: 768–1023px — icon rail (labels hidden, first letter shown) */
+@media (max-width: 1023px) and (min-width: 768px) {
+  .sidebar {
+    width: 64px;
+  }
+  .groupLabel,
+  .itemLabel {
+    display: none;
+  }
+  .item {
+    justify-content: center;
+  }
+}
+
+/* §6.1.1: <768px — hidden by default, full-height Drawer on menu tap */
+@media (max-width: 767px) {
+  .sidebar {
+    position: fixed;
+    inset: 0 25% 0 0;
+    z-index: 30;
+    transform: translateX(-100%);
+    transition: transform var(--pb-dur-base) var(--pb-ease);
+    box-shadow: var(--pb-shadow-3);
+  }
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+  .backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(18, 33, 31, 0.4);
+    z-index: 20;
+  }
+  .backdropVisible {
+    display: block;
+  }
+}
+
+@media (min-width: 768px) {
+  .backdrop {
+    display: none;
+  }
+}

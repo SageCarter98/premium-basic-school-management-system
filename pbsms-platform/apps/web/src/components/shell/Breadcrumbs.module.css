@@ -1,0 +1,27 @@
+.crumbs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: var(--pb-text-small);
+  color: var(--pb-ink-muted);
+  padding: var(--pb-space-3) var(--pb-space-4) 0;
+}
+
+.crumbs a {
+  color: var(--pb-teal-600);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.crumbs a:hover {
+  text-decoration: underline;
+}
+
+.sep {
+  color: var(--pb-rule);
+}
+
+.current {
+  color: var(--pb-ink);
+  font-weight: 600;
+}

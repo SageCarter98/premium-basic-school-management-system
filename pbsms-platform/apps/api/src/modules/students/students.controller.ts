@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { Roles } from '../../common/auth/roles.decorator';
@@ -19,8 +19,12 @@ export class StudentsController {
 
   @Roles(...ALL_STAFF)
   @Get()
-  findAll() {
-    return this.students.findAll();
+  findAll(
+    @Query('schoolId') schoolId?: string,
+    @Query('classId') classId?: string,
+    @Query('academicYearId') academicYearId?: string,
+  ) {
+    return this.students.findAll({ schoolId, classId, academicYearId });
   }
 
   @Roles(...ALL_STAFF)

@@ -1,0 +1,80 @@
+@import "./tokens.css";
+
+/* Minimal reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--pb-canvas);
+  color: var(--pb-ink);
+  font-family: var(--pb-font-body);
+  font-size: var(--pb-text-body);
+  line-height: var(--pb-text-body-line);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: var(--pb-text-h1);
+  line-height: var(--pb-text-h1-line);
+}
+
+h2 {
+  font-size: var(--pb-text-h2);
+  line-height: var(--pb-text-h2-line);
+}
+
+h3 {
+  font-size: var(--pb-text-h3);
+  line-height: var(--pb-text-h3-line);
+}
+
+small,
+.pb-text-small {
+  font-size: var(--pb-text-small);
+  line-height: var(--pb-text-small-line);
+}
+
+.pb-text-caption {
+  font-size: var(--pb-text-caption);
+  line-height: var(--pb-text-caption-line);
+  color: var(--pb-ink-muted);
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+/*
+ * Focus-visible baseline (spec §11 / NFR-ACC-020). Every interactive
+ * element in the component library inherits this — never restyled per
+ * component, so a missed component can't silently lose focus visibility.
+ */
+:focus-visible {
+  outline: 2px solid var(--pb-teal-600);
+  outline-offset: 2px;
+  border-radius: var(--pb-radius-sm);
+}
+
+/* Tabular figures for scores/money — an outlier is visible by shape before it's read */
+.pb-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.pb-mono {
+  font-family: var(--pb-font-mono);
+  font-size: 0.9em;
+}

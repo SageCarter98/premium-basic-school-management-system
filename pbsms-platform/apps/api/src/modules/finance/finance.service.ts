@@ -42,6 +42,9 @@ import { RejectAssistanceDto } from './dto/reject-assistance.dto';
 import { ReversePaymentDto } from './dto/reverse-payment.dto';
 import { ReverseAssistanceDto } from './dto/reverse-assistance.dto';
 import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
+import { CreatePenaltyRuleDto } from './dto/create-penalty-rule.dto';
+import { ApplyPenaltyDto } from './dto/apply-penalty.dto';
+import { ReversePenaltyChargeDto } from './dto/reverse-penalty-charge.dto';
 
 export interface FeeStructure {
   id: string;
@@ -122,6 +125,32 @@ export interface InvoiceBalance {
   cancelled: boolean;
 }
 
+export interface PenaltyRule {
+  id: string;
+  tenant_id: string;
+  fee_structure_id: string;
+  name: string;
+  trigger_type: string;
+  grace_period_days: number;
+  amount_type: string;
+  amount: string;
+  cap_amount: string | null;
+  frequency: string;
+  status: string;
+}
+
+export interface PenaltyCharge {
+  id: string;
+  tenant_id: string;
+  invoice_id: string;
+  penalty_rule_id: string;
+  amount: string;
+  applied_at: string;
+  applied_by: string | null;
+  reason: string | null;
+  reversed: boolean;
+}
+
 export interface FinancialAssistance {
   id: string;
   tenant_id: string;
@@ -172,6 +201,17 @@ const INSTALMENT_SUM_EPSILON = 0.005; // same reasoning as grading's GAP_EPSILON
 // 0009_finance_assistance.sql's header comments.
 const ASSISTANCE_SECOND_APPROVAL_THRESHOLD = 500;
 
+// FR-FEE-040 frequency -> minimum whole days between two non-reversed
+// charges of the same rule on the same invoice. 'monthly' is a fixed
+// 30-day approximation, the same calendar-interval simplification
+// job_schedules (0027_background_jobs.sql) already makes for recurrence —
+// this schema has no real calendar/term model to do better.
+const PENALTY_FREQUENCY_MIN_INTERVAL_DAYS: Record<string, number> = {
+  daily: 1,
+  weekly: 7,
+  monthly: 30,
+};
+
 @Injectable()
 export class FinanceService {
   constructor(private readonly db: TenantDatabaseService) {}
@@ -182,6 +222,19 @@ export class FinanceService {
 
   async createFeeStructure(input: CreateFeeStructureDto): Promise<FeeStructure> {
     const { userId } = TenantContextStore.current();
+    // Pre-check fee_structures' (tenant_id, academic_year_id, level) unique
+    // constraint (0008_finance.sql) so a collision returns a clean 409, the
+    // same way every other uniqueness rule in this file does, rather than
+    // letting the insert raise a raw, unhandled 500.
+    const existing = await this.db.query<{ id: string }>(
+      `select id from fee_structures where academic_year_id = $1 and level = $2`,
+      [input.academicYearId, input.level],
+    );
+    if (existing.length > 0) {
+      throw new ConflictException(
+        `A fee structure for level '${input.level}' already exists in academic year ${input.academicYearId}`,
+      );
+    }
     const rows = await this.db.query<FeeStructure>(
       `insert into fee_structures (tenant_id, academic_year_id, level, name, created_by, updated_by)
        values (current_tenant_id(), $1, $2, $3, $4, $4)
@@ -445,6 +498,193 @@ export class FinanceService {
       balance: Math.round((totalAmount - allocated - assisted) * 100) / 100,
       cancelled: false,
     };
+  }
+
+  // ---------------------------------------------------------------------
+  // Fee penalties (FR-FEE-040) — see 0032_fee_penalties.sql's header for
+  // why this is a manual-trigger-only, parallel ledger that does not feed
+  // findInvoiceBalance() above.
+  // ---------------------------------------------------------------------
+
+  async createPenaltyRule(feeStructureId: string, input: CreatePenaltyRuleDto): Promise<PenaltyRule> {
+    const { userId } = TenantContextStore.current();
+    await this.findFeeStructure(feeStructureId); // 404s if it doesn't exist / isn't this tenant's
+    const rows = await this.db.query<PenaltyRule>(
+      `insert into fee_penalty_rules
+         (tenant_id, fee_structure_id, name, grace_period_days, amount_type, amount, cap_amount, frequency, created_by, updated_by)
+       values (current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $8)
+       returning *`,
+      [
+        feeStructureId,
+        input.name,
+        input.gracePeriodDays ?? 0,
+        input.amountType,
+        input.amount,
+        input.capAmount ?? null,
+        input.frequency,
+        userId,
+      ],
+    );
+    return rows[0];
+  }
+
+  async findPenaltyRulesForStructure(feeStructureId: string): Promise<PenaltyRule[]> {
+    return this.db.query<PenaltyRule>(
+      `select * from fee_penalty_rules where fee_structure_id = $1 order by created_at desc`,
+      [feeStructureId],
+    );
+  }
+
+  async findPenaltyRule(id: string): Promise<PenaltyRule> {
+    const rows = await this.db.query<PenaltyRule>(`select * from fee_penalty_rules where id = $1`, [id]);
+    if (rows.length === 0) {
+      throw new NotFoundException(`Penalty rule ${id} not found`);
+    }
+    return rows[0];
+  }
+
+  async findPenaltiesForInvoice(invoiceId: string): Promise<PenaltyCharge[]> {
+    return this.db.query<PenaltyCharge>(
+      `select pc.*,
+              exists (
+                select 1 from reversals r
+                where r.reversed_entity_type = 'fee_penalty_charge' and r.reversed_entity_id = pc.id
+              ) as reversed
+       from fee_penalty_charges pc
+       where pc.invoice_id = $1
+       order by pc.applied_at desc`,
+      [invoiceId],
+    );
+  }
+
+  /**
+   * Always an explicit staff action against one specific invoice — never a
+   * scheduled sweep (see 0032_fee_penalties.sql's header). Locks the
+   * invoice row for the duration of the check-then-insert so two
+   * concurrent applies against the same invoice+rule can't both slip past
+   * the frequency/cap checks against the same "before" snapshot.
+   */
+  async applyPenalty(invoiceId: string, input: ApplyPenaltyDto): Promise<PenaltyCharge> {
+    const { userId } = TenantContextStore.current();
+    await this.db.query('BEGIN');
+    try {
+      const invoiceRows = await this.db.query<Invoice>(`select * from invoices where id = $1 for update`, [
+        invoiceId,
+      ]);
+      if (invoiceRows.length === 0) {
+        throw new NotFoundException(`Invoice ${invoiceId} not found`);
+      }
+      const invoice = invoiceRows[0];
+      if (invoice.status !== 'posted') {
+        throw new ConflictException(`Cannot apply a penalty to invoice ${invoiceId}: it is '${invoice.status}', not 'posted'`);
+      }
+
+      const rule = await this.findPenaltyRule(input.penaltyRuleId);
+      if (rule.fee_structure_id !== invoice.fee_structure_id) {
+        throw new ConflictException(
+          `Penalty rule ${input.penaltyRuleId} belongs to a different fee structure than invoice ${invoiceId}`,
+        );
+      }
+      if (rule.status !== 'active') {
+        throw new ConflictException(`Cannot apply penalty rule ${input.penaltyRuleId}: it is '${rule.status}', not 'active'`);
+      }
+
+      const balance = await this.findInvoiceBalance(invoiceId);
+      if (balance.balance <= 0) {
+        throw new ConflictException(`Cannot apply a penalty to invoice ${invoiceId}: it has no outstanding balance`);
+      }
+
+      const overdueRows = await this.db.query<{ days_overdue: number | null }>(
+        `select (current_date - due_date) as days_overdue from invoices where id = $1`,
+        [invoiceId],
+      );
+      const daysOverdue = overdueRows[0].days_overdue;
+      if (daysOverdue === null || daysOverdue < rule.grace_period_days) {
+        throw new ConflictException(
+          `Cannot apply penalty rule ${input.penaltyRuleId} to invoice ${invoiceId}: not yet past its ` +
+            `${rule.grace_period_days}-day grace period (${daysOverdue === null ? 'invoice has no due date' : `${daysOverdue} day(s) overdue`})`,
+        );
+      }
+
+      const priorChargeRows = await this.db.query<{ id: string; amount: string; applied_at: string }>(
+        `select pc.id, pc.amount, pc.applied_at
+         from fee_penalty_charges pc
+         where pc.invoice_id = $1 and pc.penalty_rule_id = $2
+           and not exists (
+             select 1 from reversals r
+             where r.reversed_entity_type = 'fee_penalty_charge' and r.reversed_entity_id = pc.id
+           )
+         order by pc.applied_at desc`,
+        [invoiceId, input.penaltyRuleId],
+      );
+
+      if (priorChargeRows.length > 0) {
+        const lastCharge = priorChargeRows[0];
+        if (rule.frequency === 'one_time') {
+          throw new ConflictException(
+            `Cannot apply penalty rule ${input.penaltyRuleId} again to invoice ${invoiceId}: it is 'one_time' and has already been applied`,
+          );
+        }
+        const minIntervalDays = PENALTY_FREQUENCY_MIN_INTERVAL_DAYS[rule.frequency];
+        const eligibleRows = await this.db.query<{ eligible: boolean }>(
+          `select (now() - $1::timestamptz) >= ($2 || ' days')::interval as eligible`,
+          [lastCharge.applied_at, minIntervalDays],
+        );
+        if (!eligibleRows[0].eligible) {
+          throw new ConflictException(
+            `Cannot apply penalty rule ${input.penaltyRuleId} again to invoice ${invoiceId} yet: its '${rule.frequency}' ` +
+              `frequency requires at least ${minIntervalDays} day(s) since the last charge (applied ${lastCharge.applied_at})`,
+          );
+        }
+      }
+
+      const priorTotal = priorChargeRows.reduce((sum, c) => sum + Number(c.amount), 0);
+      const rawAmount =
+        rule.amount_type === 'fixed'
+          ? Number(rule.amount)
+          : Math.round(Number(invoice.total_amount) * (Number(rule.amount) / 100) * 100) / 100;
+      let amount = rawAmount;
+      if (rule.cap_amount !== null) {
+        const remainingRoom = Math.round((Number(rule.cap_amount) - priorTotal) * 100) / 100;
+        if (remainingRoom <= 0) {
+          throw new ConflictException(
+            `Cannot apply penalty rule ${input.penaltyRuleId} to invoice ${invoiceId}: its cap of ${rule.cap_amount} has already been reached`,
+          );
+        }
+        amount = Math.min(rawAmount, remainingRoom);
+      }
+
+      const rows = await this.db.query<PenaltyCharge>(
+        `insert into fee_penalty_charges (tenant_id, invoice_id, penalty_rule_id, amount, applied_by, reason)
+         values (current_tenant_id(), $1, $2, $3, $4, $5)
+         returning *, false as reversed`,
+        [invoiceId, input.penaltyRuleId, amount, userId, `${daysOverdue} day(s) overdue, rule '${rule.name}'`],
+      );
+      await this.db.query('COMMIT');
+      return rows[0];
+    } catch (err) {
+      await this.db.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    }
+  }
+
+  async reversePenaltyCharge(chargeId: string, input: ReversePenaltyChargeDto): Promise<Reversal> {
+    const { userId } = TenantContextStore.current();
+    const chargeRows = await this.db.query<PenaltyCharge>(`select * from fee_penalty_charges where id = $1`, [
+      chargeId,
+    ]);
+    if (chargeRows.length === 0) {
+      throw new NotFoundException(`Penalty charge ${chargeId} not found`);
+    }
+    const charge = chargeRows[0];
+    await this.assertNotAlreadyReversed('fee_penalty_charge', chargeId);
+    const rows = await this.db.query<Reversal>(
+      `insert into reversals (tenant_id, reversed_entity_type, reversed_entity_id, amount, reason, created_by)
+       values (current_tenant_id(), 'fee_penalty_charge', $1, $2, $3, $4)
+       returning *`,
+      [chargeId, charge.amount, input.reason, userId],
+    );
+    return rows[0];
   }
 
   // ---------------------------------------------------------------------

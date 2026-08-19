@@ -1,0 +1,114 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pb-space-3);
+  margin-bottom: var(--pb-space-3);
+  flex-wrap: wrap;
+}
+
+.classSelect {
+  min-height: 44px;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  padding: 0 var(--pb-space-2);
+  background: var(--pb-surface);
+  color: var(--pb-ink);
+  font-size: var(--pb-text-body);
+}
+
+/* Sticky search (spec §8.1, "for large classes") — stays visible while
+   scrolling a long roster, positioned below the shell's own fixed top bar
+   rather than the viewport top. */
+.searchRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--pb-surface);
+  padding: var(--pb-space-2) 0;
+  margin-bottom: var(--pb-space-2);
+}
+
+.searchInput {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  padding: 0 var(--pb-space-3);
+  background: var(--pb-canvas);
+  color: var(--pb-ink);
+  font-size: var(--pb-text-body);
+}
+
+.summaryLine {
+  color: var(--pb-ink-muted);
+  font-size: var(--pb-text-small);
+  margin: 0 0 var(--pb-space-3);
+}
+
+/* Row is 56px minimum (spec §8.1) — taller than a plain 44px target
+   because it also has to fit the sync-state caption underneath the name. */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pb-space-3);
+  min-height: 56px;
+  padding: var(--pb-space-2) 0;
+  border-bottom: 1px solid var(--pb-rule);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.studentInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.studentName {
+  font-weight: 500;
+}
+
+.syncCaption {
+  font-size: var(--pb-text-caption);
+  color: var(--pb-ink-muted);
+}
+
+/* Five-state segmented control, spec §8.1 — one tap, no dropdown/modal. */
+.segmented {
+  display: flex;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  overflow: hidden;
+}
+
+.segmentBtn {
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  border-right: 1px solid var(--pb-rule);
+  background: var(--pb-surface);
+  color: var(--pb-ink);
+  font-weight: 600;
+  font-size: var(--pb-text-small);
+}
+
+.segmentBtn:last-child {
+  border-right: none;
+}
+
+.segmentBtnActive {
+  background: var(--pb-teal-900);
+  color: #fff;
+}
+
+.footer {
+  margin-top: var(--pb-space-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pb-space-3);
+}

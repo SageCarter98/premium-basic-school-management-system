@@ -1,0 +1,49 @@
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--pb-space-3);
+  margin-bottom: var(--pb-space-5);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pb-space-2);
+  padding: var(--pb-space-4);
+  min-height: 100px;
+  text-align: left;
+  border: none;
+  cursor: pointer;
+}
+
+.tileLabel {
+  font-weight: 700;
+  color: var(--pb-teal-900);
+}
+
+.tileClass {
+  font-size: var(--pb-text-small);
+  color: var(--pb-ink);
+}
+
+.tileStatus {
+  font-size: var(--pb-text-caption);
+  color: var(--pb-ink-muted);
+}
+
+.timetableTitle {
+  font-weight: 600;
+  margin: 0 0 var(--pb-space-3);
+}
+
+.timetableRow {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--pb-space-2) 0;
+  border-bottom: 1px solid var(--pb-rule);
+  font-size: var(--pb-text-small);
+}
+
+.timetableRow:last-child {
+  border-bottom: none;
+}

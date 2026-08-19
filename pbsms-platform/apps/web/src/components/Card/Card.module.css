@@ -1,0 +1,6 @@
+.card {
+  background: var(--pb-surface);
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-md);
+  box-shadow: var(--pb-shadow-1);
+}

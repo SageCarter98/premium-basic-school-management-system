@@ -13,6 +13,9 @@ import { RejectAssistanceDto } from './dto/reject-assistance.dto';
 import { ReversePaymentDto } from './dto/reverse-payment.dto';
 import { ReverseAssistanceDto } from './dto/reverse-assistance.dto';
 import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
+import { CreatePenaltyRuleDto } from './dto/create-penalty-rule.dto';
+import { ApplyPenaltyDto } from './dto/apply-penalty.dto';
+import { ReversePenaltyChargeDto } from './dto/reverse-penalty-charge.dto';
 
 /** finance.controller.ts — SRS Chapter 23 / 24. Chapter 13's role model
  * only enumerates 'Accountant/Bursar', not a separate 'Cashier' — so this
@@ -114,6 +117,37 @@ export class FinanceController {
   @Get('invoices/:id/allocations')
   findAllocationsForInvoice(@Param('id') id: string) {
     return this.finance.findAllocationsForInvoice(id);
+  }
+
+  @Roles(...RECORD_ROLES)
+  @Post('fee-structures/:id/penalty-rules')
+  createPenaltyRule(@Param('id') id: string, @Body() body: CreatePenaltyRuleDto) {
+    return this.finance.createPenaltyRule(id, body);
+  }
+
+  @Roles(...READ_ROLES)
+  @Get('fee-structures/:id/penalty-rules')
+  findPenaltyRulesForStructure(@Param('id') id: string) {
+    return this.finance.findPenaltyRulesForStructure(id);
+  }
+
+  @Roles(...READ_ROLES)
+  @Get('invoices/:id/penalties')
+  findPenaltiesForInvoice(@Param('id') id: string) {
+    return this.finance.findPenaltiesForInvoice(id);
+  }
+
+  @Roles(...RECORD_ROLES)
+  @Post('invoices/:id/penalties/apply')
+  applyPenalty(@Param('id') id: string, @Body() body: ApplyPenaltyDto) {
+    return this.finance.applyPenalty(id, body);
+  }
+
+  @Roles(...APPROVE_ROLES)
+  @SensitiveAction('financial_reversal')
+  @Post('penalties/:id/reverse')
+  reversePenaltyCharge(@Param('id') id: string, @Body() body: ReversePenaltyChargeDto) {
+    return this.finance.reversePenaltyCharge(id, body);
   }
 
   @Roles(...RECORD_ROLES)

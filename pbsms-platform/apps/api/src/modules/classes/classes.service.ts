@@ -21,12 +21,19 @@ export interface SchoolClass {
 export class ClassesService {
   constructor(private readonly db: TenantDatabaseService) {}
 
-  async findAll(): Promise<SchoolClass[]> {
+  async findAll(filter: { academicYearId?: string } = {}): Promise<SchoolClass[]> {
+    const conditions = ['deleted_at is null'];
+    const params: string[] = [];
+    if (filter.academicYearId) {
+      params.push(filter.academicYearId);
+      conditions.push(`academic_year_id = $${params.length}`);
+    }
     return this.db.query<SchoolClass>(
       `select id, tenant_id, academic_year_id, name, level
        from classes
-       where deleted_at is null
+       where ${conditions.join(' and ')}
        order by level, name`,
+      params,
     );
   }
 

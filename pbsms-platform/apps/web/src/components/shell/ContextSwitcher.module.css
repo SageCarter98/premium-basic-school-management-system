@@ -1,0 +1,55 @@
+.switcher {
+  display: flex;
+  align-items: center;
+  gap: var(--pb-space-2);
+}
+
+.select {
+  font: inherit;
+  font-size: var(--pb-text-small);
+  padding: 6px 10px;
+  min-height: 36px;
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  background: var(--pb-surface);
+  color: var(--pb-ink);
+  max-width: 160px;
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--pb-teal-600);
+  outline-offset: 1px;
+}
+
+/* §6.1.1: ≥1024px shows both selects inline */
+.summary {
+  display: none;
+}
+
+/* §6.1.1: 768–1023px collapses into a single "School · Year" summary */
+@media (max-width: 1023px) {
+  .select {
+    display: none;
+  }
+  .summary {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--pb-text-small);
+    font-weight: 500;
+    padding: 6px 10px;
+    border: 1px solid var(--pb-rule);
+    border-radius: var(--pb-radius-sm);
+    background: var(--pb-surface);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* §6.1.1: <768px — top bar reduces to menu/breadcrumb/avatar, switcher hidden entirely */
+@media (max-width: 767px) {
+  .switcher {
+    display: none;
+  }
+}

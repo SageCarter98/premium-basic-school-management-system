@@ -12,6 +12,7 @@
  * impossible to reach in the first place.
  */
 
+import { createHash } from 'node:crypto';
 import { Inject, Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
@@ -19,6 +20,7 @@ import { Pool } from 'pg';
 import { TenantContextStore } from './tenant-context';
 import { PlatformContextStore } from './platform-context';
 import { PLATFORM_POOL } from '../database/database.module';
+import { PG_POOL } from '../database/tenant-database.service';
 
 interface AccessTokenClaims {
   sub: string; // user id
@@ -71,6 +73,22 @@ const PUBLIC_PATHS = new Set([
 // same "impossible to forget" shape as PUBLIC_PATHS/MFA_SETUP_PATHS below.
 const PLATFORM_PATH_PREFIX = '/v1/platform/';
 
+// Stage 6 (Parent View, spec §6.3): the ONE other route namespace besides
+// PUBLIC_PATHS that never carries a Bearer JWT — a guardian has no
+// `users`/`tenant_users` row (0019_guardians.sql), so this resolves
+// TenantContextStore from a possession-based `?token=` query param
+// instead, verified fresh on every single request (never cached/trusted
+// from a prior check) via verify_guardian_access() — same "SECURITY
+// DEFINER function, never a blanket grant" shape as verify_document(),
+// and the same "live-validated every request" posture Phase A3's
+// impersonation grants already established for a token that can be
+// revoked mid-session. userId is set to the guardian's own id (not a real
+// `users` row) — safe because ParentController deliberately carries no
+// @Roles() decorators (RolesGuard is unrestricted-by-default) and no
+// other route ever resolves a context this way, so nothing downstream
+// ever treats this id as a real staff actor.
+const PARENT_PATH_PREFIX = '/v1/parent/';
+
 // SEC-030: a mandatory-MFA role (auth.module.ts's MFA_MANDATORY_ROLES) that
 // hasn't enrolled yet gets a token with mfaSetupRequired: true instead of a
 // full one — it still resolves a real tenant context below (enrollMfa()/
@@ -84,6 +102,7 @@ export class TenantMiddleware implements NestMiddleware {
   constructor(
     private readonly jwtService: JwtService,
     @Inject(PLATFORM_POOL) private readonly platformPool: Pool,
+    @Inject(PG_POOL) private readonly appPool: Pool,
   ) {}
 
   async use(req: Request, _res: Response, next: NextFunction) {
@@ -97,6 +116,35 @@ export class TenantMiddleware implements NestMiddleware {
     const path = req.originalUrl.split('?')[0];
     if (PUBLIC_PATHS.has(path)) {
       return next();
+    }
+
+    // Checked before the Bearer-token requirement below — a guardian
+    // request never carries one at all. Deliberately never falls through
+    // to the JWT branches further down: an ordinary staff Bearer token
+    // sent to this prefix is simply ignored, since only the query-param
+    // token is ever consulted here.
+    if (path.startsWith(PARENT_PATH_PREFIX)) {
+      const rawToken = req.query.token;
+      if (typeof rawToken !== 'string' || rawToken.length === 0) {
+        throw new UnauthorizedException('Missing parent access token');
+      }
+      const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+      const result = await this.appPool.query<{ guardian_id: string; tenant_id: string }>(
+        `select * from verify_guardian_access($1)`,
+        [tokenHash],
+      );
+      if (result.rowCount === 0) {
+        throw new UnauthorizedException('This parent access link is invalid, expired, or has been revoked');
+      }
+      const { guardian_id: guardianId, tenant_id: tenantId } = result.rows[0];
+      // userId is the system service account (worker.ts's SYSTEM_ACTOR_ID),
+      // NOT guardianId — see tenant-context.ts's guardianId doc comment for
+      // why: audit_log.actor_user_id FKs to users(id), which no guardian
+      // row satisfies. ParentViewService reads guardianId, never userId.
+      return TenantContextStore.run(
+        { tenantId, isPlatformUser: false, userId: '00000000-0000-0000-0000-000000000001', guardianId, roles: [] },
+        () => next(),
+      );
     }
 
     const authHeader = req.headers.authorization;

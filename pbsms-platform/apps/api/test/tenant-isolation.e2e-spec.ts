@@ -99,6 +99,11 @@ const CURRICULUM_INDICATOR_IN_TENANT_A = 'a4000000-0000-0000-0000-000000000001';
 const BECE_CANDIDATE_IN_TENANT_A = 'a5000000-0000-0000-0000-000000000001'; // Ama Mensah, SUN-20262027-0001
 const BECE_MOCK_RESULT_IN_TENANT_A = 'a6000000-0000-0000-0000-000000000001'; // Mock 1 2026 Mathematics, grade 3
 const CSSPS_PLACEMENT_IN_TENANT_A = 'a7000000-0000-0000-0000-000000000001'; // Ama Mensah's CSSPS choices
+const ROOM_IN_TENANT_A = 'a8000000-0000-0000-0000-000000000001'; // Block A - Room 1
+const PERIOD_IN_TENANT_A = 'a8100000-0000-0000-0000-000000000001'; // Period 1, 08:00-08:40
+const TIMETABLE_ENTRY_IN_TENANT_A = 'a8200000-0000-0000-0000-000000000001'; // JHS 2A / Mathematics / teacher@sunrise, Monday P1
+const SETTLEMENT_BATCH_IN_TENANT_A = 'a9000000-0000-0000-0000-000000000001'; // August 2026 bank statement
+const SETTLEMENT_LINE_IN_TENANT_A = 'a9100000-0000-0000-0000-000000000001'; // CASH-0001, 600, unmatched
 
 describe('Tenant isolation (NFR-QA-020)', () => {
   let pool: Pool;
@@ -3825,6 +3830,263 @@ describe('Tenant isolation (NFR-QA-020)', () => {
         '00000000-0000-0000-0000-000000000000',
         'select id from cssps_placements where id = $1',
         [CSSPS_PLACEMENT_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('rooms', () => {
+    it('Tenant A can see its own room', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, name from rooms where id = $1', [ROOM_IN_TENANT_A]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].name).toBe('Block A - Room 1');
+    });
+
+    it("Tenant B CANNOT see Tenant A's room by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from rooms');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === ROOM_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's room by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from rooms where id = $1', [ROOM_IN_TENANT_A]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's room", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update rooms set name = 'HACKED' where id = $1 returning id`,
+        [ROOM_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ name: string }>(TENANT_A, 'select name from rooms where id = $1', [
+        ROOM_IN_TENANT_A,
+      ]);
+      expect(check[0].name).toBe('Block A - Room 1');
+    });
+
+    it('A session with NO tenant context set sees zero rooms rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from rooms where id = $1', [ROOM_IN_TENANT_A]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero rooms rows', async () => {
+      const rows = await queryAsTenant('00000000-0000-0000-0000-000000000000', 'select id from rooms where id = $1', [
+        ROOM_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('periods', () => {
+    it('Tenant A can see its own period', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, name from periods where id = $1', [PERIOD_IN_TENANT_A]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].name).toBe('Period 1');
+    });
+
+    it("Tenant B CANNOT see Tenant A's period by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from periods');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === PERIOD_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's period by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from periods where id = $1', [PERIOD_IN_TENANT_A]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's period", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update periods set name = 'HACKED' where id = $1 returning id`,
+        [PERIOD_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ name: string }>(TENANT_A, 'select name from periods where id = $1', [
+        PERIOD_IN_TENANT_A,
+      ]);
+      expect(check[0].name).toBe('Period 1');
+    });
+
+    it('A session with NO tenant context set sees zero periods rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from periods where id = $1', [PERIOD_IN_TENANT_A]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero periods rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from periods where id = $1',
+        [PERIOD_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('timetable_entries', () => {
+    it('Tenant A can see its own timetable entry', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, day_of_week from timetable_entries where id = $1', [
+        TIMETABLE_ENTRY_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].day_of_week).toBe('monday');
+    });
+
+    it("Tenant B CANNOT see Tenant A's timetable entry by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from timetable_entries');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === TIMETABLE_ENTRY_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's timetable entry by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from timetable_entries where id = $1', [
+        TIMETABLE_ENTRY_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's timetable entry", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update timetable_entries set status = 'ended' where id = $1 returning id`,
+        [TIMETABLE_ENTRY_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ status: string }>(
+        TENANT_A,
+        'select status from timetable_entries where id = $1',
+        [TIMETABLE_ENTRY_IN_TENANT_A],
+      );
+      expect(check[0].status).toBe('active');
+    });
+
+    it('A session with NO tenant context set sees zero timetable_entries rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from timetable_entries where id = $1', [
+        TIMETABLE_ENTRY_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero timetable_entries rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from timetable_entries where id = $1',
+        [TIMETABLE_ENTRY_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('settlement_batches', () => {
+    it('Tenant A can see its own settlement batch', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, source from settlement_batches where id = $1', [
+        SETTLEMENT_BATCH_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].source).toBe('bank_statement');
+    });
+
+    it("Tenant B CANNOT see Tenant A's settlement batch by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from settlement_batches');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === SETTLEMENT_BATCH_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's settlement batch by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from settlement_batches where id = $1', [
+        SETTLEMENT_BATCH_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's settlement batch", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update settlement_batches set status = 'closed' where id = $1 returning id`,
+        [SETTLEMENT_BATCH_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ status: string }>(
+        TENANT_A,
+        'select status from settlement_batches where id = $1',
+        [SETTLEMENT_BATCH_IN_TENANT_A],
+      );
+      expect(check[0].status).toBe('open');
+    });
+
+    it('A session with NO tenant context set sees zero settlement_batches rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from settlement_batches where id = $1', [
+        SETTLEMENT_BATCH_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero settlement_batches rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from settlement_batches where id = $1',
+        [SETTLEMENT_BATCH_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe('settlement_lines', () => {
+    it('Tenant A can see its own settlement line', async () => {
+      const rows = await queryAsTenant(TENANT_A, 'select id, amount from settlement_lines where id = $1', [
+        SETTLEMENT_LINE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(1);
+      expect(Number(rows[0].amount)).toBe(600);
+    });
+
+    it("Tenant B CANNOT see Tenant A's settlement line by listing", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select id from settlement_lines');
+      expect(rows).toHaveLength(1);
+      expect(rows.find((r) => r.id === SETTLEMENT_LINE_IN_TENANT_A)).toBeUndefined();
+    });
+
+    it("Tenant B CANNOT see Tenant A's settlement line by direct id lookup either", async () => {
+      const rows = await queryAsTenant(TENANT_B, 'select * from settlement_lines where id = $1', [
+        SETTLEMENT_LINE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("Tenant B CANNOT update Tenant A's settlement line", async () => {
+      const rows = await queryAsTenant<{ id: string }>(
+        TENANT_B,
+        `update settlement_lines set match_status = 'matched' where id = $1 returning id`,
+        [SETTLEMENT_LINE_IN_TENANT_A],
+      );
+      expect(rows).toHaveLength(0);
+
+      const check = await queryAsTenant<{ match_status: string }>(
+        TENANT_A,
+        'select match_status from settlement_lines where id = $1',
+        [SETTLEMENT_LINE_IN_TENANT_A],
+      );
+      expect(check[0].match_status).toBe('unmatched');
+    });
+
+    it('A session with NO tenant context set sees zero settlement_lines rows', async () => {
+      const rows = await queryAsTenant(null, 'select id from settlement_lines where id = $1', [
+        SETTLEMENT_LINE_IN_TENANT_A,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('A session with an unknown/garbage tenant id sees zero settlement_lines rows', async () => {
+      const rows = await queryAsTenant(
+        '00000000-0000-0000-0000-000000000000',
+        'select id from settlement_lines where id = $1',
+        [SETTLEMENT_LINE_IN_TENANT_A],
       );
       expect(rows).toHaveLength(0);
     });

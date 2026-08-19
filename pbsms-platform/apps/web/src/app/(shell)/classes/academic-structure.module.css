@@ -54,3 +54,29 @@
   flex: 1;
   min-width: 140px;
 }
+
+.hint {
+  color: var(--pb-ink-muted);
+  font-size: var(--pb-text-caption);
+  margin: 0 0 var(--pb-space-3);
+}
+
+.subPanel {
+  border: 1px solid var(--pb-rule);
+  border-radius: var(--pb-radius-sm);
+  padding: var(--pb-space-3);
+  margin-bottom: var(--pb-space-4);
+}
+
+.subPanelTitle {
+  font-weight: 700;
+  font-size: var(--pb-text-small);
+  margin-bottom: var(--pb-space-2);
+}
+
+.dayGroupHeading {
+  font-weight: 700;
+  font-size: var(--pb-text-small);
+  text-transform: capitalize;
+  margin: var(--pb-space-3) 0 var(--pb-space-1);
+}

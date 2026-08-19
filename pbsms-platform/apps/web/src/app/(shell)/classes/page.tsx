@@ -53,16 +53,45 @@ interface School {
   name: string;
 }
 
-const TABS = ['Academic Years', 'Classes', 'Subjects', 'Teacher Assignments'] as const;
+interface Room {
+  id: string;
+  name: string;
+  capacity: number | null;
+}
+
+interface Period {
+  id: string;
+  name: string;
+  sequence: number;
+  start_time: string;
+  end_time: string;
+  period_type: string;
+}
+
+interface TimetableEntry {
+  id: string;
+  academic_year_id: string;
+  class_id: string;
+  subject_id: string;
+  teacher_id: string;
+  period_id: string;
+  room_id: string | null;
+  day_of_week: string;
+  status: string;
+}
+
+const TABS = ['Academic Years', 'Classes', 'Subjects', 'Teacher Assignments', 'Timetable'] as const;
 type Tab = (typeof TABS)[number];
+const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 /**
  * SRS Chapter 17 (spec §7.6). One tabbed hub rather than four separate
- * routes — nav-config.ts's single "Academic Structure" link lands here;
- * a Timetable builder/views pair is also named in the spec's inventory
- * but has no backing schema at all (no periods/rooms/timetable table
- * anywhere in apps/api) — genuinely blocked, not deferred by choice,
- * flagged in the README rather than faked with a non-functional screen.
+ * routes — nav-config.ts's single "Academic Structure" link lands here.
+ * The Timetable tab (0033_timetable.sql) is intentionally NOT a fixed
+ * grid/template: every school defines its own rooms, its own periods
+ * (including non-teaching ones — break/assembly/other), and its own
+ * weekly pattern from scratch, since Ghanaian basic schools don't share
+ * one universal daily structure.
  */
 export default function AcademicStructurePage() {
   const [tab, setTab] = useState<Tab>('Academic Years');
@@ -87,6 +116,7 @@ export default function AcademicStructurePage() {
         {tab === 'Classes' && <ClassesTab />}
         {tab === 'Subjects' && <SubjectsTab />}
         {tab === 'Teacher Assignments' && <TeacherAssignmentsTab />}
+        {tab === 'Timetable' && <TimetableTab />}
       </Card>
     </div>
   );
@@ -444,6 +474,319 @@ function TeacherAssignmentsTab() {
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+function TimetableTab() {
+  const roleCodes = decodeAccessToken()?.roleCodes ?? [];
+  const canConfigure = hasAnyRole(roleCodes, ACADEMIC_ADMIN);
+  const [loading, setLoading] = useState(true);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [periods, setPeriods] = useState<Period[]>([]);
+  const [entries, setEntries] = useState<TimetableEntry[]>([]);
+  const [teachers, setTeachers] = useState<StaffMember[]>([]);
+  const [classes, setClasses] = useState<SchoolClass[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [years, setYears] = useState<AcademicYear[]>([]);
+
+  const [selectedYearId, setSelectedYearId] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState('');
+
+  const [showRoomForm, setShowRoomForm] = useState(false);
+  const [roomForm, setRoomForm] = useState({ name: '', capacity: '' });
+  const [showPeriodForm, setShowPeriodForm] = useState(false);
+  const [periodForm, setPeriodForm] = useState({ name: '', sequence: '1', startTime: '08:00', endTime: '08:40', periodType: 'teaching' });
+  const [showEntryForm, setShowEntryForm] = useState(false);
+  const [entryForm, setEntryForm] = useState({ subjectId: '', teacherId: '', periodId: '', roomId: '', dayOfWeek: 'monday' as (typeof DAYS)[number] });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function reload() {
+    setLoading(true);
+    Promise.all([
+      apiGet<Room[]>('/v1/timetable/rooms'),
+      apiGet<Period[]>('/v1/timetable/periods'),
+      apiGet<TimetableEntry[]>('/v1/timetable/entries'),
+      apiGet<StaffMember[]>('/v1/staff?role=teacher'),
+      apiGet<SchoolClass[]>('/v1/classes'),
+      apiGet<Subject[]>('/v1/assessment/subjects'),
+      apiGet<AcademicYear[]>('/v1/academic-years'),
+    ]).then(([r, p, e, t, c, s, y]) => {
+      setRooms(r);
+      setPeriods(p);
+      setEntries(e);
+      setTeachers(t);
+      setClasses(c);
+      setSubjects(s);
+      setYears(y);
+      setSelectedYearId((v) => v || y[0]?.id || '');
+      setSelectedClassId((v) => v || c[0]?.id || '');
+      setEntryForm((f) => ({
+        ...f,
+        subjectId: f.subjectId || s[0]?.id || '',
+        teacherId: f.teacherId || t[0]?.id || '',
+        periodId: f.periodId || p.find((pd) => pd.period_type === 'teaching')?.id || '',
+      }));
+      setLoading(false);
+    });
+  }
+  useEffect(reload, []);
+
+  async function handleCreateRoom() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await apiFetch('/v1/timetable/rooms', {
+        method: 'POST',
+        body: JSON.stringify({ name: roomForm.name, capacity: roomForm.capacity ? Number(roomForm.capacity) : undefined }),
+      });
+      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? `Failed (${res.status})`);
+      setRoomForm({ name: '', capacity: '' });
+      setShowRoomForm(false);
+      reload();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not create room.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreatePeriod() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await apiFetch('/v1/timetable/periods', {
+        method: 'POST',
+        body: JSON.stringify({ ...periodForm, sequence: Number(periodForm.sequence) }),
+      });
+      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? `Failed (${res.status})`);
+      setPeriodForm({ name: '', sequence: '1', startTime: '08:00', endTime: '08:40', periodType: 'teaching' });
+      setShowPeriodForm(false);
+      reload();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not create period.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreateEntry() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await apiFetch('/v1/timetable/entries', {
+        method: 'POST',
+        body: JSON.stringify({
+          academicYearId: selectedYearId,
+          classId: selectedClassId,
+          subjectId: entryForm.subjectId,
+          teacherId: entryForm.teacherId,
+          periodId: entryForm.periodId,
+          roomId: entryForm.roomId || undefined,
+          dayOfWeek: entryForm.dayOfWeek,
+        }),
+      });
+      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? `Failed (${res.status})`);
+      setShowEntryForm(false);
+      reload();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not create timetable entry.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleEnd(id: string) {
+    await apiFetch(`/v1/timetable/entries/${id}/end`, { method: 'POST', body: JSON.stringify({ reason: 'Ended from Timetable screen' }) });
+    reload();
+  }
+
+  if (loading) return <LoadingState label="Loading timetable" rows={3} />;
+
+  const teachingPeriods = periods.filter((p) => p.period_type === 'teaching').sort((a, b) => a.sequence - b.sequence);
+  const filteredEntries = entries.filter((e) => e.academic_year_id === selectedYearId && e.class_id === selectedClassId && e.status === 'active');
+
+  return (
+    <div>
+      <p className={styles.hint}>
+        Every school builds its own timetable from scratch — add the rooms and periods (including breaks/assembly) this school actually uses, then assign
+        classes to teaching periods. Nothing here is a fixed template.
+      </p>
+
+      <div className={styles.subPanel}>
+        <div className={styles.subPanelTitle}>Rooms</div>
+        {canConfigure && (
+          <Button type="button" variant="secondary" onClick={() => setShowRoomForm((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
+            {showRoomForm ? 'Cancel' : 'Add room'}
+          </Button>
+        )}
+        {canConfigure && showRoomForm && (
+          <div className={styles.formRow}>
+            <input className={styles.textInput} placeholder="Name, e.g. Block A - Room 1" value={roomForm.name} onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })} />
+            <input className={styles.textInput} placeholder="Capacity (optional)" type="number" min={1} value={roomForm.capacity} onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })} />
+            <Button type="button" onClick={handleCreateRoom} disabled={saving || !roomForm.name}>
+              Save
+            </Button>
+          </div>
+        )}
+        {rooms.length === 0 ? (
+          <EmptyState title="No rooms yet" message="Add one if this school assigns classes to specific rooms." />
+        ) : (
+          rooms.map((r) => (
+            <div key={r.id} className={styles.listRow}>
+              <span>{r.name}</span>
+              <span style={{ color: 'var(--pb-ink-muted)' }}>{r.capacity ? `Capacity ${r.capacity}` : ''}</span>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className={styles.subPanel}>
+        <div className={styles.subPanelTitle}>Periods</div>
+        {canConfigure && (
+          <Button type="button" variant="secondary" onClick={() => setShowPeriodForm((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
+            {showPeriodForm ? 'Cancel' : 'Add period'}
+          </Button>
+        )}
+        {canConfigure && showPeriodForm && (
+          <div className={styles.formRow}>
+            <input className={styles.textInput} placeholder="Name, e.g. Period 1 or Lunch" value={periodForm.name} onChange={(e) => setPeriodForm({ ...periodForm, name: e.target.value })} />
+            <input className={styles.textInput} placeholder="Order" type="number" min={1} value={periodForm.sequence} onChange={(e) => setPeriodForm({ ...periodForm, sequence: e.target.value })} />
+            <input className={styles.textInput} type="time" value={periodForm.startTime} onChange={(e) => setPeriodForm({ ...periodForm, startTime: e.target.value })} />
+            <input className={styles.textInput} type="time" value={periodForm.endTime} onChange={(e) => setPeriodForm({ ...periodForm, endTime: e.target.value })} />
+            <select className={styles.select} value={periodForm.periodType} onChange={(e) => setPeriodForm({ ...periodForm, periodType: e.target.value })}>
+              <option value="teaching">Teaching</option>
+              <option value="break">Break</option>
+              <option value="assembly">Assembly</option>
+              <option value="other">Other</option>
+            </select>
+            <Button type="button" onClick={handleCreatePeriod} disabled={saving || !periodForm.name}>
+              Save
+            </Button>
+          </div>
+        )}
+        {periods.length === 0 ? (
+          <EmptyState title="No periods yet" message="Add this school's own daily structure — teaching periods and any breaks/assembly slots." />
+        ) : (
+          periods
+            .slice()
+            .sort((a, b) => a.sequence - b.sequence)
+            .map((p) => (
+              <div key={p.id} className={styles.listRow}>
+                <span>
+                  {p.name} · {p.start_time.slice(0, 5)}–{p.end_time.slice(0, 5)}
+                </span>
+                <Pill variant={p.period_type === 'teaching' ? 'success' : 'neutral'}>{p.period_type}</Pill>
+              </div>
+            ))
+        )}
+      </div>
+
+      <div className={styles.subPanel}>
+        <div className={styles.subPanelTitle}>Weekly entries</div>
+        <div className={styles.formRow}>
+          <select className={styles.select} value={selectedYearId} onChange={(e) => setSelectedYearId(e.target.value)}>
+            {years.map((y) => (
+              <option key={y.id} value={y.id}>
+                {y.name}
+              </option>
+            ))}
+          </select>
+          <select className={styles.select} value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {canConfigure && (
+            <Button type="button" variant="secondary" onClick={() => setShowEntryForm((v) => !v)}>
+              {showEntryForm ? 'Cancel' : 'Add entry'}
+            </Button>
+          )}
+        </div>
+
+        {canConfigure && showEntryForm && (
+          <div className={styles.formRow}>
+            <select className={styles.select} value={entryForm.subjectId} onChange={(e) => setEntryForm({ ...entryForm, subjectId: e.target.value })}>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <select className={styles.select} value={entryForm.teacherId} onChange={(e) => setEntryForm({ ...entryForm, teacherId: e.target.value })}>
+              {teachers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.full_name}
+                </option>
+              ))}
+            </select>
+            <select className={styles.select} value={entryForm.periodId} onChange={(e) => setEntryForm({ ...entryForm, periodId: e.target.value })}>
+              {teachingPeriods.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.start_time.slice(0, 5)}–{p.end_time.slice(0, 5)})
+                </option>
+              ))}
+            </select>
+            <select className={styles.select} value={entryForm.roomId} onChange={(e) => setEntryForm({ ...entryForm, roomId: e.target.value })}>
+              <option value="">No room</option>
+              {rooms.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            <select className={styles.select} value={entryForm.dayOfWeek} onChange={(e) => setEntryForm({ ...entryForm, dayOfWeek: e.target.value as (typeof DAYS)[number] })}>
+              {DAYS.map((d) => (
+                <option key={d} value={d}>
+                  {d[0].toUpperCase() + d.slice(1)}
+                </option>
+              ))}
+            </select>
+            <Button type="button" onClick={handleCreateEntry} disabled={saving || !entryForm.subjectId || !entryForm.teacherId || !entryForm.periodId || teachingPeriods.length === 0}>
+              Save
+            </Button>
+          </div>
+        )}
+        {saveError && <ErrorState message={saveError} />}
+
+        {filteredEntries.length === 0 ? (
+          <EmptyState title="No timetable entries yet for this class" message="Add periods first, then assign this class to a teaching period." />
+        ) : (
+          DAYS.map((day) => {
+            const dayEntries = filteredEntries
+              .filter((e) => e.day_of_week === day)
+              .slice()
+              .sort((a, b) => (periods.find((p) => p.id === a.period_id)?.sequence ?? 0) - (periods.find((p) => p.id === b.period_id)?.sequence ?? 0));
+            if (dayEntries.length === 0) return null;
+            return (
+              <div key={day}>
+                <div className={styles.dayGroupHeading}>{day}</div>
+                {dayEntries.map((e) => {
+                  const period = periods.find((p) => p.id === e.period_id);
+                  return (
+                    <div key={e.id} className={styles.listRow}>
+                      <span>
+                        {period ? `${period.name} (${period.start_time.slice(0, 5)}–${period.end_time.slice(0, 5)})` : e.period_id} —{' '}
+                        {subjects.find((s) => s.id === e.subject_id)?.name ?? e.subject_id} ·{' '}
+                        {teachers.find((t) => t.id === e.teacher_id)?.full_name ?? e.teacher_id}
+                        {e.room_id && <> · {rooms.find((r) => r.id === e.room_id)?.name ?? e.room_id}</>}
+                      </span>
+                      {canConfigure && (
+                        <Button type="button" variant="secondary" onClick={() => handleEnd(e.id)}>
+                          End
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }

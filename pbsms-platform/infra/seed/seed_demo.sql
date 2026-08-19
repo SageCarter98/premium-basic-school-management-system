@@ -1013,6 +1013,55 @@ insert into cssps_placements (id, tenant_id, student_id, choices, created_by, up
    'eeeeeeee-0000-0000-0000-000000000002', array['Wesley Girls'],
    '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
 
+-- Timetable (0033_timetable.sql, Chapter 17 spec §7.6 / FR-ACA-040) — one
+-- room, one teaching period, and one active entry per tenant, reusing the
+-- same class/subject/teacher (JHS 2A / Mathematics / teacher@sunrise) the
+-- assessment/teacher-assignment fixtures above already exercise. Fixed ids
+-- exist purely for the isolation suite's direct-id-lookup tests, same
+-- reasoning as every fixture above.
+insert into rooms (id, tenant_id, name, capacity, created_by, updated_by) values
+  ('a8000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'Block A - Room 1', 40, '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a8000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'Block A - Room 1', 40, '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into periods (id, tenant_id, name, sequence, start_time, end_time, period_type, created_by, updated_by) values
+  ('a8100000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'Period 1', 1, '08:00', '08:40', 'teaching', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a8100000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'Period 1', 1, '08:00', '08:40', 'teaching', '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into timetable_entries
+    (id, tenant_id, academic_year_id, class_id, subject_id, teacher_id, period_id, room_id, day_of_week, created_by, updated_by) values
+  ('a8200000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'cccccccc-0000-0000-0000-000000000001', 'dddddddd-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001',
+   '99999999-0000-0000-0000-000000000003', 'a8100000-0000-0000-0000-000000000001', 'a8000000-0000-0000-0000-000000000001',
+   'monday', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a8200000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'cccccccc-0000-0000-0000-000000000002', 'dddddddd-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000002',
+   '99999999-0000-0000-0000-000000000002', 'a8100000-0000-0000-0000-000000000002', 'a8000000-0000-0000-0000-000000000002',
+   'monday', '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+-- Settlement reconciliation (0034_settlement_reconciliation.sql, spec
+-- §8.8) — one open batch per tenant with one line already auto-matchable
+-- against the seeded payment above (d7777777-...-01, reference 'CASH-0001',
+-- amount 600), so autoMatchSettlementBatch() has something real to match
+-- immediately via curl, same "ready to exercise, not pre-exhausted"
+-- posture as the rest of this file. Left UNMATCHED here (not
+-- pre-matched) so the match/auto-match path itself is exercised live,
+-- not just displayed.
+insert into settlement_batches (id, tenant_id, source, reference, notes, created_by, updated_by) values
+  ('a9000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'bank_statement', 'STMT-2026-08', 'August 2026 bank statement', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a9000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'bank_statement', 'STMT-2026-08', 'August 2026 bank statement', '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
+insert into settlement_lines (id, tenant_id, settlement_batch_id, line_reference, amount, value_date, description, created_by, updated_by) values
+  ('a9100000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'a9000000-0000-0000-0000-000000000001', 'CASH-0001', 600, current_date, 'Cash lodgement', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000000001'),
+  ('a9100000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'a9000000-0000-0000-0000-000000000002', 'CASH-0001', 600, current_date, 'Cash lodgement', '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
+
 -- ============================================================================
 -- PROOF OF ISOLATION — run these manually after seeding
 -- ============================================================================

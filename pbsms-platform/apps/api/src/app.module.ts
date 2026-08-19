@@ -35,6 +35,7 @@ import { JobsModule } from './modules/jobs/jobs.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { DataProtectionModule } from './modules/data-protection/data-protection.module';
 import { NaccaModule } from './modules/nacca/nacca.module';
+import { TimetableModule } from './modules/timetable/timetable.module';
 
 @Controller()
 class HealthController {
@@ -81,6 +82,7 @@ class HealthController {
     AnalyticsModule,
     DataProtectionModule,
     NaccaModule,
+    TimetableModule,
   ],
   controllers: [HealthController],
 })

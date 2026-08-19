@@ -16,6 +16,9 @@ import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
 import { CreatePenaltyRuleDto } from './dto/create-penalty-rule.dto';
 import { ApplyPenaltyDto } from './dto/apply-penalty.dto';
 import { ReversePenaltyChargeDto } from './dto/reverse-penalty-charge.dto';
+import { CreateSettlementBatchDto } from './dto/create-settlement-batch.dto';
+import { AddSettlementLineDto } from './dto/add-settlement-line.dto';
+import { MatchSettlementLineDto } from './dto/match-settlement-line.dto';
 
 /** finance.controller.ts — SRS Chapter 23 / 24. Chapter 13's role model
  * only enumerates 'Accountant/Bursar', not a separate 'Cashier' — so this
@@ -252,5 +255,63 @@ export class FinanceController {
   @Get('dashboard/outstanding-balances')
   outstandingBalances() {
     return this.finance.outstandingBalances();
+  }
+
+  // ---------------------------------------------------------------------
+  // Settlement reconciliation (spec §8.8)
+  // ---------------------------------------------------------------------
+
+  @Roles(...RECORD_ROLES)
+  @Post('settlement-batches')
+  createSettlementBatch(@Body() body: CreateSettlementBatchDto) {
+    return this.finance.createSettlementBatch(body);
+  }
+
+  @Roles(...READ_ROLES)
+  @Get('settlement-batches')
+  findAllSettlementBatches() {
+    return this.finance.findAllSettlementBatches();
+  }
+
+  @Roles(...READ_ROLES)
+  @Get('settlement-batches/:id')
+  findSettlementBatch(@Param('id') id: string) {
+    return this.finance.findSettlementBatch(id);
+  }
+
+  @Roles(...RECORD_ROLES)
+  @Post('settlement-batches/:id/lines')
+  addSettlementLine(@Param('id') id: string, @Body() body: AddSettlementLineDto) {
+    return this.finance.addSettlementLine(id, body);
+  }
+
+  @Roles(...READ_ROLES)
+  @Get('settlement-batches/:id/lines')
+  findLinesForBatch(@Param('id') id: string) {
+    return this.finance.findLinesForBatch(id);
+  }
+
+  @Roles(...RECORD_ROLES)
+  @Post('settlement-batches/:id/auto-match')
+  autoMatchSettlementBatch(@Param('id') id: string) {
+    return this.finance.autoMatchSettlementBatch(id);
+  }
+
+  @Roles(...APPROVE_ROLES)
+  @Post('settlement-batches/:id/close')
+  closeSettlementBatch(@Param('id') id: string) {
+    return this.finance.closeSettlementBatch(id);
+  }
+
+  @Roles(...RECORD_ROLES)
+  @Post('settlement-lines/:id/match')
+  matchSettlementLine(@Param('id') id: string, @Body() body: MatchSettlementLineDto) {
+    return this.finance.matchSettlementLine(id, body);
+  }
+
+  @Roles(...RECORD_ROLES)
+  @Post('settlement-lines/:id/unmatch')
+  unmatchSettlementLine(@Param('id') id: string) {
+    return this.finance.unmatchSettlementLine(id);
   }
 }

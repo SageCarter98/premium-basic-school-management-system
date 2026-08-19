@@ -155,6 +155,25 @@ interface OutstandingBalance {
   due_date: string | null;
   overdue: boolean;
 }
+interface SettlementBatch {
+  id: string;
+  source: string;
+  reference: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  status: string;
+  notes: string | null;
+}
+interface SettlementLine {
+  id: string;
+  settlement_batch_id: string;
+  line_reference: string | null;
+  amount: string;
+  value_date: string | null;
+  description: string | null;
+  matched_payment_id: string | null;
+  match_status: string;
+}
 interface GeneratedDocument {
   id: string;
   document_type: string;
@@ -184,23 +203,23 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   return (Array.isArray(m) ? m.join('; ') : m) ?? fallback;
 }
 
-const TABS = ['Fee Structures', 'Invoices', 'Payments', 'Assistance', 'Reversals', 'Dashboard', 'Receipts'] as const;
+const TABS = ['Fee Structures', 'Invoices', 'Payments', 'Assistance', 'Reversals', 'Dashboard', 'Receipts', 'Reconciliation'] as const;
 type Tab = (typeof TABS)[number];
 
 /**
  * SRS Chapters 23-25 (spec §7.10's Finance console + §8.5 Payment
  * Allocation + §8.8 Reconciliation Workspace). Built on the already-real
- * backend Finance module (Chapters 23-25) — no new backend surface,
- * matching Stage 5/6's screens-on-existing-primitives pattern.
+ * backend Finance module (Chapters 23-25) — no new backend surface for
+ * most tabs, matching Stage 5/6's screens-on-existing-primitives pattern.
  *
- * One spec item genuinely NOT built here, flagged not faked (see
- * apps/web/README.md's Stage 7 and post-Stage-9-gap-closure sections):
- * - Reconciliation Workspace (§8.8, "provider settlement vs internal") —
- *   there is no provider integration or settlement-record table at all
- *   (mobile_money/card payments are explicitly rejected as
- *   not-implemented); a reconciliation screen with nothing on the
- *   provider side to reconcile against would be theatre, not a real
- *   screen.
+ * Reconciliation (§8.8) is the one exception — 0034_settlement_
+ * reconciliation.sql adds real schema for it. Live provider webhook
+ * integration (Paystack/Hubtel/MTN MoMo/Telecel) is still out of scope
+ * (mobile_money/card payments are still rejected as not-implemented) —
+ * what's built instead is manual/import-based settlement matching against
+ * this codebase's own `payments` table, the same posture `payments`
+ * itself already has (manual-entry-only). See finance.service.ts's
+ * Settlement Reconciliation section header for the full reasoning.
  */
 export default function FinancePage() {
   const [tab, setTab] = useState<Tab>('Fee Structures');
@@ -275,6 +294,7 @@ export default function FinancePage() {
         {tab === 'Reversals' && <ReversalsTab students={students} />}
         {tab === 'Dashboard' && <DashboardTab students={students} />}
         {tab === 'Receipts' && <ReceiptsTab />}
+        {tab === 'Reconciliation' && <ReconciliationTab canApprove={canApprove} />}
       </Card>
     </div>
   );
@@ -1549,6 +1569,243 @@ function ReceiptsTab() {
             )}
           </div>
         ))
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Reconciliation — §8.8's manual/import-based settlement matching (see
+// this file's own header, and finance.service.ts's Settlement
+// Reconciliation section, for why this is not a live provider integration).
+// ---------------------------------------------------------------------
+
+function ReconciliationTab({ canApprove }: { canApprove: boolean }) {
+  const [loading, setLoading] = useState(true);
+  const [batches, setBatches] = useState<SettlementBatch[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ source: 'bank_statement', reference: '', notes: '' });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function reload() {
+    setLoading(true);
+    apiGet<SettlementBatch[]>('/v1/finance/settlement-batches')
+      .then(setBatches)
+      .finally(() => setLoading(false));
+  }
+  useEffect(reload, []);
+
+  async function handleCreate() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await apiFetch('/v1/finance/settlement-batches', { method: 'POST', body: JSON.stringify(form) });
+      if (!res.ok) throw new Error(await errorMessage(res, `Failed (${res.status})`));
+      setForm({ source: 'bank_statement', reference: '', notes: '' });
+      setShowCreate(false);
+      reload();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not create settlement batch.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <LoadingState label="Loading settlement batches" rows={3} />;
+
+  return (
+    <div>
+      <p className={styles.hint}>
+        Enter or import an external statement (bank, mobile money, card settlement) as a batch of lines, then match each line against a recorded payment.
+        This is manual/import-based reconciliation, not a live provider feed — the same manual-entry posture the Payments tab itself already has.
+      </p>
+      <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
+        {showCreate ? 'Cancel' : 'New settlement batch'}
+      </Button>
+      {showCreate && (
+        <div className={styles.formRow}>
+          <select className={styles.select} value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })}>
+            <option value="bank_statement">Bank statement</option>
+            <option value="mobile_money_statement">Mobile money statement</option>
+            <option value="card_settlement">Card settlement</option>
+            <option value="other">Other</option>
+          </select>
+          <input className={styles.textInput} placeholder="Reference (e.g. STMT-2026-08)" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
+          <input className={styles.textInput} placeholder="Notes (optional)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          <Button type="button" onClick={handleCreate} disabled={saving}>
+            Save
+          </Button>
+        </div>
+      )}
+      {saveError && <ErrorState message={saveError} />}
+      {batches.length === 0 ? (
+        <EmptyState title="No settlement batches yet" message="Create one for each external statement you want to reconcile against recorded payments." />
+      ) : (
+        batches.map((b) => (
+          <div key={b.id}>
+            <div className={styles.listRow} style={{ cursor: 'pointer' }} onClick={() => setExpandedId(expandedId === b.id ? null : b.id)}>
+              <span>
+                {b.source.replace(/_/g, ' ')} {b.reference && `— ${b.reference}`}
+              </span>
+              <Pill variant={b.status === 'open' ? 'neutral' : 'success'}>{b.status}</Pill>
+            </div>
+            {expandedId === b.id && <SettlementBatchDetail batch={b} canApprove={canApprove} onChanged={reload} />}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function SettlementBatchDetail({ batch, canApprove, onChanged }: { batch: SettlementBatch; canApprove: boolean; onChanged: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [lines, setLines] = useState<SettlementLine[]>([]);
+  const [showAddLine, setShowAddLine] = useState(false);
+  const [lineForm, setLineForm] = useState({ lineReference: '', amount: '', description: '' });
+  const [matchPaymentId, setMatchPaymentId] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [matchSummary, setMatchSummary] = useState<string | null>(null);
+
+  function reload() {
+    setLoading(true);
+    apiGet<SettlementLine[]>(`/v1/finance/settlement-batches/${batch.id}/lines`)
+      .then(setLines)
+      .finally(() => setLoading(false));
+  }
+  useEffect(reload, [batch.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function addLine() {
+    setBusy(true);
+    setError(null);
+    const res = await apiFetch(`/v1/finance/settlement-batches/${batch.id}/lines`, {
+      method: 'POST',
+      body: JSON.stringify({ ...lineForm, amount: Number(lineForm.amount) }),
+    });
+    setBusy(false);
+    if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
+    setLineForm({ lineReference: '', amount: '', description: '' });
+    setShowAddLine(false);
+    reload();
+  }
+
+  async function autoMatch() {
+    setBusy(true);
+    setError(null);
+    setMatchSummary(null);
+    const res = await apiFetch(`/v1/finance/settlement-batches/${batch.id}/auto-match`, { method: 'POST' });
+    setBusy(false);
+    if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
+    const result = (await res.json()) as { matchedCount: number; remainingUnmatched: number };
+    setMatchSummary(`Matched ${result.matchedCount} line(s); ${result.remainingUnmatched} still unmatched.`);
+    reload();
+  }
+
+  async function manualMatch(lineId: string) {
+    const paymentId = matchPaymentId[lineId];
+    if (!paymentId) return;
+    setBusy(true);
+    setError(null);
+    const res = await apiFetch(`/v1/finance/settlement-lines/${lineId}/match`, { method: 'POST', body: JSON.stringify({ paymentId }) });
+    setBusy(false);
+    if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
+    reload();
+  }
+
+  async function unmatch(lineId: string) {
+    setBusy(true);
+    setError(null);
+    const res = await apiFetch(`/v1/finance/settlement-lines/${lineId}/unmatch`, { method: 'POST' });
+    setBusy(false);
+    if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
+    reload();
+  }
+
+  async function closeBatch() {
+    setBusy(true);
+    setError(null);
+    const res = await apiFetch(`/v1/finance/settlement-batches/${batch.id}/close`, { method: 'POST' });
+    setBusy(false);
+    if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
+    onChanged();
+  }
+
+  const matchVariant: Record<string, 'success' | 'danger' | 'neutral'> = { matched: 'success', discrepancy: 'danger', unmatched: 'neutral' };
+
+  return (
+    <div className={styles.detailPanel}>
+      {loading ? (
+        <LoadingState label="Loading settlement lines" rows={2} />
+      ) : (
+        <>
+          <div className={styles.actionRow}>
+            {batch.status === 'open' && (
+              <Button type="button" variant="secondary" onClick={() => setShowAddLine((v) => !v)}>
+                {showAddLine ? 'Cancel' : 'Add line'}
+              </Button>
+            )}
+            {batch.status === 'open' && (
+              <Button type="button" variant="secondary" onClick={autoMatch} disabled={busy}>
+                Auto-match
+              </Button>
+            )}
+            {canApprove && batch.status === 'open' && (
+              <Button type="button" onClick={closeBatch} disabled={busy}>
+                Close batch
+              </Button>
+            )}
+          </div>
+          {matchSummary && <p className={styles.hint}>{matchSummary}</p>}
+          {error && <ErrorState message={error} />}
+
+          {showAddLine && (
+            <div className={styles.formRow}>
+              <input className={styles.textInput} placeholder="Reference (e.g. CASH-0001)" value={lineForm.lineReference} onChange={(e) => setLineForm({ ...lineForm, lineReference: e.target.value })} />
+              <input className={styles.textInput} type="number" min="0.01" step="0.01" placeholder="Amount" value={lineForm.amount} onChange={(e) => setLineForm({ ...lineForm, amount: e.target.value })} />
+              <input className={styles.textInput} placeholder="Description (optional)" value={lineForm.description} onChange={(e) => setLineForm({ ...lineForm, description: e.target.value })} />
+              <Button type="button" onClick={addLine} disabled={busy || !lineForm.amount}>
+                Save
+              </Button>
+            </div>
+          )}
+
+          {lines.length === 0 ? (
+            <EmptyState title="No lines yet" message="Add each external transaction line, then auto-match or match them by hand." />
+          ) : (
+            lines.map((l) => (
+              <div key={l.id} className={styles.listRow}>
+                <span>
+                  {l.line_reference ?? '(no reference)'} — {money(Number(l.amount))}
+                  {l.description && <> · {l.description}</>}
+                </span>
+                <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
+                  <Pill variant={matchVariant[l.match_status]}>{l.match_status}</Pill>
+                  {batch.status === 'open' && l.match_status !== 'matched' && (
+                    <>
+                      <input
+                        className={styles.allocInput}
+                        placeholder="Payment id"
+                        value={matchPaymentId[l.id] ?? ''}
+                        onChange={(e) => setMatchPaymentId((m) => ({ ...m, [l.id]: e.target.value }))}
+                        style={{ width: 160, textAlign: 'left' }}
+                      />
+                      <Button type="button" variant="secondary" onClick={() => manualMatch(l.id)} disabled={busy || !matchPaymentId[l.id]}>
+                        Match
+                      </Button>
+                    </>
+                  )}
+                  {batch.status === 'open' && l.matched_payment_id && (
+                    <Button type="button" variant="secondary" onClick={() => unmatch(l.id)} disabled={busy}>
+                      Unmatch
+                    </Button>
+                  )}
+                </span>
+              </div>
+            ))
+          )}
+        </>
       )}
     </div>
   );

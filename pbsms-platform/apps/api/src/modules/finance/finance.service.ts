@@ -45,6 +45,9 @@ import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
 import { CreatePenaltyRuleDto } from './dto/create-penalty-rule.dto';
 import { ApplyPenaltyDto } from './dto/apply-penalty.dto';
 import { ReversePenaltyChargeDto } from './dto/reverse-penalty-charge.dto';
+import { CreateSettlementBatchDto } from './dto/create-settlement-batch.dto';
+import { AddSettlementLineDto } from './dto/add-settlement-line.dto';
+import { MatchSettlementLineDto } from './dto/match-settlement-line.dto';
 
 export interface FeeStructure {
   id: string;
@@ -191,6 +194,31 @@ export interface OutstandingBalance {
   balance: number;
   due_date: string | null;
   overdue: boolean;
+}
+
+export interface SettlementBatch {
+  id: string;
+  tenant_id: string;
+  source: string;
+  reference: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  status: string;
+  notes: string | null;
+}
+
+export interface SettlementLine {
+  id: string;
+  tenant_id: string;
+  settlement_batch_id: string;
+  line_reference: string | null;
+  amount: string;
+  value_date: string | null;
+  description: string | null;
+  matched_payment_id: string | null;
+  match_status: string;
+  matched_at: string | null;
+  matched_by: string | null;
 }
 
 const NOT_YET_IMPLEMENTED_METHODS = new Set(['mobile_money', 'card']);
@@ -1104,5 +1132,186 @@ export class FinanceService {
         };
       })
       .filter((r) => r.balance > 0);
+  }
+
+  // ---------------------------------------------------------------------
+  // Settlement reconciliation (spec §8.8's Reconciliation Workspace) — see
+  // 0034_settlement_reconciliation.sql's header for why this is a manual/
+  // import-based matching workspace, not a live provider integration.
+  // Confirmed with the user before building (same "genuine design fork"
+  // gate this codebase applied to Stage 6's guardian-access mechanism).
+  // ---------------------------------------------------------------------
+
+  async createSettlementBatch(input: CreateSettlementBatchDto): Promise<SettlementBatch> {
+    const { userId } = TenantContextStore.current();
+    const rows = await this.db.query<SettlementBatch>(
+      `insert into settlement_batches (tenant_id, source, reference, period_start, period_end, notes, created_by, updated_by)
+       values (current_tenant_id(), $1, $2, $3, $4, $5, $6, $6)
+       returning *`,
+      [input.source, input.reference ?? null, input.periodStart ?? null, input.periodEnd ?? null, input.notes ?? null, userId],
+    );
+    return rows[0];
+  }
+
+  async findAllSettlementBatches(): Promise<SettlementBatch[]> {
+    return this.db.query<SettlementBatch>(`select * from settlement_batches order by created_at desc`);
+  }
+
+  async findSettlementBatch(id: string): Promise<SettlementBatch> {
+    const rows = await this.db.query<SettlementBatch>(`select * from settlement_batches where id = $1`, [id]);
+    if (rows.length === 0) {
+      throw new NotFoundException(`Settlement batch ${id} not found`);
+    }
+    return rows[0];
+  }
+
+  async addSettlementLine(batchId: string, input: AddSettlementLineDto): Promise<SettlementLine> {
+    const { userId } = TenantContextStore.current();
+    const batch = await this.findSettlementBatch(batchId);
+    if (batch.status !== 'open') {
+      throw new ConflictException(`Cannot add a line to settlement batch ${batchId}: it is '${batch.status}', not 'open'.`);
+    }
+    const rows = await this.db.query<SettlementLine>(
+      `insert into settlement_lines
+         (tenant_id, settlement_batch_id, line_reference, amount, value_date, description, created_by, updated_by)
+       values (current_tenant_id(), $1, $2, $3, $4, $5, $6, $6)
+       returning *`,
+      [batchId, input.lineReference ?? null, input.amount, input.valueDate ?? null, input.description ?? null, userId],
+    );
+    return rows[0];
+  }
+
+  async findLinesForBatch(batchId: string): Promise<SettlementLine[]> {
+    return this.db.query<SettlementLine>(
+      `select * from settlement_lines where settlement_batch_id = $1 order by created_at`,
+      [batchId],
+    );
+  }
+
+  async findSettlementLine(id: string): Promise<SettlementLine> {
+    const rows = await this.db.query<SettlementLine>(`select * from settlement_lines where id = $1`, [id]);
+    if (rows.length === 0) {
+      throw new NotFoundException(`Settlement line ${id} not found`);
+    }
+    return rows[0];
+  }
+
+  /**
+   * Always an explicit staff-triggered action against one batch, never a
+   * background sweep — same "unsupervised process touching money is a
+   * separate risk-acceptance question" caution 0032_fee_penalties.sql's
+   * header already applied to applyPenalty(). Matches a line to a payment
+   * only when exactly one payment shares its (provider_reference, amount)
+   * AND isn't already claimed by another line — an ambiguous or
+   * already-claimed candidate is left unmatched for a human to resolve via
+   * matchSettlementLine() rather than guessed at.
+   */
+  async autoMatchSettlementBatch(batchId: string): Promise<{ matchedCount: number; remainingUnmatched: number }> {
+    const { userId } = TenantContextStore.current();
+    await this.findSettlementBatch(batchId);
+    const lines = await this.db.query<SettlementLine>(
+      `select * from settlement_lines
+       where settlement_batch_id = $1 and match_status = 'unmatched' and line_reference is not null`,
+      [batchId],
+    );
+
+    let matchedCount = 0;
+    for (const line of lines) {
+      const candidates = await this.db.query<{ id: string }>(
+        `select p.id from payments p
+         where p.provider_reference = $1 and p.amount = $2
+           and not exists (select 1 from settlement_lines sl where sl.matched_payment_id = p.id)`,
+        [line.line_reference, line.amount],
+      );
+      if (candidates.length !== 1) {
+        continue; // no candidate, or ambiguous — leave for a human
+      }
+      const updated = await this.db.query<SettlementLine>(
+        `update settlement_lines
+         set matched_payment_id = $1, match_status = 'matched', matched_at = now(), matched_by = $2, updated_at = now(), updated_by = $2
+         where id = $3 and match_status = 'unmatched'
+         returning id`,
+        [candidates[0].id, userId, line.id],
+      );
+      if (updated.length > 0) {
+        matchedCount += 1;
+      }
+    }
+
+    const remainingRows = await this.db.query<{ count: string }>(
+      `select count(*)::text as count from settlement_lines where settlement_batch_id = $1 and match_status = 'unmatched'`,
+      [batchId],
+    );
+    return { matchedCount, remainingUnmatched: Number(remainingRows[0].count) };
+  }
+
+  /** Manual match — the human-in-the-loop counterpart to autoMatch().
+   * Amounts that don't agree are still linked, but flagged 'discrepancy'
+   * rather than 'matched' (see 0034_settlement_reconciliation.sql's
+   * header on why that's a distinct, more actionable state than
+   * 'unmatched'). Re-matching a 'matched' line requires unmatch() first,
+   * so a good match is never silently overwritten. */
+  async matchSettlementLine(lineId: string, input: MatchSettlementLineDto): Promise<SettlementLine> {
+    const { userId } = TenantContextStore.current();
+    const line = await this.findSettlementLine(lineId);
+    if (line.match_status === 'matched') {
+      throw new ConflictException(`Settlement line ${lineId} is already matched — unmatch it first to re-match.`);
+    }
+    const paymentRows = await this.db.query<{ id: string; amount: string }>(
+      `select id, amount from payments where id = $1`,
+      [input.paymentId],
+    );
+    if (paymentRows.length === 0) {
+      throw new NotFoundException(`Payment ${input.paymentId} not found`);
+    }
+    const claimedRows = await this.db.query<{ id: string }>(
+      `select id from settlement_lines where matched_payment_id = $1 and id != $2`,
+      [input.paymentId, lineId],
+    );
+    if (claimedRows.length > 0) {
+      throw new ConflictException(
+        `Payment ${input.paymentId} is already matched to settlement line ${claimedRows[0].id}.`,
+      );
+    }
+    const status = Number(paymentRows[0].amount) === Number(line.amount) ? 'matched' : 'discrepancy';
+    const rows = await this.db.query<SettlementLine>(
+      `update settlement_lines
+       set matched_payment_id = $1, match_status = $2, matched_at = now(), matched_by = $3, updated_at = now(), updated_by = $3
+       where id = $4
+       returning *`,
+      [input.paymentId, status, userId, lineId],
+    );
+    return rows[0];
+  }
+
+  async unmatchSettlementLine(lineId: string): Promise<SettlementLine> {
+    const { userId } = TenantContextStore.current();
+    await this.findSettlementLine(lineId);
+    const rows = await this.db.query<SettlementLine>(
+      `update settlement_lines
+       set matched_payment_id = null, match_status = 'unmatched', matched_at = null, matched_by = null, updated_at = now(), updated_by = $1
+       where id = $2
+       returning *`,
+      [userId, lineId],
+    );
+    return rows[0];
+  }
+
+  /** A sign-off action (LEADERSHIP tier, mirrors activateFeeStructure()'s
+   * status flip) — deliberately does NOT require every line to be matched
+   * first; unmatched/discrepancy lines are a legitimate reason to close a
+   * period's reconciliation with follow-up items still open, not a reason
+   * to block closing it. */
+  async closeSettlementBatch(id: string): Promise<SettlementBatch> {
+    const { userId } = TenantContextStore.current();
+    const rows = await this.db.query<SettlementBatch>(
+      `update settlement_batches set status = 'closed', updated_at = now(), updated_by = $1 where id = $2 and status = 'open' returning *`,
+      [userId, id],
+    );
+    if (rows.length === 0) {
+      await this.findSettlementBatch(id); // 404s if it doesn't exist at all
+      throw new ConflictException(`Settlement batch ${id} is already closed`);
+    }
+    return rows[0];
   }
 }

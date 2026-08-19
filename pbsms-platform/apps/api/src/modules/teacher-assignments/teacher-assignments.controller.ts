@@ -9,9 +9,11 @@ import { ACADEMIC_ADMIN, ACADEMIC_STAFF } from '../../common/auth/role-groups';
  * teacher-assignments.controller.ts — Chapter 17.1. Assigning/ending a
  * teacher's class-subject responsibility is an academic-office function
  * (ACADEMIC_ADMIN), same tier as assessment structural configuration;
- * reading assignments is broad ACADEMIC_STAFF (role-gated only, no
- * record-scoping — a teacher can currently see every assignment, not just
- * their own, same deferred-to-Chapter-13.3 posture as every other module).
+ * reading assignments is broad ACADEMIC_STAFF, record-scoped in the
+ * service layer — a non-admin caller only ever sees their own
+ * assignments (findAll() overrides any teacherId filter, findOne()
+ * 403s on someone else's), closing what was previously a deferred
+ * Chapter 13.3 gap.
  */
 @Controller('v1/teacher-assignments')
 export class TeacherAssignmentsController {

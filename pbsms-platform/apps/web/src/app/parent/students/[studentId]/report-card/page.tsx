@@ -32,6 +32,14 @@ interface StudentResultItem {
   is_pass: boolean;
 }
 
+interface CompetencyProfileRow {
+  indicatorId: string;
+  indicatorCode: string;
+  indicatorText: string;
+  scored: boolean;
+  passed: boolean | null;
+}
+
 function ReportCardContent({ studentId }: { studentId: string }) {
   const token = useParentToken();
   const searchParams = useSearchParams();
@@ -40,11 +48,12 @@ function ReportCardContent({ studentId }: { studentId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<StudentResult | null>(null);
   const [items, setItems] = useState<StudentResultItem[]>([]);
+  const [competencyProfiles, setCompetencyProfiles] = useState<Record<string, CompetencyProfileRow[]>>({});
 
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    parentApiGet<{ result: StudentResult; items: StudentResultItem[] }>(
+    parentApiGet<{ result: StudentResult; items: StudentResultItem[]; competencyProfiles: Record<string, CompetencyProfileRow[]> }>(
       `/v1/parent/students/${studentId}/report-card`,
       token,
       resultId ? { resultId } : undefined,
@@ -53,6 +62,7 @@ function ReportCardContent({ studentId }: { studentId: string }) {
         if (cancelled) return;
         setResult(body.result);
         setItems(body.items);
+        setCompetencyProfiles(body.competencyProfiles ?? {});
       })
       .catch(() => {
         if (!cancelled) setError('Could not load this report card.');
@@ -100,18 +110,35 @@ function ReportCardContent({ studentId }: { studentId: string }) {
         <ErrorState message="No graded subjects on this result yet." />
       ) : (
         <Card style={{ padding: 'var(--pb-space-4)' }}>
-          {items.map((item) => (
-            <div key={item.subject_id} className={styles.subjectRow}>
-              <div>
-                <div className={styles.subjectName}>{item.subject_name}</div>
-                {item.remark && <div className={styles.gradeText}>{item.remark}</div>}
+          {items.map((item) => {
+            const profile = competencyProfiles[item.subject_id];
+            return (
+              <div key={item.subject_id} className={styles.subjectBlock}>
+                <div className={styles.subjectRow}>
+                  <div>
+                    <div className={styles.subjectName}>{item.subject_name}</div>
+                    {item.remark && <div className={styles.gradeText}>{item.remark}</div>}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div>{Number(item.percentage).toFixed(1)}%</div>
+                    <Pill variant={item.is_pass ? 'success' : 'danger'}>{item.grade}</Pill>
+                  </div>
+                </div>
+                {profile && profile.length > 0 && (
+                  <div className={styles.competencyList}>
+                    {profile.map((row) => (
+                      <div key={row.indicatorId} className={styles.competencyRow}>
+                        <span>
+                          {row.indicatorCode} — {row.indicatorText}
+                        </span>
+                        <Pill variant={!row.scored ? 'neutral' : row.passed ? 'success' : 'danger'}>{!row.scored ? 'not yet assessed' : row.passed ? 'achieved' : 'developing'}</Pill>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div>{Number(item.percentage).toFixed(1)}%</div>
-                <Pill variant={item.is_pass ? 'success' : 'danger'}>{item.grade}</Pill>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </Card>
       )}
 

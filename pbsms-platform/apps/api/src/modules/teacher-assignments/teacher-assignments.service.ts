@@ -13,9 +13,10 @@
  * contactGuardian() -> CommunicationService.
  */
 
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDatabaseService } from '../../common/database/tenant-database.service';
 import { TenantContextStore } from '../../common/tenant/tenant-context';
+import { ACADEMIC_ADMIN } from '../../common/auth/role-groups';
 
 export interface TeacherAssignment {
   id: string;
@@ -59,7 +60,20 @@ export class TeacherAssignmentsService {
     return rows[0];
   }
 
+  private isCallerAcademicAdmin(): boolean {
+    const { roles } = TenantContextStore.current();
+    return roles.some((r) => (ACADEMIC_ADMIN as readonly string[]).includes(r));
+  }
+
+  /** Chapter 13.3 record-level scoping: a non-admin caller only ever sees
+   * their own assignments, regardless of what teacherId (if any) they
+   * pass — this module's own header comment used to document this as a
+   * known, deferred gap. */
   async findAll(filter: TeacherAssignmentFilter): Promise<TeacherAssignment[]> {
+    if (!this.isCallerAcademicAdmin()) {
+      const { userId } = TenantContextStore.current();
+      filter = { ...filter, teacherId: userId };
+    }
     const conditions: string[] = [];
     const params: string[] = [];
     if (filter.teacherId) {
@@ -89,6 +103,12 @@ export class TeacherAssignmentsService {
     const rows = await this.db.query<TeacherAssignment>(`select * from teacher_assignments where id = $1`, [id]);
     if (rows.length === 0) {
       throw new NotFoundException(`Teacher assignment ${id} not found`);
+    }
+    if (!this.isCallerAcademicAdmin()) {
+      const { userId } = TenantContextStore.current();
+      if (rows[0].teacher_id !== userId) {
+        throw new ForbiddenException(`Teacher assignment ${id} does not belong to you`);
+      }
     }
     return rows[0];
   }

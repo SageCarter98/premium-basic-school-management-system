@@ -73,6 +73,18 @@ export interface RetentionEligibilityRow {
   oldestDate: string | null;
 }
 
+export interface AuditLogEntry {
+  id: string;
+  actor_user_id: string;
+  actor_role_codes: string[];
+  action: string;
+  method: string;
+  path: string;
+  status_code: number;
+  detail: Record<string, unknown> | null;
+  created_at: string;
+}
+
 @Injectable()
 export class DataProtectionService {
   constructor(
@@ -280,6 +292,30 @@ export class DataProtectionService {
     return this.db.query<ConsentRecord>(
       `select * from consent_records where subject_type = $1 and subject_id = $2 order by version desc`,
       [subjectType, subjectId],
+    );
+  }
+
+  // --------------------------------------------------------------------
+  // Audit log viewer (Chapter 39-40's "tenant-visible audit log" —
+  // 0016_authorization.sql's audit_log table already exists and
+  // pbsms_app already has SELECT on it (RLS scopes every row to the
+  // current tenant automatically), this was purely a missing read path,
+  // not a missing schema. Genuinely NOT built: incl. platform actions —
+  // TEN-022's platform_audit_logs half lives in an entirely separate
+  // table this tenant-scoped role has no grant on at all, and merging
+  // the two into one feed is a real design question (different actor
+  // kinds, different retention rules) left for whoever picks that up.
+  // --------------------------------------------------------------------
+
+  async findAuditLog(filters: { actorUserId?: string; action?: string }): Promise<AuditLogEntry[]> {
+    return this.db.query<AuditLogEntry>(
+      `select id, actor_user_id, actor_role_codes, action, method, path, status_code, detail, created_at
+       from audit_log
+       where ($1::uuid is null or actor_user_id = $1)
+         and ($2::text is null or action = $2)
+       order by created_at desc
+       limit 200`,
+      [filters.actorUserId ?? null, filters.action ?? null],
     );
   }
 }

@@ -28,6 +28,16 @@ interface TransportStop {
   route_id: string;
   name: string;
   sequence_no: number;
+  latitude: string | null;
+  longitude: string | null;
+}
+interface TransportVehicleLocation {
+  id: string;
+  vehicle_id: string;
+  latitude: string;
+  longitude: string;
+  recorded_at: string;
+  reported_by: string;
 }
 interface TransportVehicle {
   id: string;
@@ -63,10 +73,15 @@ function studentName(students: Student[], id: string): string {
   return s ? `${s.last_name}, ${s.first_name}` : id.slice(0, 8) + '…';
 }
 
-const TABS = ['Routes & Stops', 'Vehicles & Drivers', 'Student Assignments'] as const;
+const TABS = ['Routes & Stops', 'Vehicles & Drivers', 'Student Assignments', 'Live Tracking'] as const;
 type Tab = (typeof TABS)[number];
 
-/** SRS Chapter 28 (spec §7.13 "Transport — routes, stops, vehicles, assignments"). GPS-based arrival notification is explicitly not built in the backend. */
+/** SRS Chapter 28 (spec §7.13 "Transport — routes, stops, vehicles,
+ * assignments"). GPS-based arrival notification (0035_transport_gps.sql)
+ * has no real device/vendor integration — Live Tracking posts
+ * manually-entered coordinates through the same endpoint a real GPS
+ * device or driver app would call, same "seam is real, wiring is later"
+ * pattern the Reconciliation Workspace uses for provider settlement data. */
 export default function TransportPage() {
   const [tab, setTab] = useState<Tab>('Routes & Stops');
   const roleCodes = decodeAccessToken()?.roleCodes ?? [];
@@ -128,6 +143,7 @@ export default function TransportPage() {
         {tab === 'Routes & Stops' && <RoutesTab routes={routes} onChanged={reloadShared} />}
         {tab === 'Vehicles & Drivers' && <VehiclesDriversTab routes={routes} vehicles={vehicles} drivers={drivers} onChanged={reloadShared} />}
         {tab === 'Student Assignments' && <AssignmentsTab students={students} routes={routes} />}
+        {tab === 'Live Tracking' && <LiveTrackingTab vehicles={vehicles} />}
       </Card>
     </div>
   );
@@ -141,6 +157,7 @@ function RoutesTab({ routes, onChanged }: { routes: TransportRoute[]; onChanged:
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [stops, setStops] = useState<TransportStop[]>([]);
   const [stopForm, setStopForm] = useState({ name: '', sequenceNo: '1' });
+  const [locationForm, setLocationForm] = useState<Record<string, { latitude: string; longitude: string }>>({});
 
   async function handleCreate() {
     setSaving(true);
@@ -172,6 +189,18 @@ function RoutesTab({ routes, onChanged }: { routes: TransportRoute[]; onChanged:
     const res = await apiFetch(`/v1/transport/routes/${routeId}/stops`, { method: 'POST', body: JSON.stringify({ name: stopForm.name, sequenceNo: Number(stopForm.sequenceNo) }) });
     if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
     setStopForm({ name: '', sequenceNo: String(Number(stopForm.sequenceNo) + 1) });
+    setStops(await apiGet<TransportStop[]>(`/v1/transport/routes/${routeId}/stops`));
+  }
+
+  async function saveStopLocation(routeId: string, stopId: string) {
+    setError(null);
+    const f = locationForm[stopId];
+    if (!f?.latitude || !f?.longitude) return;
+    const res = await apiFetch(`/v1/transport/stops/${stopId}/location`, {
+      method: 'POST',
+      body: JSON.stringify({ latitude: Number(f.latitude), longitude: Number(f.longitude) }),
+    });
+    if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
     setStops(await apiGet<TransportStop[]>(`/v1/transport/routes/${routeId}/stops`));
   }
 
@@ -210,8 +239,40 @@ function RoutesTab({ routes, onChanged }: { routes: TransportRoute[]; onChanged:
                     .slice()
                     .sort((a, b) => a.sequence_no - b.sequence_no)
                     .map((s) => (
-                      <div key={s.id} className={styles.listRow}>
-                        <span>#{s.sequence_no} {s.name}</span>
+                      <div key={s.id}>
+                        <div className={styles.listRow}>
+                          <span>#{s.sequence_no} {s.name}</span>
+                          {s.latitude && s.longitude ? (
+                            <Pill variant="success">
+                              {Number(s.latitude).toFixed(4)}, {Number(s.longitude).toFixed(4)}
+                            </Pill>
+                          ) : (
+                            <Pill variant="neutral">no location</Pill>
+                          )}
+                        </div>
+                        <div className={styles.formRow}>
+                          <input
+                            aria-label={`${s.name} latitude`}
+                            className={styles.textInput}
+                            type="number"
+                            step="0.000001"
+                            placeholder="Latitude"
+                            value={locationForm[s.id]?.latitude ?? ''}
+                            onChange={(e) => setLocationForm({ ...locationForm, [s.id]: { ...locationForm[s.id], latitude: e.target.value, longitude: locationForm[s.id]?.longitude ?? '' } })}
+                          />
+                          <input
+                            aria-label={`${s.name} longitude`}
+                            className={styles.textInput}
+                            type="number"
+                            step="0.000001"
+                            placeholder="Longitude"
+                            value={locationForm[s.id]?.longitude ?? ''}
+                            onChange={(e) => setLocationForm({ ...locationForm, [s.id]: { ...locationForm[s.id], longitude: e.target.value, latitude: locationForm[s.id]?.latitude ?? '' } })}
+                          />
+                          <Button type="button" variant="secondary" onClick={() => saveStopLocation(r.id, s.id)} disabled={!locationForm[s.id]?.latitude || !locationForm[s.id]?.longitude}>
+                            {s.latitude ? 'Update location' : 'Set location'}
+                          </Button>
+                        </div>
                       </div>
                     ))
                 )}
@@ -449,6 +510,90 @@ function AssignmentsTab({ students, routes }: { students: Student[]; routes: Tra
                 </Button>
               )}
             </span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function LiveTrackingTab({ vehicles }: { vehicles: TransportVehicle[] }) {
+  const [vehicleId, setVehicleId] = useState(vehicles[0]?.id ?? '');
+  const [form, setForm] = useState({ latitude: '', longitude: '' });
+  const [locations, setLocations] = useState<TransportVehicleLocation[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  function reload(id: string) {
+    if (!id) return;
+    setLoading(true);
+    apiGet<TransportVehicleLocation[]>(`/v1/transport/vehicles/${id}/locations`)
+      .then(setLocations)
+      .finally(() => setLoading(false));
+  }
+  useEffect(() => {
+    reload(vehicleId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicleId]);
+
+  async function recordLocation() {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    const res = await apiFetch(`/v1/transport/vehicles/${vehicleId}/locations`, {
+      method: 'POST',
+      body: JSON.stringify({ latitude: Number(form.latitude), longitude: Number(form.longitude) }),
+    });
+    setBusy(false);
+    if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
+    setResult('Location recorded. Guardians of any students at a stop within range are notified automatically.');
+    setForm({ latitude: '', longitude: '' });
+    reload(vehicleId);
+  }
+
+  if (vehicles.length === 0) {
+    return <EmptyState title="No vehicles yet" message="Add a vehicle on the Vehicles & Drivers tab first." />;
+  }
+
+  return (
+    <div>
+      <p className={styles.hint}>
+        No real GPS device is connected in this environment — this posts a manually-entered position through the same endpoint a driver&apos;s phone or a real GPS unit would call. Guardians of
+        students assigned to a geo-located stop within 300m are notified automatically, at most once every 30 minutes per stop.
+      </p>
+      <div className={styles.formRow}>
+        <select aria-label="Vehicle" className={styles.select} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+          {vehicles.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.registration_no}
+            </option>
+          ))}
+        </select>
+        <input aria-label="Latitude" className={styles.textInput} type="number" step="0.000001" placeholder="Latitude" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} />
+        <input aria-label="Longitude" className={styles.textInput} type="number" step="0.000001" placeholder="Longitude" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} />
+        <Button type="button" onClick={recordLocation} disabled={busy || !vehicleId || !form.latitude || !form.longitude}>
+          Record location
+        </Button>
+      </div>
+      {error && <ErrorState message={error} />}
+      {result && <p className={styles.hint}>{result}</p>}
+
+      <p className={styles.hint} style={{ marginTop: 'var(--pb-space-3)' }}>
+        Recent positions
+      </p>
+      {loading ? (
+        <LoadingState label="Loading positions" rows={3} />
+      ) : locations.length === 0 ? (
+        <EmptyState title="No positions recorded yet" message="Record one above." />
+      ) : (
+        locations.map((loc) => (
+          <div key={loc.id} className={styles.listRow}>
+            <span>
+              {Number(loc.latitude).toFixed(6)}, {Number(loc.longitude).toFixed(6)}
+            </span>
+            <span className={styles.hint}>{new Date(loc.recorded_at).toLocaleString()}</span>
           </div>
         ))
       )}

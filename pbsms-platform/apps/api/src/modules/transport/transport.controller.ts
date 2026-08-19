@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { TransportService } from './transport.service';
 import { CreateRouteDto } from './dto/create-route.dto';
 import { AddStopDto } from './dto/add-stop.dto';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { AssignStudentDto } from './dto/assign-student.dto';
+import { SetStopLocationDto } from './dto/set-stop-location.dto';
+import { RecordVehicleLocationDto } from './dto/record-vehicle-location.dto';
 import { Roles } from '../../common/auth/roles.decorator';
 import { TRANSPORT_TEAM } from '../../common/auth/role-groups';
 
@@ -46,6 +48,12 @@ export class TransportController {
   }
 
   @Roles(...TRANSPORT_TEAM)
+  @Post('stops/:id/location')
+  setStopLocation(@Param('id') id: string, @Body() body: SetStopLocationDto) {
+    return this.transport.setStopLocation(id, body);
+  }
+
+  @Roles(...TRANSPORT_TEAM)
   @Post('vehicles')
   createVehicle(@Body() body: CreateVehicleDto) {
     return this.transport.createVehicle(body);
@@ -67,6 +75,18 @@ export class TransportController {
   @Post('vehicles/:id/assign-route/:routeId')
   assignVehicleToRoute(@Param('id') id: string, @Param('routeId') routeId: string) {
     return this.transport.assignVehicleToRoute(id, routeId);
+  }
+
+  @Roles(...TRANSPORT_TEAM)
+  @Post('vehicles/:id/locations')
+  recordVehicleLocation(@Param('id') id: string, @Body() body: RecordVehicleLocationDto) {
+    return this.transport.recordVehicleLocation(id, body);
+  }
+
+  @Roles(...TRANSPORT_TEAM)
+  @Get('vehicles/:id/locations')
+  findVehicleLocations(@Param('id') id: string, @Query('limit') limit?: string) {
+    return this.transport.findVehicleLocations(id, limit ? Number(limit) : undefined);
   }
 
   @Roles(...TRANSPORT_TEAM)

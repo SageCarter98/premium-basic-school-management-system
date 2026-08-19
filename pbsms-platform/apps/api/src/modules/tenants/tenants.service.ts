@@ -63,7 +63,10 @@ export interface CreateTenantInput {
   trialDays?: number;
   // Optional at creation — TEN-023 only requires a plan to be set before
   // trial->onboarding, not at signup. Changing an already-assigned plan
-  // (upgrade/downgrade) is Chapter 5 / a later Phase A item, not built here.
+  // (upgrade/downgrade) is real and already built — billing.service.ts's
+  // assignPlan() ends the current tenant_subscriptions row and inserts a
+  // new one in one transaction; this comment used to flag it as a later
+  // Phase A item, written before that method existed.
   planId?: string;
 }
 

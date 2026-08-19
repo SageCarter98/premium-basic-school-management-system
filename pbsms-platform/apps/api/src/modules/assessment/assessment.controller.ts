@@ -3,6 +3,7 @@ import { AssessmentService } from './assessment.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { CreateAssessmentStructureDto } from './dto/create-assessment-structure.dto';
 import { AddAssessmentComponentDto } from './dto/add-assessment-component.dto';
+import { CreateComponentTypeDto } from './dto/create-component-type.dto';
 import { ReopenAssessmentStructureDto } from './dto/reopen-assessment-structure.dto';
 import { UpsertScoreDto } from './dto/upsert-score.dto';
 import { Roles } from '../../common/auth/roles.decorator';
@@ -30,6 +31,18 @@ export class AssessmentController {
   @Get('subjects')
   findAllSubjects() {
     return this.assessment.findAllSubjects();
+  }
+
+  @Roles(...ACADEMIC_ADMIN)
+  @Post('component-types')
+  createComponentType(@Body() body: CreateComponentTypeDto) {
+    return this.assessment.createComponentType(body);
+  }
+
+  @Roles(...ACADEMIC_STAFF)
+  @Get('component-types')
+  findComponentTypes() {
+    return this.assessment.findComponentTypes();
   }
 
   @Roles(...ACADEMIC_ADMIN)

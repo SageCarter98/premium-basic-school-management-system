@@ -34,6 +34,16 @@ interface DataInventoryEntry {
   sensitivity_classification: string;
   source_tables: string[];
 }
+interface AuditLogEntry {
+  id: string;
+  actor_user_id: string;
+  actor_role_codes: string[];
+  action: string;
+  method: string;
+  path: string;
+  status_code: number;
+  created_at: string;
+}
 interface RetentionPolicy {
   id: string;
   record_type: string;
@@ -90,17 +100,18 @@ const DSR_STATUS_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'neu
   rejected: 'danger',
 };
 
-const TABS = ['Data Subject Requests', 'Consent', 'Data Inventory', 'Retention'] as const;
+const TABS = ['Data Subject Requests', 'Consent', 'Data Inventory', 'Retention', 'Audit Log'] as const;
 type Tab = (typeof TABS)[number];
 
 /**
- * SRS §7.14 "Compliance & Curriculum" (Volume V, DP-030/090). Two spec
- * items genuinely not built here, flagged not faked: "Audit log viewer
- * (tenant-visible, incl. platform actions)" has no read endpoint
- * anywhere in this backend (audit_log is written by AuditLogInterceptor
- * but nothing exposes a GET on it); and retention is reporting-only —
- * there is no purge mechanism anywhere, so this page can only ever show
- * counts, never a "purge now" action.
+ * SRS §7.14 "Compliance & Curriculum" (Volume V, DP-030/090). One spec
+ * item genuinely not built here, flagged not faked: retention is
+ * reporting-only — there is no purge mechanism anywhere, so the
+ * Retention tab can only ever show counts, never a "purge now" action.
+ * The audit log viewer (tenant-visible only, not platform actions —
+ * those live in a separate table this tenant role has no grant on)
+ * closes what was previously flagged as a missing read endpoint; see
+ * apps/web/README.md's post-Stage-9 gap closure section.
  */
 export default function CompliancePage() {
   const [tab, setTab] = useState<Tab>('Data Subject Requests');
@@ -155,6 +166,7 @@ export default function CompliancePage() {
         {tab === 'Consent' && <ConsentTab students={students} guardians={guardians} staff={staff} />}
         {tab === 'Data Inventory' && <DataInventoryTab />}
         {tab === 'Retention' && <RetentionTab canManage={canManageRequests} />}
+        {tab === 'Audit Log' && <AuditLogTab staff={staff} canManage={canManageRequests} />}
       </Card>
     </div>
   );
@@ -502,6 +514,94 @@ function RetentionTab({ canManage }: { canManage: boolean }) {
             ))
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function AuditLogTab({ staff, canManage }: { staff: StaffMember[]; canManage: boolean }) {
+  const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const [actorFilter, setActorFilter] = useState('');
+  const [actionFilter, setActionFilter] = useState('');
+
+  function reload(actorUserId: string, action: string) {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (actorUserId) params.set('actorUserId', actorUserId);
+    if (action) params.set('action', action);
+    const qs = params.toString();
+    apiGet<AuditLogEntry[]>(`/v1/data-protection/audit-log${qs ? `?${qs}` : ''}`)
+      .then(setEntries)
+      .finally(() => setLoading(false));
+  }
+  useEffect(() => {
+    if (canManage) reload('', '');
+    else setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManage]);
+
+  function actorName(id: string) {
+    return staff.find((s) => s.id === id)?.full_name ?? id;
+  }
+
+  if (!canManage) {
+    return <RestrictedState message="The audit log is available to school leadership only." />;
+  }
+  if (loading) return <LoadingState label="Loading audit log" rows={4} />;
+
+  return (
+    <div>
+      <p className={styles.hint}>
+        This tenant&apos;s own actions only (create/edit/archive against every endpoint), not platform-actor actions taken during a support impersonation session — those are logged separately
+        and aren&apos;t readable from this role. Shows the most recent 200 entries.
+      </p>
+      <div className={styles.formRow}>
+        <select
+          aria-label="Filter by staff member"
+          className={styles.select}
+          value={actorFilter}
+          onChange={(e) => {
+            setActorFilter(e.target.value);
+            reload(e.target.value, actionFilter);
+          }}
+        >
+          <option value="">All staff</option>
+          {staff.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.full_name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Filter by action"
+          className={styles.select}
+          value={actionFilter}
+          onChange={(e) => {
+            setActionFilter(e.target.value);
+            reload(actorFilter, e.target.value);
+          }}
+        >
+          <option value="">All actions</option>
+          <option value="create">Create</option>
+          <option value="edit">Edit</option>
+          <option value="archive">Archive</option>
+        </select>
+      </div>
+      {entries.length === 0 ? (
+        <EmptyState title="No audit entries" message="Nothing matches this filter." />
+      ) : (
+        entries.map((e) => (
+          <div key={e.id} className={styles.listRow}>
+            <span>
+              {actorName(e.actor_user_id)} — {e.action} {e.path}
+            </span>
+            <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
+              <Pill variant={e.status_code < 400 ? 'success' : 'danger'}>{e.status_code}</Pill>
+              <span className={styles.hint}>{new Date(e.created_at).toLocaleString()}</span>
+            </span>
+          </div>
+        ))
       )}
     </div>
   );

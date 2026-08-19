@@ -18,6 +18,28 @@ import { AddStopDto } from './dto/add-stop.dto';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { AssignStudentDto } from './dto/assign-student.dto';
+import { SetStopLocationDto } from './dto/set-stop-location.dto';
+import { RecordVehicleLocationDto } from './dto/record-vehicle-location.dto';
+import { GuardiansService } from '../guardians/guardians.service';
+import { CommunicationService } from '../communication/communication.service';
+
+// FR-OPS-020's "GPS-based arrival notification" thresholds. No spec-given
+// values exist for either — a school bus's own GPS accuracy is typically
+// tens of meters, so 300m keeps false negatives (never firing) rarer than
+// false positives (firing a stop early); 30 minutes keeps a vehicle
+// dwelling near a stop (traffic, another stop 200m away) from re-notifying
+// every single ping.
+const ARRIVAL_THRESHOLD_METERS = 300;
+const NOTIFICATION_COOLDOWN_MINUTES = 30;
+
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 export interface TransportRoute {
   id: string;
@@ -32,6 +54,18 @@ export interface TransportStop {
   route_id: string;
   name: string;
   sequence_no: number;
+  latitude: string | null;
+  longitude: string | null;
+}
+
+export interface TransportVehicleLocation {
+  id: string;
+  tenant_id: string;
+  vehicle_id: string;
+  latitude: string;
+  longitude: string;
+  recorded_at: string;
+  reported_by: string;
 }
 
 export interface TransportVehicle {
@@ -64,7 +98,11 @@ export interface TransportStudentAssignment {
 
 @Injectable()
 export class TransportService {
-  constructor(private readonly db: TenantDatabaseService) {}
+  constructor(
+    private readonly db: TenantDatabaseService,
+    private readonly guardians: GuardiansService,
+    private readonly communication: CommunicationService,
+  ) {}
 
   // ---------------------------------------------------------------------
   // Routes & stops
@@ -109,6 +147,23 @@ export class TransportService {
     return this.db.query<TransportStop>(`select * from transport_stops where route_id = $1 order by sequence_no`, [
       routeId,
     ]);
+  }
+
+  private async findStop(id: string): Promise<TransportStop> {
+    const rows = await this.db.query<TransportStop>(`select * from transport_stops where id = $1`, [id]);
+    if (rows.length === 0) {
+      throw new NotFoundException(`Transport stop ${id} not found`);
+    }
+    return rows[0];
+  }
+
+  async setStopLocation(stopId: string, input: SetStopLocationDto): Promise<TransportStop> {
+    await this.findStop(stopId);
+    const rows = await this.db.query<TransportStop>(
+      `update transport_stops set latitude = $1, longitude = $2 where id = $3 returning *`,
+      [input.latitude, input.longitude, stopId],
+    );
+    return rows[0];
   }
 
   // ---------------------------------------------------------------------
@@ -237,5 +292,106 @@ export class TransportService {
       [userId, id],
     );
     return rows[0];
+  }
+
+  // ---------------------------------------------------------------------
+  // GPS-based arrival notification (FR-OPS-020, 0035_transport_gps.sql).
+  // No device/vendor integration exists — recordVehicleLocation() is the
+  // real seam any GPS device or driver-facing app would call; today it's
+  // called with manually-entered coordinates the same way payments are
+  // manually recorded rather than arriving via a provider webhook.
+  // ---------------------------------------------------------------------
+
+  async recordVehicleLocation(vehicleId: string, input: RecordVehicleLocationDto): Promise<TransportVehicleLocation> {
+    const { userId } = TenantContextStore.current();
+    const vehicle = await this.findVehicle(vehicleId);
+    const rows = await this.db.query<TransportVehicleLocation>(
+      `insert into transport_vehicle_locations (tenant_id, vehicle_id, latitude, longitude, reported_by)
+       values (current_tenant_id(), $1, $2, $3, $4)
+       returning *`,
+      [vehicleId, input.latitude, input.longitude, userId],
+    );
+    const location = rows[0];
+
+    if (vehicle.route_id) {
+      await this.checkArrivals(vehicle, location);
+    }
+    return location;
+  }
+
+  async findVehicleLocations(vehicleId: string, limit = 50): Promise<TransportVehicleLocation[]> {
+    await this.findVehicle(vehicleId);
+    return this.db.query<TransportVehicleLocation>(
+      `select * from transport_vehicle_locations where vehicle_id = $1 order by recorded_at desc limit $2`,
+      [vehicleId, limit],
+    );
+  }
+
+  /** Checks every geo-located stop on the vehicle's route against the just-
+   * recorded position; a stop within ARRIVAL_THRESHOLD_METERS that hasn't
+   * already notified within NOTIFICATION_COOLDOWN_MINUTES gets a fresh
+   * transport_stop_arrivals row and a real notification to every guardian
+   * of every student assigned to that stop. One bad recipient must not
+   * block the rest — same per-item isolation mass-notification.handler.ts
+   * uses for the same reason. */
+  private async checkArrivals(vehicle: TransportVehicle, location: TransportVehicleLocation): Promise<void> {
+    const stops = await this.db.query<TransportStop>(
+      `select * from transport_stops where route_id = $1 and latitude is not null and longitude is not null`,
+      [vehicle.route_id],
+    );
+    for (const stop of stops) {
+      const distance = haversineMeters(Number(location.latitude), Number(location.longitude), Number(stop.latitude), Number(stop.longitude));
+      if (distance > ARRIVAL_THRESHOLD_METERS) continue;
+
+      const recentArrival = await this.db.query<{ id: string }>(
+        `select id from transport_stop_arrivals
+         where vehicle_id = $1 and stop_id = $2 and notified_at > now() - interval '${NOTIFICATION_COOLDOWN_MINUTES} minutes'
+         limit 1`,
+        [vehicle.id, stop.id],
+      );
+      if (recentArrival.length > 0) continue;
+
+      await this.db.query(
+        `insert into transport_stop_arrivals (tenant_id, vehicle_id, stop_id) values (current_tenant_id(), $1, $2)`,
+        [vehicle.id, stop.id],
+      );
+      await this.notifyGuardiansOfArrival(stop, vehicle);
+    }
+  }
+
+  private async notifyGuardiansOfArrival(stop: TransportStop, vehicle: TransportVehicle): Promise<void> {
+    const assignments = await this.db.query<{ student_id: string }>(
+      `select student_id from transport_student_assignments where stop_id = $1 and status = 'active'`,
+      [stop.id],
+    );
+    const seenGuardians = new Set<string>();
+    for (const { student_id } of assignments) {
+      let links;
+      try {
+        links = await this.guardians.findForStudent(student_id);
+      } catch {
+        continue; // one student's link lookup failing must not block the rest
+      }
+      for (const link of links) {
+        if (seenGuardians.has(link.guardian_id)) continue;
+        seenGuardians.add(link.guardian_id);
+        try {
+          const notification = await this.communication.createNotification({
+            recipientType: 'guardian',
+            recipientId: link.guardian_id,
+            recipientName: link.full_name,
+            recipientPhone: link.phone ?? undefined,
+            recipientEmail: link.email ?? undefined,
+            subject: 'Bus arriving',
+            body: `The bus for route "${vehicle.registration_no}" is now near ${stop.name}.`,
+            sensitivityLevel: 'normal',
+            isUrgent: true,
+          });
+          await this.communication.send(notification.id);
+        } catch {
+          continue; // one failed dispatch must not block the rest
+        }
+      }
+    }
   }
 }

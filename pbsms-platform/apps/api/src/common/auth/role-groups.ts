@@ -5,12 +5,16 @@
  * its own narrower tiers inline — see finance.controller.ts) rather than
  * hand-rolling role arrays per file.
  *
- * These are ROLE tiers only (Chapter 13.2). They are NOT record-relationship
- * scope (Chapter 13.3 — assigned students / linked children / record
- * ownership) — that depends on guardians/teacher-assignment existing as
- * real entities, which they don't yet (see README's deferred-items list).
- * A 'teacher' granted TEACHING_STAFF access can act on ANY class's records
- * via these endpoints today, not just their own assigned class.
+ * These are ROLE tiers only (Chapter 13.2), not record-relationship scope
+ * (Chapter 13.3 — assigned students / linked children / record ownership).
+ * `teacher_assignments` is the real entity that backs Chapter 13.3's
+ * "assigned class" scope — `TeacherAssignmentsService.
+ * hasAnyActiveAssignmentForClass()` is the enforcement point, wired into
+ * attendance sync, assessment score entry, results submit/reopen,
+ * discipline (cases/notes/recognitions), and teacher-assignments' own
+ * findAll()/findOne(). Modules not listed here (e.g. library, transport)
+ * still rely on role tier alone — check each module's own header comment
+ * before assuming Chapter 13.3 scoping applies to it.
  */
 
 export const LEADERSHIP = ['proprietor', 'administrator', 'headmaster'];

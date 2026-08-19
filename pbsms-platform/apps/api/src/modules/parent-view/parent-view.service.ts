@@ -20,6 +20,7 @@ import { TenantDatabaseService } from '../../common/database/tenant-database.ser
 import { TenantContextStore } from '../../common/tenant/tenant-context';
 import { ResultsService, StudentResult, StudentResultItem } from '../results/results.service';
 import { FinanceService, Invoice, InvoiceBalance } from '../finance/finance.service';
+import { NaccaService, CompetencyProfileRow } from '../nacca/nacca.service';
 
 interface LinkedStudentRow {
   student_id: string;
@@ -55,6 +56,7 @@ export class ParentViewService {
     private readonly db: TenantDatabaseService,
     private readonly results: ResultsService,
     private readonly finance: FinanceService,
+    private readonly nacca: NaccaService,
   ) {}
 
   private guardianId(): string {
@@ -163,7 +165,10 @@ export class ParentViewService {
    * are reachable") — omit it to get the current one. Either way the
    * result's student_id is re-checked against this guardian's real link,
    * never trusted from the URL alone. */
-  async getReportCard(studentId: string, resultId?: string): Promise<{ result: StudentResult; items: StudentResultItem[] }> {
+  async getReportCard(
+    studentId: string,
+    resultId?: string,
+  ): Promise<{ result: StudentResult; items: StudentResultItem[]; competencyProfiles: Record<string, CompetencyProfileRow[]> }> {
     const link = await this.assertLinked(studentId);
     if (!link.has_report_access) {
       throw new ForbiddenException('This access link does not include report access for this student');
@@ -182,7 +187,22 @@ export class ParentViewService {
       result = latest;
     }
     const items = await this.results.findItems(result.id);
-    return { result, items };
+
+    // NaCCA competency data composed here, server-side, rather than a
+    // second frontend call — the guardian access token this whole module
+    // runs under isn't authorized to call /v1/nacca/* directly (Parent
+    // View has its own tenant.middleware.ts branch, separate from the
+    // Bearer-JWT path that route requires). Returns [] per subject when
+    // the tenant hasn't adopted NaCCA or configured indicators for it —
+    // competencyProfile() itself has no adoption gate, an empty join
+    // result is the natural "nothing configured" case, not an error.
+    const profiles = await Promise.all(items.map((item) => this.nacca.competencyProfile(studentId, item.subject_id, result.academic_year_id)));
+    const competencyProfiles: Record<string, CompetencyProfileRow[]> = {};
+    items.forEach((item, i) => {
+      if (profiles[i].length > 0) competencyProfiles[item.subject_id] = profiles[i];
+    });
+
+    return { result, items, competencyProfiles };
   }
 
   /** Spec §8.6's "Balance"/"[See statement]". */

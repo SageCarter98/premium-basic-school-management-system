@@ -173,15 +173,17 @@ export class DocumentsService {
     }
 
     const items = await this.db.query<{
+      subject_id: string;
       subject_name: string;
       percentage: string;
       grade: string;
       point: string | null;
       remark: string | null;
       is_pass: boolean;
-    }>(`select subject_name, percentage, grade, point, remark, is_pass from student_result_items where student_result_id = $1 order by subject_name`, [
-      result.id,
-    ]);
+    }>(
+      `select subject_id, subject_name, percentage, grade, point, remark, is_pass from student_result_items where student_result_id = $1 order by subject_name`,
+      [result.id],
+    );
 
     const [student, klass, year, branding] = await Promise.all([
       this.db.query<{ first_name: string; last_name: string; admission_no: string }>(

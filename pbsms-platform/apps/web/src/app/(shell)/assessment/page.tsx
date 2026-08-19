@@ -179,21 +179,52 @@ function StructureDetail({
   const [loading, setLoading] = useState(true);
   const [structure, setStructure] = useState<AssessmentStructure | null>(null);
   const [components, setComponents] = useState<AssessmentComponent[]>([]);
+  const [customTypes, setCustomTypes] = useState<{ code: string; name: string }[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ componentType: COMPONENT_TYPES[0], weight: '', maxScore: '100' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAddType, setShowAddType] = useState(false);
+  const [typeForm, setTypeForm] = useState({ code: '', name: '' });
+  const [typeError, setTypeError] = useState<string | null>(null);
+
+  const allComponentTypes = [...COMPONENT_TYPES, ...customTypes.map((t) => t.code)];
 
   function reload() {
     setLoading(true);
-    Promise.all([apiGet<AssessmentStructure>(`/v1/assessment/structures/${structureId}`), apiGet<AssessmentComponent[]>(`/v1/assessment/structures/${structureId}/components`)])
-      .then(([s, c]) => {
+    Promise.all([
+      apiGet<AssessmentStructure>(`/v1/assessment/structures/${structureId}`),
+      apiGet<AssessmentComponent[]>(`/v1/assessment/structures/${structureId}/components`),
+      apiGet<{ code: string; name: string }[]>('/v1/assessment/component-types'),
+    ])
+      .then(([s, c, t]) => {
         setStructure(s);
         setComponents(c);
+        setCustomTypes(t);
       })
       .finally(() => setLoading(false));
   }
   useEffect(reload, [structureId]);
+
+  async function handleAddType() {
+    setSaving(true);
+    setTypeError(null);
+    try {
+      const res = await apiFetch('/v1/assessment/component-types', { method: 'POST', body: JSON.stringify(typeForm) });
+      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? `Failed (${res.status})`);
+      setShowAddType(false);
+      setTypeForm({ code: '', name: '' });
+      reload();
+    } catch (err) {
+      setTypeError(err instanceof Error ? err.message : 'Could not add component type.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function typeLabel(code: string): string {
+    return customTypes.find((t) => t.code === code)?.name ?? componentTypeLabel(code);
+  }
 
   const totalWeight = useMemo(() => components.reduce((sum, c) => sum + Number(c.weight), 0), [components]);
   const weightOk = Math.abs(totalWeight - 100) < 0.01;
@@ -299,7 +330,7 @@ function StructureDetail({
       ) : (
         components.map((c) => (
           <div key={c.id} className={styles.listRow} style={{ cursor: 'default' }}>
-            <span>{componentTypeLabel(c.component_type)}</span>
+            <span>{typeLabel(c.component_type)}</span>
             <span style={{ color: 'var(--pb-ink-muted)' }}>
               {c.weight}% · out of {c.max_score}
             </span>
@@ -314,10 +345,10 @@ function StructureDetail({
           </Button>
           {showAdd && (
             <div className={styles.formRow} style={{ marginTop: 'var(--pb-space-3)' }}>
-              <select className={styles.select} value={form.componentType} onChange={(e) => setForm({ ...form, componentType: e.target.value })}>
-                {COMPONENT_TYPES.map((t) => (
+              <select aria-label="Component type" className={styles.select} value={form.componentType} onChange={(e) => setForm({ ...form, componentType: e.target.value })}>
+                {allComponentTypes.map((t) => (
                   <option key={t} value={t}>
-                    {componentTypeLabel(t)}
+                    {typeLabel(t)}
                   </option>
                 ))}
               </select>
@@ -328,6 +359,30 @@ function StructureDetail({
               </Button>
             </div>
           )}
+        </div>
+      )}
+
+      {canConfigure && (
+        <div style={{ marginTop: 'var(--pb-space-3)' }}>
+          <Button type="button" variant="secondary" onClick={() => setShowAddType((v) => !v)}>
+            {showAddType ? 'Cancel' : 'Add custom component type'}
+          </Button>
+          {showAddType && (
+            <div className={styles.formRow} style={{ marginTop: 'var(--pb-space-3)' }}>
+              <input
+                aria-label="Type code"
+                className={styles.textInput}
+                placeholder="Code, e.g. practical_exam"
+                value={typeForm.code}
+                onChange={(e) => setTypeForm({ ...typeForm, code: e.target.value })}
+              />
+              <input aria-label="Type name" className={styles.textInput} placeholder="Name, e.g. Practical Exam" value={typeForm.name} onChange={(e) => setTypeForm({ ...typeForm, name: e.target.value })} />
+              <Button type="button" onClick={handleAddType} disabled={saving || !typeForm.code || !typeForm.name}>
+                Save
+              </Button>
+            </div>
+          )}
+          {typeError && <ErrorState message={typeError} />}
         </div>
       )}
 

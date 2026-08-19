@@ -98,4 +98,10 @@ export class DataProtectionController {
   findConsentHistory(@Param('subjectType') subjectType: string, @Param('subjectId') subjectId: string) {
     return this.dataProtection.findConsentHistory(subjectType, subjectId);
   }
+
+  @Roles(...LEADERSHIP)
+  @Get('audit-log')
+  findAuditLog(@Query('actorUserId') actorUserId?: string, @Query('action') action?: string) {
+    return this.dataProtection.findAuditLog({ actorUserId, action });
+  }
 }

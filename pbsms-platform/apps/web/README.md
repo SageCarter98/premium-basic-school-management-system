@@ -332,10 +332,10 @@ attempted here.
 **Academic Structure (Chapter 17, spec §7.6).** `src/app/(shell)/classes/`
 — one tabbed hub (Academic Years, Classes, Subjects, Teacher Assignments)
 rather than four routes, all list+create on top of already-built backend
-endpoints. **Genuinely blocked, not deferred by choice**: the spec's
-Timetable builder/views pair has zero backing schema anywhere in
-`apps/api` (no periods/rooms/timetable table at all) — a real prerequisite
-gap, flagged rather than faked with a non-functional screen.
+endpoints. **Was genuinely blocked, now closed (2026-08-19)**: the spec's Timetable
+builder/views pair had zero backing schema — see "No-backing-schema gaps
+closed" below for the real `0033_timetable.sql` build and the new
+Timetable tab on this page.
 
 **Known gap, found live post-Stage-6, not yet fixed**: unlike every other
 Stage 5 screen (Students' `canCreate`, Assessment/Grading's
@@ -595,12 +595,14 @@ per role.
   concept at all. The Fee Structure detail panel says so explicitly rather
   than showing a non-functional control.
 - **Reconciliation Workspace (§8.8, "provider settlement vs internal
-  records")** — there is no provider integration and no settlement-record
-  table; `mobile_money`/`card` payments are explicitly rejected as
-  not-implemented (`NOT_YET_IMPLEMENTED_METHODS` in `finance.service.ts`).
-  A reconciliation screen needs two sides to reconcile; with nothing on
-  the provider side, it would be a screen with nothing real to show —
-  genuinely blocked, same category as Stage 5's Timetable builder gap.
+  records")** — was genuinely blocked (no provider integration, no
+  settlement-record table; `mobile_money`/`card` payments are still
+  explicitly rejected as not-implemented via `NOT_YET_IMPLEMENTED_METHODS`
+  in `finance.service.ts`). **Closed 2026-08-19** as manual/import-based
+  settlement matching against `payments`, not a live provider feed — see
+  "No-backing-schema gaps closed" below for the real
+  `0034_settlement_reconciliation.sql` build and the new Reconciliation
+  tab on this page.
 
 **Real composition decisions made, documented (not silently assumed):**
 
@@ -1061,6 +1063,46 @@ everything under it (item, instalment, penalty rule, invoice, penalty
 charge, reversal, 8 audit_log rows) removed in FK-safe order; fee
 structures/invoices confirmed back to the original single seeded row
 each.
+
+## No-backing-schema gaps closed (2026-08-19)
+
+The two remaining spec items with genuinely no backing schema — Academic
+Structure's Timetable builder (Stage 5) and Finance's Reconciliation
+Workspace (Stage 7) — are now both built. See the root `README.md`'s
+status table for the full backend writeup (`0033_timetable.sql`,
+`0034_settlement_reconciliation.sql`); summary from the frontend side:
+
+- **Timetable** — a new "Timetable" tab on `(shell)/classes/`. Rooms and
+  periods are entirely tenant-defined (a fresh tenant starts with zero of
+  either) — `periods` also carry a `period_type` (teaching/break/
+  assembly/other) specifically so a school's own non-teaching structure
+  can be represented, not just a fixed teaching grid (a real design
+  addition made mid-build after the user asked for the timetable to be
+  "customizable to suit customer preference," before the schema had been
+  applied to the dev DB — cheap to fold in at that point). A weekly
+  entries list (grouped by day, not a grid) assigns class+subject+teacher
+  to a teaching period/room/day, gated the same `canConfigure`
+  (`ACADEMIC_ADMIN`) way every other Stage 5 tab already is — this tab
+  does NOT repeat that stage's once-found ungated-button gap.
+- **Reconciliation** — a new "Reconciliation" tab on `(shell)/finance/`.
+  A settlement batch (source/reference/notes) holds lines (reference/
+  amount/description) entered one at a time; Auto-match links a line to
+  an unambiguous same-reference-and-amount payment, manual Match/Unmatch
+  handles the rest, and mismatched-amount manual matches surface as
+  `discrepancy` rather than silently forcing `matched`. Closing a batch
+  is `canApprove` (LEADERSHIP)-gated, the same tier as every other
+  Finance sign-off action.
+
+Both live-HTTP verified as `admin@sunrise.pbsms.test` (headmaster, real
+MFA): a teacher-double-booking 409, a break-period-assignment 409, a real
+auto-match against the seeded `CASH-0001`/600 payment, a double-claim
+409, and a closed-batch-refuses-new-lines 409 — then visually confirmed
+via headless Puppeteer (Chrome extension was disconnected this session)
+showing both tabs rendering real seeded data. Backend isolation suite:
+483/483 (5 new table describe blocks, was 453). Smoke-test cleanup:
+1 extra `period` row, 1 auto-matched settlement line reverted to
+`unmatched`, 1 settlement batch reverted to `open`, 8 stray `audit_log`
+rows — all removed/reverted, re-verified green.
 
 ## Setup
 

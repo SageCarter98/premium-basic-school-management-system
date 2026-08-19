@@ -4,8 +4,9 @@
  * Implements SRS v2.1 Chapter 28 (FR-OPS-040) and its student-lifecycle
  * restatement (FR-STU-040). See 0011_discipline.sql's header for the full
  * scope-cut list (no separate follow-up table — case notes serve that
- * role; role/record-level scoping deferred like every other module;
- * retention documented, not enforced).
+ * role; retention documented, not enforced). Chapter 13.3 record-level
+ * scoping is now built — see assertCanActOnStudent()/assignedClassIdsOrNull()
+ * below — closing what this file's own comment used to flag as deferred.
  *
  * Case status machine:
  *   reported -> investigating -> response_issued -> closed
@@ -24,12 +25,14 @@
  * one place.
  */
 
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDatabaseService } from '../../common/database/tenant-database.service';
 import { TenantContextStore } from '../../common/tenant/tenant-context';
+import { ACADEMIC_ADMIN } from '../../common/auth/role-groups';
 import { CommunicationService } from '../communication/communication.service';
 import { StaffService } from '../staff/staff.service';
 import { GuardiansService } from '../guardians/guardians.service';
+import { TeacherAssignmentsService } from '../teacher-assignments/teacher-assignments.service';
 import { CreateCaseDto } from './dto/create-case.dto';
 import { AddNoteDto } from './dto/add-note.dto';
 import { IssueResponseDto } from './dto/issue-response.dto';
@@ -118,13 +121,61 @@ export class DisciplineService {
     private readonly communication: CommunicationService,
     private readonly staff: StaffService,
     private readonly guardians: GuardiansService,
+    private readonly teacherAssignments: TeacherAssignmentsService,
   ) {}
+
+  // ---------------------------------------------------------------------
+  // Chapter 13.3 record-level scoping — deferred since this module's own
+  // original header comment, now built. An ACADEMIC_ADMIN-tier caller
+  // (the disciplinary-authority tier every write action above ACADEMIC_STAFF
+  // already requires) overrides this, same posture attendance.service.ts's
+  // FR-ATT sync and assessment.service.ts's FR-ASM-020 score entry already
+  // established — a plain teacher may only report/view/recognize a case
+  // for a student in a class they are actively assigned to.
+  // ---------------------------------------------------------------------
+
+  private isCallerAcademicAdmin(): boolean {
+    const { roles } = TenantContextStore.current();
+    return roles.some((r) => (ACADEMIC_ADMIN as readonly string[]).includes(r));
+  }
+
+  private async assertCanActOnStudent(studentId: string): Promise<void> {
+    if (this.isCallerAcademicAdmin()) return;
+    const { userId } = TenantContextStore.current();
+    const enrolRows = await this.db.query<{ class_id: string; academic_year_id: string }>(
+      `select class_id, academic_year_id from enrolments where student_id = $1 and status = 'active' limit 1`,
+      [studentId],
+    );
+    if (enrolRows.length === 0) {
+      throw new ForbiddenException(`Student ${studentId} has no active enrolment to check a teacher assignment against`);
+    }
+    const assigned = await this.teacherAssignments.hasAnyActiveAssignmentForClass(
+      userId,
+      enrolRows[0].class_id,
+      enrolRows[0].academic_year_id,
+    );
+    if (!assigned) {
+      throw new ForbiddenException(`You do not have an active teacher assignment for this student's class`);
+    }
+  }
+
+  /** The class ids a non-admin caller may see records for — used to filter
+   * a list endpoint (createCase/findCase's per-record check doesn't apply
+   * to a list). Returns null for an ACADEMIC_ADMIN caller, meaning "no
+   * filter, see everything." */
+  private async assignedClassIdsOrNull(): Promise<string[] | null> {
+    if (this.isCallerAcademicAdmin()) return null;
+    const { userId } = TenantContextStore.current();
+    const assignments = await this.teacherAssignments.findAll({ teacherId: userId });
+    return [...new Set(assignments.filter((a) => a.status === 'active').map((a) => a.class_id))];
+  }
 
   // ---------------------------------------------------------------------
   // Cases (FR-OPS-040: incident recording, investigation, response)
   // ---------------------------------------------------------------------
 
   async createCase(input: CreateCaseDto): Promise<DisciplineCase> {
+    await this.assertCanActOnStudent(input.studentId);
     const { userId } = TenantContextStore.current();
     const rows = await this.db.query<DisciplineCase>(
       `insert into discipline_cases
@@ -137,7 +188,18 @@ export class DisciplineService {
   }
 
   async findAllCases(): Promise<DisciplineCase[]> {
-    return this.db.query<DisciplineCase>(`select * from discipline_cases order by incident_date desc`);
+    const classIds = await this.assignedClassIdsOrNull();
+    if (classIds === null) {
+      return this.db.query<DisciplineCase>(`select * from discipline_cases order by incident_date desc`);
+    }
+    if (classIds.length === 0) return [];
+    return this.db.query<DisciplineCase>(
+      `select dc.* from discipline_cases dc
+       join enrolments e on e.student_id = dc.student_id and e.status = 'active'
+       where e.class_id = any($1::uuid[])
+       order by dc.incident_date desc`,
+      [classIds],
+    );
   }
 
   async findCase(id: string): Promise<DisciplineCase> {
@@ -145,6 +207,7 @@ export class DisciplineService {
     if (rows.length === 0) {
       throw new NotFoundException(`Discipline case ${id} not found`);
     }
+    await this.assertCanActOnStudent(rows[0].student_id);
     return rows[0];
   }
 
@@ -191,6 +254,7 @@ export class DisciplineService {
   }
 
   async findResponses(caseId: string): Promise<DisciplineCaseResponse[]> {
+    await this.findCase(caseId); // scoping gate — see assertCanActOnStudent()
     return this.db.query<DisciplineCaseResponse>(
       `select * from discipline_case_responses where case_id = $1 order by created_at`,
       [caseId],
@@ -240,6 +304,7 @@ export class DisciplineService {
   }
 
   async findNotes(caseId: string): Promise<DisciplineCaseNote[]> {
+    await this.findCase(caseId); // scoping gate — see assertCanActOnStudent()
     return this.db.query<DisciplineCaseNote>(
       `select * from discipline_case_notes where case_id = $1 order by created_at`,
       [caseId],
@@ -307,6 +372,7 @@ export class DisciplineService {
   }
 
   async findGuardianContacts(caseId: string): Promise<DisciplineGuardianContact[]> {
+    await this.findCase(caseId); // scoping gate — see assertCanActOnStudent()
     return this.db.query<DisciplineGuardianContact>(
       `select * from discipline_guardian_contacts where case_id = $1 order by created_at`,
       [caseId],
@@ -390,6 +456,7 @@ export class DisciplineService {
   }
 
   async findAppeals(caseId: string): Promise<DisciplineAppeal[]> {
+    await this.findCase(caseId); // scoping gate — see assertCanActOnStudent()
     return this.db.query<DisciplineAppeal>(`select * from discipline_appeals where case_id = $1 order by filed_at`, [
       caseId,
     ]);
@@ -400,6 +467,7 @@ export class DisciplineService {
   // ---------------------------------------------------------------------
 
   async createRecognition(input: CreateRecognitionDto): Promise<DisciplineRecognition> {
+    await this.assertCanActOnStudent(input.studentId);
     const { userId } = TenantContextStore.current();
     const rows = await this.db.query<DisciplineRecognition>(
       `insert into discipline_recognitions (tenant_id, student_id, category, description, awarded_by, created_by, updated_by)
@@ -411,7 +479,18 @@ export class DisciplineService {
   }
 
   async findAllRecognitions(): Promise<DisciplineRecognition[]> {
-    return this.db.query<DisciplineRecognition>(`select * from discipline_recognitions order by awarded_at desc`);
+    const classIds = await this.assignedClassIdsOrNull();
+    if (classIds === null) {
+      return this.db.query<DisciplineRecognition>(`select * from discipline_recognitions order by awarded_at desc`);
+    }
+    if (classIds.length === 0) return [];
+    return this.db.query<DisciplineRecognition>(
+      `select dr.* from discipline_recognitions dr
+       join enrolments e on e.student_id = dr.student_id and e.status = 'active'
+       where e.class_id = any($1::uuid[])
+       order by dr.awarded_at desc`,
+      [classIds],
+    );
   }
 
   async findRecognition(id: string): Promise<DisciplineRecognition> {
@@ -421,6 +500,7 @@ export class DisciplineService {
     if (rows.length === 0) {
       throw new NotFoundException(`Recognition ${id} not found`);
     }
+    await this.assertCanActOnStudent(rows[0].student_id);
     return rows[0];
   }
 }

@@ -82,6 +82,23 @@ interface NotificationDelivery {
   error_message: string | null;
   cost_amount: string | null;
 }
+interface BackgroundJob {
+  id: string;
+  job_type: string;
+  status: string;
+  attempt_count: number;
+  last_error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+interface JobSchedule {
+  id: string;
+  job_type: string;
+  frequency: string;
+  next_run_at: string;
+  last_run_at: string | null;
+  is_active: boolean;
+}
 interface CommunicationPreference {
   id: string;
   recipient_type: string;
@@ -234,6 +251,12 @@ interface SharedProps {
 // ---------------------------------------------------------------------
 
 function ComposeTab({ students, classes, enrolments, staff, guardians }: SharedProps) {
+  const [job, setJob] = useState<BackgroundJob | null>(null);
+  const [schedules, setSchedules] = useState<JobSchedule[]>([]);
+  const [showRepeat, setShowRepeat] = useState(false);
+  const [repeatForm, setRepeatForm] = useState({ frequency: 'weekly', nextRunAt: '' });
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [mode, setMode] = useState<'single' | 'class'>('single');
   const [recipientType, setRecipientType] = useState<'student' | 'staff' | 'guardian'>('guardian');
   const [recipientId, setRecipientId] = useState('');
@@ -277,33 +300,129 @@ function ComposeTab({ students, classes, enrolments, staff, guardians }: SharedP
     }
   }
 
-  async function send() {
+  async function sendSingle() {
     setBusy(true);
     setError(null);
     setResult(null);
-    const targets = mode === 'single' ? [{ id: recipientId, name: recipientOptions().find((o) => o.id === recipientId)?.label ?? recipientId }] : (preview ?? []).map((p) => ({ id: p.id, name: p.name }));
-    let created = 0;
+    const t = { id: recipientId, name: recipientOptions().find((o) => o.id === recipientId)?.label ?? recipientId };
+    const createRes = await apiFetch('/v1/communication/notifications', {
+      method: 'POST',
+      body: JSON.stringify({ recipientType, recipientId: t.id, recipientName: t.name, subject: subject || undefined, body, sensitivityLevel: sensitivity, isUrgent: urgent }),
+    });
+    if (!createRes.ok) {
+      setBusy(false);
+      setResult('Failed to create notification.');
+      return;
+    }
     let sent = 0;
-    let failed = 0;
-    for (const t of targets) {
-      const createRes = await apiFetch('/v1/communication/notifications', {
-        method: 'POST',
-        body: JSON.stringify({ recipientType, recipientId: t.id, recipientName: t.name, subject: subject || undefined, body, sensitivityLevel: sensitivity, isUrgent: urgent }),
-      });
-      if (!createRes.ok) {
-        failed++;
-        continue;
-      }
-      created++;
-      if (sendNow) {
-        const notif = (await createRes.json()) as Notification;
-        const sendRes = await apiFetch(`/v1/communication/notifications/${notif.id}/send`, { method: 'POST' });
-        if (sendRes.ok) sent++;
-      }
+    if (sendNow) {
+      const notif = (await createRes.json()) as Notification;
+      const sendRes = await apiFetch(`/v1/communication/notifications/${notif.id}/send`, { method: 'POST' });
+      if (sendRes.ok) sent++;
     }
     setBusy(false);
-    setResult(`Created ${created} notification(s)${sendNow ? `, ${sent} dispatch attempt(s) completed` : ''}${failed ? `, ${failed} failed` : ''}.`);
-    setPreview(null);
+    setResult(`Created 1 notification(s)${sendNow ? `, ${sent} dispatch attempt(s) completed` : ''}.`);
+  }
+
+  // A real mass_notification background job exists (Chapter 35.1) and does
+  // exactly this fan-out + per-recipient delivery server-side, with
+  // per-item failure isolation — replacing the old client-side loop over
+  // one createNotification()+send() call per recipient. That loop worked,
+  // but meant one recipient's browser tab held the whole batch's progress
+  // and a lost connection mid-send left no record of what had actually
+  // gone out; the job runs to completion independent of this tab.
+  async function sendClass() {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    setJob(null);
+    const recipients = (preview ?? []).map((p) => ({
+      recipientType,
+      recipientId: p.id,
+      recipientName: p.name,
+      recipientPhone: p.phone ?? undefined,
+      recipientEmail: p.email ?? undefined,
+    }));
+    const res = await apiFetch('/v1/jobs', {
+      method: 'POST',
+      body: JSON.stringify({
+        jobType: 'mass_notification',
+        payload: { subject: subject || undefined, body, sensitivityLevel: sensitivity, isUrgent: urgent, recipients },
+      }),
+    });
+    if (!res.ok) {
+      setBusy(false);
+      setError('Could not enqueue the bulk send job.');
+      return;
+    }
+    const enqueued = (await res.json()) as BackgroundJob;
+    setJob(enqueued);
+    await pollJob(enqueued.id);
+  }
+
+  async function pollJob(jobId: string) {
+    // background_jobs.status is queued|running|succeeded|failed|dead_letter
+    // (0027_background_jobs.sql) — confirmed live, not 'completed' as the
+    // name might suggest.
+    for (let i = 0; i < 40; i++) {
+      const current = await apiGet<BackgroundJob>(`/v1/jobs/${jobId}`);
+      setJob(current);
+      if (current.status === 'succeeded' || current.status === 'failed' || current.status === 'dead_letter') {
+        setBusy(false);
+        setResult(current.status === 'succeeded' ? `Sent to ${(preview ?? []).length} recipient(s).` : `Job ${current.status}: ${current.last_error ?? 'unknown error'}`);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    setBusy(false);
+    setResult('Still running — check the Jobs status via the job id shown below.');
+  }
+
+  function send() {
+    if (mode === 'single') return sendSingle();
+    return sendClass();
+  }
+
+  function reloadSchedules() {
+    apiGet<JobSchedule[]>('/v1/jobs/schedules/list').then((all) => setSchedules(all.filter((s) => s.job_type === 'mass_notification')));
+  }
+  useEffect(reloadSchedules, []);
+
+  // A real generic scheduler already runs (Chapter 35.1's job_schedules +
+  // worker.ts's scheduleLoop()) and mass_notification was already a
+  // whitelisted schedulable job type — this was purely a missing UI to
+  // create one, not a missing backend feature.
+  async function createSchedule() {
+    setScheduleBusy(true);
+    setScheduleError(null);
+    const recipients = (preview ?? []).map((p) => ({
+      recipientType,
+      recipientId: p.id,
+      recipientName: p.name,
+      recipientPhone: p.phone ?? undefined,
+      recipientEmail: p.email ?? undefined,
+    }));
+    const res = await apiFetch('/v1/jobs/schedules', {
+      method: 'POST',
+      body: JSON.stringify({
+        jobType: 'mass_notification',
+        payloadTemplate: { subject: subject || undefined, body, sensitivityLevel: sensitivity, isUrgent: urgent, recipients },
+        frequency: repeatForm.frequency,
+        nextRunAt: new Date(repeatForm.nextRunAt).toISOString(),
+      }),
+    });
+    setScheduleBusy(false);
+    if (!res.ok) return setScheduleError(await errorMessage(res, `Failed (${res.status})`));
+    setShowRepeat(false);
+    setRepeatForm({ frequency: 'weekly', nextRunAt: '' });
+    reloadSchedules();
+  }
+
+  async function deactivateSchedule(id: string) {
+    setScheduleBusy(true);
+    await apiFetch(`/v1/jobs/schedules/${id}/deactivate`, { method: 'POST' });
+    setScheduleBusy(false);
+    reloadSchedules();
   }
 
   return (
@@ -387,6 +506,12 @@ function ComposeTab({ students, classes, enrolments, staff, guardians }: SharedP
       </div>
 
       {error && <ErrorState message={error} />}
+      {job && (
+        <p className={styles.hint}>
+          Bulk send job <strong>{job.id}</strong> — <Pill variant={job.status === 'completed' ? 'success' : job.status === 'failed' ? 'danger' : 'neutral'}>{job.status}</Pill>
+          {job.attempt_count > 0 && ` · attempt ${job.attempt_count}`}
+        </p>
+      )}
       {result && <p className={styles.hint}>{result}</p>}
       <p className={styles.hint}>
         No real WhatsApp/SMS/email provider is wired up in this environment — every send attempt honestly ends &quot;exhausted&quot;. Check the Delivery Log tab for the real per-channel outcome.
@@ -399,6 +524,58 @@ function ComposeTab({ students, classes, enrolments, staff, guardians }: SharedP
       >
         {mode === 'single' ? 'Send' : `Send to ${preview?.length ?? 0} recipient(s)`}
       </Button>
+
+      {mode === 'class' && (
+        <div style={{ marginTop: 'var(--pb-space-4)' }}>
+          <Button type="button" variant="secondary" onClick={() => setShowRepeat((v) => !v)} disabled={!preview || preview.length === 0}>
+            {showRepeat ? 'Cancel' : 'Repeat this send…'}
+          </Button>
+          {showRepeat && (
+            <div className={styles.formRow} style={{ marginTop: 'var(--pb-space-2)' }}>
+              <select aria-label="Repeat frequency" className={styles.select} value={repeatForm.frequency} onChange={(e) => setRepeatForm({ ...repeatForm, frequency: e.target.value })}>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="termly">Termly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+              <input
+                aria-label="First run date and time"
+                className={styles.textInput}
+                type="datetime-local"
+                value={repeatForm.nextRunAt}
+                onChange={(e) => setRepeatForm({ ...repeatForm, nextRunAt: e.target.value })}
+              />
+              <Button type="button" onClick={createSchedule} disabled={scheduleBusy || !repeatForm.nextRunAt || !body}>
+                Create schedule
+              </Button>
+            </div>
+          )}
+          {scheduleError && <ErrorState message={scheduleError} />}
+        </div>
+      )}
+
+      {schedules.length > 0 && (
+        <div style={{ marginTop: 'var(--pb-space-4)' }}>
+          <p className={styles.hint}>Active recurring sends</p>
+          {schedules.map((s) => (
+            <div key={s.id} className={styles.listRow}>
+              <span>
+                {s.frequency} — next {new Date(s.next_run_at).toLocaleString()}
+                {s.last_run_at && <> · last ran {new Date(s.last_run_at).toLocaleString()}</>}
+              </span>
+              <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
+                <Pill variant={s.is_active ? 'success' : 'neutral'}>{s.is_active ? 'active' : 'inactive'}</Pill>
+                {s.is_active && (
+                  <Button type="button" variant="secondary" onClick={() => deactivateSchedule(s.id)} disabled={scheduleBusy}>
+                    Deactivate
+                  </Button>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

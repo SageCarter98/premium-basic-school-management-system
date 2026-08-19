@@ -31,7 +31,8 @@ import { TeacherAssignmentsService } from '../teacher-assignments/teacher-assign
 import { ACADEMIC_ADMIN } from '../../common/auth/role-groups';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { CreateAssessmentStructureDto } from './dto/create-assessment-structure.dto';
-import { AddAssessmentComponentDto } from './dto/add-assessment-component.dto';
+import { AddAssessmentComponentDto, BUILT_IN_COMPONENT_TYPES } from './dto/add-assessment-component.dto';
+import { CreateComponentTypeDto } from './dto/create-component-type.dto';
 import { ReopenAssessmentStructureDto } from './dto/reopen-assessment-structure.dto';
 import { UpsertScoreDto } from './dto/upsert-score.dto';
 
@@ -64,6 +65,14 @@ export interface AssessmentComponent {
   max_score: string;
   nacca_strand: string | null;
   indicator_id: string | null;
+}
+
+export interface AssessmentComponentType {
+  id: string;
+  tenant_id: string;
+  code: string;
+  name: string;
+  created_at: string;
 }
 
 export interface Score {
@@ -171,6 +180,18 @@ export class AssessmentService {
         `Cannot add a component to structure ${structureId}: it is '${structure.status}', not 'draft'`,
       );
     }
+    if (!BUILT_IN_COMPONENT_TYPES.includes(input.componentType)) {
+      const customType = await this.db.query<{ hit: number }>(
+        `select 1 as hit from assessment_component_types where code = $1 limit 1`,
+        [input.componentType],
+      );
+      if (customType.length === 0) {
+        throw new ConflictException(
+          `'${input.componentType}' is not one of the built-in component types (${BUILT_IN_COMPONENT_TYPES.join(', ')}) ` +
+            `and no custom type with that code has been defined for this tenant — create one first via POST /v1/assessment/component-types`,
+        );
+      }
+    }
     const rows = await this.db.query<AssessmentComponent>(
       `insert into assessment_components
          (tenant_id, assessment_structure_id, component_type, weight, max_score, nacca_strand, indicator_id)
@@ -193,6 +214,35 @@ export class AssessmentService {
       `select * from assessment_components where assessment_structure_id = $1 order by component_type`,
       [structureId],
     );
+  }
+
+  /** 0036_assessment_component_types.sql: per-tenant additions beyond the
+   * 5 built-in types (BUILT_IN_COMPONENT_TYPES) addComponent() also
+   * accepts. Additive only — no update/delete, see that migration's
+   * header for why. */
+  async createComponentType(input: CreateComponentTypeDto): Promise<AssessmentComponentType> {
+    const { userId } = TenantContextStore.current();
+    if (BUILT_IN_COMPONENT_TYPES.includes(input.code)) {
+      throw new ConflictException(`'${input.code}' is already one of the built-in component types`);
+    }
+    const existing = await this.db.query<{ hit: number }>(
+      `select 1 as hit from assessment_component_types where code = $1 limit 1`,
+      [input.code],
+    );
+    if (existing.length > 0) {
+      throw new ConflictException(`A component type with code '${input.code}' already exists for this tenant`);
+    }
+    const rows = await this.db.query<AssessmentComponentType>(
+      `insert into assessment_component_types (tenant_id, code, name, created_by)
+       values (current_tenant_id(), $1, $2, $3)
+       returning *`,
+      [input.code, input.name, userId],
+    );
+    return rows[0];
+  }
+
+  async findComponentTypes(): Promise<AssessmentComponentType[]> {
+    return this.db.query<AssessmentComponentType>(`select * from assessment_component_types order by name`);
   }
 
   /**

@@ -82,6 +82,26 @@ interface InvoiceItem {
   description: string;
   amount: string;
 }
+interface PenaltyRule {
+  id: string;
+  fee_structure_id: string;
+  name: string;
+  grace_period_days: number;
+  amount_type: string;
+  amount: string;
+  cap_amount: string | null;
+  frequency: string;
+  status: string;
+}
+interface PenaltyCharge {
+  id: string;
+  invoice_id: string;
+  penalty_rule_id: string;
+  amount: string;
+  applied_at: string;
+  reason: string | null;
+  reversed: boolean;
+}
 interface InvoiceBalance {
   invoiceId: string;
   totalAmount: number;
@@ -173,9 +193,8 @@ type Tab = (typeof TABS)[number];
  * backend Finance module (Chapters 23-25) — no new backend surface,
  * matching Stage 5/6's screens-on-existing-primitives pattern.
  *
- * Two spec items genuinely NOT built here, flagged not faked (see
- * apps/web/README.md's Stage 7 section for the full explanation):
- * - Penalty rules (FR-FEE-040) — no backing schema anywhere in apps/api.
+ * One spec item genuinely NOT built here, flagged not faked (see
+ * apps/web/README.md's Stage 7 and post-Stage-9-gap-closure sections):
  * - Reconciliation Workspace (§8.8, "provider settlement vs internal") —
  *   there is no provider integration or settlement-record table at all
  *   (mobile_money/card payments are explicitly rejected as
@@ -347,9 +366,11 @@ function FeeStructuresTab({ years }: { years: AcademicYear[] }) {
 function FeeStructureDetail({ structure, onChanged }: { structure: FeeStructure; onChanged: () => void }) {
   const [items, setItems] = useState<FeeStructureItem[]>([]);
   const [instalments, setInstalments] = useState<FeeInstalment[]>([]);
+  const [penaltyRules, setPenaltyRules] = useState<PenaltyRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [itemForm, setItemForm] = useState({ name: '', amount: '' });
   const [instForm, setInstForm] = useState({ sequence: '1', amount: '', percentage: '', dueDate: '' });
+  const [ruleForm, setRuleForm] = useState({ name: '', amountType: 'fixed', amount: '', capAmount: '', frequency: 'one_time', gracePeriodDays: '0' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -358,13 +379,35 @@ function FeeStructureDetail({ structure, onChanged }: { structure: FeeStructure;
     Promise.all([
       apiGet<FeeStructureItem[]>(`/v1/finance/fee-structures/${structure.id}/items`),
       apiGet<FeeInstalment[]>(`/v1/finance/fee-structures/${structure.id}/instalments`),
-    ]).then(([i, ins]) => {
+      apiGet<PenaltyRule[]>(`/v1/finance/fee-structures/${structure.id}/penalty-rules`),
+    ]).then(([i, ins, pr]) => {
       setItems(i);
       setInstalments(ins);
+      setPenaltyRules(pr);
       setLoading(false);
     });
   }
   useEffect(reload, [structure.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function addPenaltyRule() {
+    setError(null);
+    setBusy(true);
+    const res = await apiFetch(`/v1/finance/fee-structures/${structure.id}/penalty-rules`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: ruleForm.name,
+        amountType: ruleForm.amountType,
+        amount: Number(ruleForm.amount),
+        capAmount: ruleForm.capAmount ? Number(ruleForm.capAmount) : undefined,
+        frequency: ruleForm.frequency,
+        gracePeriodDays: Number(ruleForm.gracePeriodDays) || 0,
+      }),
+    });
+    setBusy(false);
+    if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
+    setRuleForm({ name: '', amountType: 'fixed', amount: '', capAmount: '', frequency: 'one_time', gracePeriodDays: '0' });
+    reload();
+  }
 
   const itemsTotal = items.reduce((sum, i) => sum + Number(i.amount), 0);
   const instalmentsTotal = instalments.reduce((sum, i) => sum + Number(i.amount), 0);
@@ -501,9 +544,68 @@ function FeeStructureDetail({ structure, onChanged }: { structure: FeeStructure;
         </div>
       )}
 
-      <p className={styles.hint} style={{ marginTop: 'var(--pb-space-3)' }}>
-        Penalty rules (FR-FEE-040) are not built — this scaffold has no backing schema for late-payment penalties yet.
-      </p>
+      <div className={styles.detailSection}>
+        <div className={styles.detailSectionTitle}>Penalty rules (FR-FEE-040)</div>
+        {penaltyRules.length === 0 ? (
+          <p className={styles.hint}>No penalty rules yet. Rules apply to invoices generated from this fee structure, past their grace period.</p>
+        ) : (
+          penaltyRules.map((r) => (
+            <div key={r.id} className={styles.listRow}>
+              <span>
+                {r.name} — {r.amount_type === 'percentage' ? `${r.amount}%` : money(Number(r.amount))}
+                {r.cap_amount && ` (capped at ${money(Number(r.cap_amount))})`} · {r.frequency.replace('_', ' ')} · {r.grace_period_days}-day grace
+              </span>
+              <Pill variant={r.status === 'active' ? 'success' : 'neutral'}>{r.status}</Pill>
+            </div>
+          ))
+        )}
+        <div className={styles.formRow}>
+          <input aria-label="Rule name" className={styles.textInput} placeholder="Rule name, e.g. Late tuition fee" value={ruleForm.name} onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })} />
+          <select aria-label="Amount type" className={styles.select} value={ruleForm.amountType} onChange={(e) => setRuleForm({ ...ruleForm, amountType: e.target.value })}>
+            <option value="fixed">Fixed amount</option>
+            <option value="percentage">Percentage of balance</option>
+          </select>
+          <input
+            aria-label={ruleForm.amountType === 'percentage' ? 'Percentage' : 'Amount'}
+            className={styles.textInput}
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder={ruleForm.amountType === 'percentage' ? 'Percentage' : 'Amount'}
+            value={ruleForm.amount}
+            onChange={(e) => setRuleForm({ ...ruleForm, amount: e.target.value })}
+          />
+          <input
+            aria-label="Cap amount"
+            className={styles.textInput}
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder="Cap amount (optional)"
+            value={ruleForm.capAmount}
+            onChange={(e) => setRuleForm({ ...ruleForm, capAmount: e.target.value })}
+          />
+          <select aria-label="Frequency" className={styles.select} value={ruleForm.frequency} onChange={(e) => setRuleForm({ ...ruleForm, frequency: e.target.value })}>
+            <option value="one_time">One time</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          <input
+            aria-label="Grace period days"
+            className={styles.textInput}
+            type="number"
+            min="0"
+            style={{ maxWidth: 130 }}
+            placeholder="Grace days"
+            value={ruleForm.gracePeriodDays}
+            onChange={(e) => setRuleForm({ ...ruleForm, gracePeriodDays: e.target.value })}
+          />
+          <Button type="button" variant="secondary" onClick={addPenaltyRule} disabled={busy || !ruleForm.name || !ruleForm.amount}>
+            Add rule
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -712,14 +814,24 @@ function InvoiceDetail({ invoice, students, canApprove, onChanged }: { invoice: 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const [balance, setBalance] = useState<InvoiceBalance | null>(null);
+  const [penaltyRules, setPenaltyRules] = useState<PenaltyRule[]>([]);
+  const [penaltyCharges, setPenaltyCharges] = useState<PenaltyCharge[]>([]);
+  const [applyRuleId, setApplyRuleId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   function reload() {
     setLoading(true);
-    Promise.all([apiGet<InvoiceItem[]>(`/v1/finance/invoices/${invoice.id}/items`), apiGet<InvoiceBalance>(`/v1/finance/invoices/${invoice.id}/balance`)]).then(([i, b]) => {
+    Promise.all([
+      apiGet<InvoiceItem[]>(`/v1/finance/invoices/${invoice.id}/items`),
+      apiGet<InvoiceBalance>(`/v1/finance/invoices/${invoice.id}/balance`),
+      apiGet<PenaltyRule[]>(`/v1/finance/fee-structures/${invoice.fee_structure_id}/penalty-rules`),
+      apiGet<PenaltyCharge[]>(`/v1/finance/invoices/${invoice.id}/penalties`),
+    ]).then(([i, b, pr, pc]) => {
       setItems(i);
       setBalance(b);
+      setPenaltyRules(pr);
+      setPenaltyCharges(pc);
       setLoading(false);
     });
   }
@@ -734,6 +846,28 @@ function InvoiceDetail({ invoice, students, canApprove, onChanged }: { invoice: 
     setBusy(false);
     if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
     onChanged();
+  }
+
+  async function applyPenalty() {
+    if (!applyRuleId) return;
+    setBusy(true);
+    setError(null);
+    const res = await apiFetch(`/v1/finance/invoices/${invoice.id}/penalties/apply`, { method: 'POST', body: JSON.stringify({ penaltyRuleId: applyRuleId }) });
+    setBusy(false);
+    if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
+    setApplyRuleId('');
+    reload();
+  }
+
+  async function reversePenalty(chargeId: string) {
+    const reason = window.prompt('Reason for reversing this penalty charge (required):');
+    if (!reason) return;
+    setBusy(true);
+    setError(null);
+    const res = await apiFetch(`/v1/finance/penalties/${chargeId}/reverse`, { method: 'POST', body: JSON.stringify({ reason }) });
+    setBusy(false);
+    if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
+    reload();
   }
 
   if (loading) return <LoadingState label="Loading invoice detail" rows={3} />;
@@ -770,6 +904,48 @@ function InvoiceDetail({ invoice, students, canApprove, onChanged }: { invoice: 
           </div>
         </div>
       )}
+      <div className={styles.detailSection}>
+        <div className={styles.detailSectionTitle}>Penalties (FR-FEE-040)</div>
+        {penaltyCharges.length === 0 ? (
+          <p className={styles.hint}>No penalties applied to this invoice.</p>
+        ) : (
+          penaltyCharges.map((c) => (
+            <div key={c.id} className={styles.listRow}>
+              <span>
+                {penaltyRules.find((r) => r.id === c.penalty_rule_id)?.name ?? c.penalty_rule_id} — applied {new Date(c.applied_at).toLocaleDateString()}
+              </span>
+              <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
+                <span>{money(Number(c.amount))}</span>
+                {c.reversed ? (
+                  <Pill variant="danger">reversed</Pill>
+                ) : (
+                  canApprove && (
+                    <Button type="button" variant="secondary" onClick={() => reversePenalty(c.id)} disabled={busy}>
+                      Reverse
+                    </Button>
+                  )
+                )}
+              </span>
+            </div>
+          ))
+        )}
+        {invoice.status === 'posted' && penaltyRules.length > 0 && (
+          <div className={styles.formRow}>
+            <select aria-label="Penalty rule to apply" className={styles.select} value={applyRuleId} onChange={(e) => setApplyRuleId(e.target.value)}>
+              <option value="">Penalty rule…</option>
+              {penaltyRules.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            <Button type="button" variant="secondary" onClick={applyPenalty} disabled={busy || !applyRuleId}>
+              Apply penalty
+            </Button>
+          </div>
+        )}
+      </div>
+
       {canApprove && invoice.status === 'posted' && (
         <Button type="button" variant="secondary" onClick={cancel} disabled={busy}>
           Cancel invoice

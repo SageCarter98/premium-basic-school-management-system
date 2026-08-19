@@ -1016,6 +1016,52 @@ previously-visited browser profile.
 
 This closes Frontend Design Spec v1.1 §13's 9-stage Build Order.
 
+## Post-Stage-9 gap closure (2026-08-19)
+
+Auditing what was still flagged-but-open across all 9 stages (rather than
+trusting each stage's own write-up as current) surfaced one item whose
+status had silently changed and one that was simply never done:
+
+- **Finance penalty rules (FR-FEE-040)** — Stage 7's README said "no
+  backing schema anywhere in apps/api." That's now false: the same
+  checkpoint commit that landed Stage 9 also added a real
+  `fee_penalty_rules`/`fee_penalty_charges` schema and
+  `createPenaltyRule()`/`applyPenalty()`/`reversePenaltyCharge()` to
+  `finance.service.ts` — but the Finance page's UI (and its own header
+  comment) never caught up. Added a real Penalty Rules section to the
+  Fee Structures tab's detail panel (list + add-rule form) and a
+  Penalties section to the Invoice detail panel (apply from the
+  structure's active rules, reverse with a reason — `canApprove`-gated,
+  matching `APPROVE_ROLES` + `@SensitiveAction('financial_reversal')`
+  on `reversePenaltyCharge()` exactly). No new backend surface, same
+  screens-on-existing-primitives pattern as every other Finance tab.
+- **Stage 5's Academic Structure ungated buttons** — flagged when found
+  post-Stage-6, never actually fixed across Stages 6-9. All four tabs
+  (`(shell)/classes/page.tsx`) now gate their "Add …" controls (and
+  Teacher Assignments' "End") behind `hasAnyRole(roleCodes,
+  ACADEMIC_ADMIN)`, matching `classes.controller.ts`/
+  `academic-years.controller.ts`/`assessment.controller.ts`'s
+  `subjects` route/`teacher-assignments.controller.ts`'s real
+  `@Roles(...ACADEMIC_ADMIN)` decorators exactly — same pattern Stage 7
+  already used to avoid repeating this.
+
+**Verified**: clean `npm run build` (still 28 routes). Live-HTTP full
+lifecycle as `accountant@sunrise.pbsms.test` (create rule → generate an
+overdue invoice → apply penalty → real `230 day(s) overdue` message) then
+`admin@sunrise.pbsms.test` through a real MFA verify (reverse the charge
+→ confirmed `reversed: true`). Visual proof via a headless Puppeteer
+script (the Chrome extension was intermittently disconnected this
+session) — `teacher@sunrise`'s `/classes` page renders zero "Add" buttons
+now, and `accountant@sunrise`'s Finance page renders the real "Late fee
+test" rule created via the API above. Backend e2e/isolation suite:
+453/453 (one transient timeout on an unrelated `audit_log` RLS test under
+concurrent load, not reproducible on a clean re-run — not a regression).
+Smoke-test cleanup: the one live-verification fee structure and
+everything under it (item, instalment, penalty rule, invoice, penalty
+charge, reversal, 8 audit_log rows) removed in FK-safe order; fee
+structures/invoices confirmed back to the original single seeded row
+each.
+
 ## Setup
 
 ```bash

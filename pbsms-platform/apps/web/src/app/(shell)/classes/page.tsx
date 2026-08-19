@@ -8,6 +8,8 @@ import { LoadingState } from '@/components/states/LoadingState';
 import { ErrorState } from '@/components/states/ErrorState';
 import { EmptyState } from '@/components/states/EmptyState';
 import { apiFetch, apiGet } from '@/lib/api-client';
+import { decodeAccessToken } from '@/lib/auth-token-store';
+import { ACADEMIC_ADMIN, hasAnyRole } from '@/lib/role-groups';
 import styles from './academic-structure.module.css';
 
 interface AcademicYear {
@@ -91,6 +93,8 @@ export default function AcademicStructurePage() {
 }
 
 function AcademicYearsTab() {
+  const roleCodes = decodeAccessToken()?.roleCodes ?? [];
+  const canConfigure = hasAnyRole(roleCodes, ACADEMIC_ADMIN);
   const [loading, setLoading] = useState(true);
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [schools, setSchools] = useState<School[]>([]);
@@ -131,10 +135,12 @@ function AcademicYearsTab() {
 
   return (
     <div>
-      <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
-        {showCreate ? 'Cancel' : 'Add academic year'}
-      </Button>
-      {showCreate && (
+      {canConfigure && (
+        <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
+          {showCreate ? 'Cancel' : 'Add academic year'}
+        </Button>
+      )}
+      {canConfigure && showCreate && (
         <div className={styles.formRow}>
           <select className={styles.select} value={form.schoolId} onChange={(e) => setForm({ ...form, schoolId: e.target.value })}>
             {schools.map((s) => (
@@ -169,6 +175,8 @@ function AcademicYearsTab() {
 }
 
 function ClassesTab() {
+  const roleCodes = decodeAccessToken()?.roleCodes ?? [];
+  const canConfigure = hasAnyRole(roleCodes, ACADEMIC_ADMIN);
   const [loading, setLoading] = useState(true);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [years, setYears] = useState<AcademicYear[]>([]);
@@ -209,10 +217,12 @@ function ClassesTab() {
 
   return (
     <div>
-      <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
-        {showCreate ? 'Cancel' : 'Add class'}
-      </Button>
-      {showCreate && (
+      {canConfigure && (
+        <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
+          {showCreate ? 'Cancel' : 'Add class'}
+        </Button>
+      )}
+      {canConfigure && showCreate && (
         <div className={styles.formRow}>
           <select className={styles.select} value={form.academicYearId} onChange={(e) => setForm({ ...form, academicYearId: e.target.value })}>
             {years.map((y) => (
@@ -244,6 +254,8 @@ function ClassesTab() {
 }
 
 function SubjectsTab() {
+  const roleCodes = decodeAccessToken()?.roleCodes ?? [];
+  const canConfigure = hasAnyRole(roleCodes, ACADEMIC_ADMIN);
   const [loading, setLoading] = useState(true);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -279,10 +291,12 @@ function SubjectsTab() {
 
   return (
     <div>
-      <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
-        {showCreate ? 'Cancel' : 'Add subject'}
-      </Button>
-      {showCreate && (
+      {canConfigure && (
+        <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
+          {showCreate ? 'Cancel' : 'Add subject'}
+        </Button>
+      )}
+      {canConfigure && showCreate && (
         <div className={styles.formRow}>
           <input className={styles.textInput} placeholder="Name, e.g. Mathematics" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <input className={styles.textInput} placeholder="Code, e.g. MATH" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
@@ -307,6 +321,8 @@ function SubjectsTab() {
 }
 
 function TeacherAssignmentsTab() {
+  const roleCodes = decodeAccessToken()?.roleCodes ?? [];
+  const canConfigure = hasAnyRole(roleCodes, ACADEMIC_ADMIN);
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState<TeacherAssignment[]>([]);
   const [teachers, setTeachers] = useState<StaffMember[]>([]);
@@ -367,10 +383,12 @@ function TeacherAssignmentsTab() {
 
   return (
     <div>
-      <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
-        {showCreate ? 'Cancel' : 'Add assignment'}
-      </Button>
-      {showCreate && (
+      {canConfigure && (
+        <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
+          {showCreate ? 'Cancel' : 'Add assignment'}
+        </Button>
+      )}
+      {canConfigure && showCreate && (
         <div className={styles.formRow}>
           <select className={styles.select} value={form.teacherId} onChange={(e) => setForm({ ...form, teacherId: e.target.value })}>
             {teachers.map((t) => (
@@ -417,7 +435,7 @@ function TeacherAssignmentsTab() {
             </span>
             <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
               <Pill variant={a.status === 'active' ? 'success' : 'neutral'}>{a.status}</Pill>
-              {a.status === 'active' && (
+              {canConfigure && a.status === 'active' && (
                 <Button type="button" variant="secondary" onClick={() => handleEnd(a.id)}>
                   End
                 </Button>

@@ -25,15 +25,38 @@ const STARTER_PLAN = '00000000-0000-0000-0000-000000000001'; // seed_demo.sql
 describe('Tenant lifecycle (Chapter 4.1, TEN-023..026)', () => {
   let platformPool: Pool;
   let appPool: Pool;
+  let cleanupPool: Pool;
   let service: TenantsService;
+  const createdTenantIds: string[] = [];
 
   beforeAll(() => {
     platformPool = new Pool({ connectionString: process.env.PLATFORM_DATABASE_URL });
     appPool = new Pool({ connectionString: process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL });
+    // pbsms_platform (platformPool's role) deliberately has no DELETE grant
+    // on tenants/platform_audit_logs — same restricted-role posture as
+    // pbsms_app (0021_tenant_lifecycle.sql). Cleanup below needs the
+    // schema-owning role instead, used for nothing but this teardown.
+    cleanupPool = new Pool({ connectionString: process.env.MIGRATE_DATABASE_URL });
     service = new TenantsService(platformPool);
   });
 
   afterAll(async () => {
+    // Every test below creates a real tenant and never deleted it — this
+    // was silently accumulating a fresh batch of 7 rows in `tenants` on
+    // every e2e run with no teardown at all (caught 2026-08-19 after 119
+    // stray rows had built up across many prior sessions' runs).
+    if (createdTenantIds.length > 0) {
+      // record_platform_action_in_tenant_audit() (0022_platform_roles.sql)
+      // means every create()/transition() call writes BOTH the
+      // platform-side audit trail AND the tenant's own audit_log — both
+      // FK tenants(id) and must go before it (order found live: the first
+      // cleanup attempt only deleted platform_audit_logs and still hit
+      // audit_log's FK on the tenants delete).
+      await cleanupPool.query('delete from audit_log where tenant_id = any($1::uuid[])', [createdTenantIds]);
+      await cleanupPool.query('delete from platform_audit_logs where tenant_id = any($1::uuid[])', [createdTenantIds]);
+      await cleanupPool.query('delete from tenants where id = any($1::uuid[])', [createdTenantIds]);
+    }
+    await cleanupPool.end();
     await platformPool.end();
     await appPool.end();
   });
@@ -53,6 +76,7 @@ describe('Tenant lifecycle (Chapter 4.1, TEN-023..026)', () => {
   it('creates a tenant in trial status with a 30-day default trial window, and audits the creation', async () => {
     const slug = `test-school-${Date.now()}`;
     const tenant = await service.create(PLATFORM_ADMIN, { name: 'Test School', slug });
+    createdTenantIds.push(tenant.id);
 
     expect(tenant.status).toBe('trial');
     expect(tenant.trial_ends_at).not.toBeNull();
@@ -69,6 +93,7 @@ describe('Tenant lifecycle (Chapter 4.1, TEN-023..026)', () => {
       name: 'No Plan School',
       slug: `no-plan-${Date.now()}`,
     });
+    createdTenantIds.push(tenant.id);
 
     await expect(
       service.transition(tenant.id, PLATFORM_ADMIN, {
@@ -85,6 +110,7 @@ describe('Tenant lifecycle (Chapter 4.1, TEN-023..026)', () => {
       slug: `unconfirmed-${Date.now()}`,
       planId: STARTER_PLAN,
     });
+    createdTenantIds.push(tenant.id);
 
     await expect(
       service.transition(tenant.id, PLATFORM_ADMIN, { toStatus: 'onboarding', reason: 'sales confirmed' }),
@@ -97,6 +123,7 @@ describe('Tenant lifecycle (Chapter 4.1, TEN-023..026)', () => {
       slug: `no-reason-${Date.now()}`,
       planId: STARTER_PLAN,
     });
+    createdTenantIds.push(tenant.id);
 
     await expect(
       service.transition(tenant.id, PLATFORM_ADMIN, { toStatus: 'onboarding', reason: '', billingMethodConfirmed: true }),
@@ -108,6 +135,7 @@ describe('Tenant lifecycle (Chapter 4.1, TEN-023..026)', () => {
       name: 'Skip State School',
       slug: `skip-state-${Date.now()}`,
     });
+    createdTenantIds.push(tenant.id);
 
     await expect(
       service.transition(tenant.id, PLATFORM_ADMIN, { toStatus: 'active', reason: 'skip ahead' }),
@@ -120,6 +148,7 @@ describe('Tenant lifecycle (Chapter 4.1, TEN-023..026)', () => {
       slug: `full-lifecycle-${Date.now()}`,
       planId: STARTER_PLAN,
     });
+    createdTenantIds.push(tenant.id);
 
     const onboarding = await service.transition(tenant.id, PLATFORM_ADMIN, {
       toStatus: 'onboarding',
@@ -186,6 +215,7 @@ describe('Tenant lifecycle (Chapter 4.1, TEN-023..026)', () => {
       name: 'Findable School',
       slug: `findable-${Date.now()}`,
     });
+    createdTenantIds.push(tenant.id);
 
     const found = await service.findOne(tenant.id);
     expect(found.id).toBe(tenant.id);

@@ -843,13 +843,178 @@ on. The audit was redone directly instead: grepping each page's actual
 literals, which a naive grep misses) and reading each page's own header
 comment, both cross-checked against the real controllers.
 
-Before building Stage 9 (Platform Console — tenant management,
-plan/billing, impersonation, platform audit log — all built backend-side
-in Phases A1-A4 but with zero frontend yet), read SRS v2.1 Chapter 3-5
-and the frontend spec's own §14 deviation note (Platform Console shows
-impersonation-blocked actions as disabled-with-reason rather than
-hidden, the one documented exception to "the frontend hides unavailable
-actions").
+## Stage 9 — Platform Console: tenants, billing, impersonation, platform staff, audit log (done)
+
+Spec §13 Build Order's final stage. Picked up 2026-08-19 as an
+**already-in-progress, uncommitted-then-committed** build, same
+forensic-recovery shape as Stage 8: an untracked `.pa11y-stage9.tmp.js`
+was sitting in the working tree (a pa11y check on `/platform` + `/login`,
+started and never finished), and a checkpoint commit (`ec79539`) had
+already landed the real code — a full `/platform` tabbed hub (Tenants,
+Billing, Impersonation, Platform Staff, Audit Log — 900 lines), its own
+shell/`RequirePlatformAuth` guard (a fourth, genuinely separate shell
+after Staff Console/Teacher Field App/Parent View), and — the real
+prerequisite this stage needed — `LoginForm.tsx` gained a working
+MFA verify **and self-enrollment** flow, replacing every earlier stage's
+honest "not built yet" message. No memory of the session that did this
+existed; this session verified it rather than re-building it.
+
+One correction to earlier stages' setup notes below and to
+[[project_frontend_build_status]]'s memory: **MFA sign-in is real now**,
+not a documented gap. `admin@sunrise.pbsms.test` and the platform-only
+`platform-admin@pbsms.test` (seeded, `platform_super_admin`, no
+tenant — see `infra/seed/seed_demo.sql`) both go through a real
+verify-code or first-time-enrollment screen instead of an honest refusal.
+
+**Tabs, matching each `/v1/platform/*` controller's real shape** (broad
+read open to any platform role, narrow write per-tier — same split every
+other module in this backend uses):
+
+- **Tenants** — create (Onboarding Specialist/`platform_super_admin`
+  only), the 7-state lifecycle transition graph hand-mirrored from
+  `TenantsService`'s `ALLOWED_TRANSITIONS` (documented judgment call,
+  same category as `role-groups.ts`), plan assignment, and a
+  per-tenant audit trail — all inside one expandable row rather than
+  separate screens, since the spec's 9-item screen inventory groups
+  naturally into one tenant's detail view.
+- **Billing** — plans/metering (read-only wraps of data that already
+  existed with no prior read endpoint), a revenue dashboard (MRR +
+  tenant-status counts; true churn/cohort analysis flagged not built,
+  `billing.service.ts`'s own documented scope), invoice generation,
+  payment recording, mark-overdue, dunning advance.
+- **Impersonation** — grants are started from a tenant's own detail
+  panel (Tenants tab), not here; this tab lists/ends grants and handles
+  the TEN-021 four-eyes sensitive-action approval. See the real bug
+  found and fixed below.
+- **Platform Staff** — role grant/revoke is `platform_super_admin`-only
+  ("break-glass access only", Chapter 3.1); reading is open to any
+  platform role.
+- **Audit Log** — the platform-actor side of TEN-022 only; a tenant's
+  own `audit_log` still has no read endpoint anywhere in this backend
+  (same gap Stage 8's Compliance page already flagged), so this is
+  genuinely not a general audit viewer.
+
+**A real, live-verified bug found and fixed**: the Impersonation tab's
+"Request approval" UI was gated to `isSuperAdmin`, but
+`approveSensitiveApproval()` is *also* `platform_super_admin`-only and
+the backend enforces real four-eyes (requester cannot also approve —
+confirmed live, see below). That combination meant the only user who
+could ever see the "Request approval" button was guaranteed to fail the
+approval it produced — the four-eyes control was unusable through this
+UI. Support Engineer is the role TEN-021 actually names as the
+requester (`impersonation.controller.ts`'s own header comment), so the
+request section is now gated by `canImpersonate` (Support Engineer or
+`platform_super_admin`) instead. Added a minimal approve action
+alongside it (paste an approval id, `platform_super_admin` only) since
+no endpoint anywhere lists pending approvals — the requester passes the
+id along the same out-of-band way `support_ticket_ref` already is,
+rather than this screen inventing a list view over a read path that
+doesn't exist.
+
+**A real accessibility regression found and fixed**: every raw
+`<input>`/`<select>` across all five tabs (25 controls) relied on
+`placeholder` text alone for its accessible name — a real WCAG 4.1.2
+failure pa11y caught fresh (18 issues across the Billing/Impersonation/
+Platform Staff/Audit Log tabs), not present in Stages 1-8's inputs.
+Fixed with `aria-label` on every one, re-verified to 0 issues after.
+
+**A real, pre-existing test-data hygiene gap found and fixed, unrelated
+to this stage's own code**: `tenant-lifecycle.e2e-spec.ts` (written back
+in Phase A1) creates 7 real tenants per run and never deleted any of
+them — `afterAll` only closed its DB pools. This local Postgres had
+accumulated **119 stray test tenants** across many prior sessions'
+`npm run api:test:e2e` runs; the live `/v1/platform/tenants` list had
+121 rows, only 2 real. Fixed two ways: (1) the test now tracks every
+tenant id it creates and deletes it (plus the `audit_log` and
+`platform_audit_logs` rows it produces via
+`record_platform_action_in_tenant_audit()` — both FK `tenants(id)` and
+must go first) through a third pool connected as the schema-owning role,
+since `pbsms_platform`'s own connection deliberately has no `DELETE`
+grant on any platform table (same restricted-role posture as
+`pbsms_app`); (2) the 119 accumulated rows were deleted the same way,
+authorized by the user first given the scale. Re-ran the suite twice
+after the fix to confirm it actually holds (`tenants` back to exactly 2
+rows both times) before trusting it.
+
+**Spec deviation, flagged not fixed**: §14 names Platform Console as the
+one documented exception to "the frontend hides unavailable actions" —
+here, unavailable actions should show disabled-with-a-reason instead of
+being hidden entirely. The current tabs all use plain
+`{condition && (...)}` hiding (matching every other module in this
+codebase), not the disabled-with-reason pattern. Not changed this
+session — a real, deliberate design divergence from §14 worth a decision
+before Stage 9 is considered fully spec-conformant, not an oversight to
+silently correct.
+
+**Verified this session:**
+
+- Clean `npm run build` on both `apps/web` (28 routes) and `apps/api`.
+- Backend e2e/isolation suite: **453/453**, both before and after the
+  tenant-lifecycle cleanup fix.
+- A role-gate audit: every tab's client-side gate
+  (`canOnboard`/`canBilling`/`canImpersonate`/`isSuperAdmin`) read
+  against the real `@PlatformRoles()` decorator on the matching
+  controller method — all match except the four-eyes bug above, which
+  is now fixed. One lower-severity, deliberately-left note: the whole
+  Impersonation tab is gated behind `canImpersonate`, but
+  `endGrant`/`listGrants`/`requestSensitiveApproval` are actually
+  `PLATFORM_ALL` on the backend (broader) — a Billing Administrator or
+  Onboarding Specialist can't reach this tab at all even though the
+  backend would let them view/end a grant. Not a security hole (server
+  still decides), left as a scope judgment call rather than widened,
+  since Chapter 3.1 names Support Engineer as impersonation's real
+  owner.
+- Fresh authenticated pa11y (WCAG2AA) via a real MFA login + injected
+  session (the extension-based click-through this session's other
+  verification work usually does was unavailable — Chrome extension
+  never reconnected) — 0 issues across `/login` and all 5 Platform
+  Console tabs, after the accessible-name fix above.
+- Live-HTTP, real Postgres, as the real seeded
+  `platform-admin@pbsms.test` (`platform_super_admin`) through an actual
+  MFA verify (no bypass — computed a live TOTP code from the seeded
+  secret, same technique documented in
+  [[project_frontend_build_status]]): full tenant lifecycle
+  (create→plan-assign→onboarding-blocked-without-plan→onboarding→
+  active), invoice generate→pay, a role grant→revoke round-trip, and
+  the full impersonation loop (create grant→mint token→request
+  sensitive approval→**confirmed the backend's four-eyes rejection
+  live**, same actor request+approve → real 409→end grant). Every
+  response shape matched the frontend's TypeScript interfaces exactly.
+- Smoke-test cleanup: the one live-verification tenant (`Live Verify
+  School`) and everything under it (subscription, invoice, ended grant,
+  approval request, audit rows across both `audit_log` and
+  `platform_audit_logs`) removed in FK-safe order, reported and
+  authorized first. `tenants` confirmed back to exactly the 2 real rows
+  afterward.
+
+**Real browser click-through, completed once the Chrome extension
+reconnected later the same session**: signed in as
+`platform-admin@pbsms.test` through the actual `/login` UI (real
+credentials → real MFA verify screen → real code), landed on `/platform`,
+and visually confirmed all 5 tabs render correctly with clean live data
+— Tenants (2 real active tenants, correct plan names), Billing (metering
+figures correct, "No platform invoices yet" matching the cleanup),
+Impersonation ("No impersonation grants", and the new four-eyes-fix
+approve section rendering), Platform Staff (both platform users, the
+support_engineer grant/revoke round-trip correctly showing "no active
+roles" again), Audit Log (exactly the 2 remaining entries from that
+round-trip). This is the strongest evidence this stage has — a real
+user's actual click path, not code review or an injected session.
+
+**A second sharp edge found and fixed along the way**: the first
+click-through attempt showed the OLD "MFA isn't built yet" message
+despite the code being real and already proven live via `curl` — caused
+by a **stale service worker** (Stage 3's real `public/sw.js`,
+cache-first shell strategy) left registered in this Chrome profile from
+an earlier session, intercepting `/login` with a cached bundle. Nothing
+to do with the Next.js dev server. Fixed by unregistering it and
+clearing its cache from the page's own JS context, then a hard reload.
+Worth checking `navigator.serviceWorker.getRegistrations()` first,
+before assuming a dev server is serving stale code, any time this app's
+UI doesn't match what the source actually contains in a
+previously-visited browser profile.
+
+This closes Frontend Design Spec v1.1 §13's 9-stage Build Order.
 
 ## Setup
 
@@ -861,6 +1026,10 @@ npm run web:dev    # from repo root — apps/web, falls back to :3001 (api holds
 
 Log in at `/login` with a seeded demo account (password `demo1234` for all
 of them — see root README's Quick Start): `teacher@sunrise.pbsms.test` or
-`accountant@sunrise.pbsms.test` work today (no MFA). `admin@sunrise.pbsms.test`
-and other `LEADERSHIP`-tier accounts will hit Stage 2's honest
-MFA-not-built message instead of signing in — that's expected, not a bug.
+`accountant@sunrise.pbsms.test` work today with no extra step.
+`admin@sunrise.pbsms.test` and other `LEADERSHIP`-tier accounts, plus the
+platform-only `platform-admin@pbsms.test`, go through a real MFA
+verify-code screen (Stage 9) — first sign-in for an account with no
+`mfa_secret` yet shows a real self-enrollment screen instead (setup key +
+otpauth URI as copyable text, no QR image rendering in this
+environment).

@@ -310,10 +310,10 @@ function TenantsTab({
       {showCreate && (
         <div style={{ marginBottom: 'var(--pb-space-3)' }}>
           <div className={styles.formRow}>
-            <input className={styles.textInput} placeholder="School name" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} />
-            <input className={styles.textInput} placeholder="Slug" value={createForm.slug} onChange={(e) => setCreateForm({ ...createForm, slug: e.target.value })} />
-            <input className={styles.textInput} placeholder="Billing email (optional)" value={createForm.billingEmail} onChange={(e) => setCreateForm({ ...createForm, billingEmail: e.target.value })} />
-            <input className={styles.textInput} type="number" placeholder="Trial days" value={createForm.trialDays} onChange={(e) => setCreateForm({ ...createForm, trialDays: e.target.value })} />
+            <input aria-label="School name" className={styles.textInput} placeholder="School name" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} />
+            <input aria-label="Slug" className={styles.textInput} placeholder="Slug" value={createForm.slug} onChange={(e) => setCreateForm({ ...createForm, slug: e.target.value })} />
+            <input aria-label="Billing email" className={styles.textInput} placeholder="Billing email (optional)" value={createForm.billingEmail} onChange={(e) => setCreateForm({ ...createForm, billingEmail: e.target.value })} />
+            <input aria-label="Trial days" className={styles.textInput} type="number" placeholder="Trial days" value={createForm.trialDays} onChange={(e) => setCreateForm({ ...createForm, trialDays: e.target.value })} />
           </div>
           <Button type="button" onClick={handleCreate} disabled={creating || !createForm.name || !createForm.slug}>
             Create
@@ -348,7 +348,7 @@ function TenantsTab({
 
                   {nextStatuses.length > 0 ? (
                     <div className={styles.formRow}>
-                      <select className={styles.select} value={transitionForm.toStatus} onChange={(e) => setTransitionForm({ ...transitionForm, toStatus: e.target.value })}>
+                      <select aria-label="Transition to" className={styles.select} value={transitionForm.toStatus} onChange={(e) => setTransitionForm({ ...transitionForm, toStatus: e.target.value })}>
                         <option value="">Transition to…</option>
                         {nextStatuses.map((s) => (
                           <option key={s} value={s}>
@@ -356,7 +356,7 @@ function TenantsTab({
                           </option>
                         ))}
                       </select>
-                      <input className={styles.textInput} placeholder="Reason (required)" value={transitionForm.reason} onChange={(e) => setTransitionForm({ ...transitionForm, reason: e.target.value })} />
+                      <input aria-label="Reason" className={styles.textInput} placeholder="Reason (required)" value={transitionForm.reason} onChange={(e) => setTransitionForm({ ...transitionForm, reason: e.target.value })} />
                       {t.status === 'trial' && transitionForm.toStatus === 'onboarding' && (
                         <>
                           <label className={styles.hint} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -364,6 +364,7 @@ function TenantsTab({
                             Billing method confirmed
                           </label>
                           <input
+                            aria-label="Free-tier approval reason"
                             className={styles.textInput}
                             placeholder="or free-tier approval reason"
                             value={transitionForm.freeTierApprovalReason}
@@ -382,7 +383,7 @@ function TenantsTab({
 
                   {canBilling && (
                     <div className={styles.formRow} style={{ marginTop: 'var(--pb-space-3)' }}>
-                      <select className={styles.select} value={planForm.planId} onChange={(e) => setPlanForm({ ...planForm, planId: e.target.value })}>
+                      <select aria-label="Assign plan" className={styles.select} value={planForm.planId} onChange={(e) => setPlanForm({ ...planForm, planId: e.target.value })}>
                         <option value="">Assign plan…</option>
                         {plans.map((p) => (
                           <option key={p.id} value={p.id}>
@@ -390,7 +391,7 @@ function TenantsTab({
                           </option>
                         ))}
                       </select>
-                      <select className={styles.select} value={planForm.billingCycle} onChange={(e) => setPlanForm({ ...planForm, billingCycle: e.target.value })}>
+                      <select aria-label="Billing cycle" className={styles.select} value={planForm.billingCycle} onChange={(e) => setPlanForm({ ...planForm, billingCycle: e.target.value })}>
                         <option value="monthly">Monthly</option>
                         <option value="termly">Termly</option>
                       </select>
@@ -403,8 +404,8 @@ function TenantsTab({
 
                   {canImpersonate && (
                     <div className={styles.formRow} style={{ marginTop: 'var(--pb-space-3)' }}>
-                      <input className={styles.textInput} placeholder="Support ticket # (required)" value={grantForm.supportTicketRef} onChange={(e) => setGrantForm({ ...grantForm, supportTicketRef: e.target.value })} />
-                      <input className={styles.textInput} placeholder="Reason (optional)" value={grantForm.reason} onChange={(e) => setGrantForm({ ...grantForm, reason: e.target.value })} />
+                      <input aria-label="Support ticket number" className={styles.textInput} placeholder="Support ticket # (required)" value={grantForm.supportTicketRef} onChange={(e) => setGrantForm({ ...grantForm, supportTicketRef: e.target.value })} />
+                      <input aria-label="Reason" className={styles.textInput} placeholder="Reason (optional)" value={grantForm.reason} onChange={(e) => setGrantForm({ ...grantForm, reason: e.target.value })} />
                       <Button type="button" variant="secondary" onClick={() => handleStartImpersonation(t)} disabled={busy || !grantForm.supportTicketRef}>
                         Start impersonation session
                       </Button>
@@ -532,8 +533,8 @@ function BillingTab({ tenants, canBilling }: { tenants: Tenant[]; canBilling: bo
     <div>
       <p className={styles.hint}>Revenue dashboard (MRR, invoice totals, tenant status counts)</p>
       <div className={styles.formRow}>
-        <input className={styles.textInput} type="date" value={revenueRange.periodStart} onChange={(e) => setRevenueRange({ ...revenueRange, periodStart: e.target.value })} />
-        <input className={styles.textInput} type="date" value={revenueRange.periodEnd} onChange={(e) => setRevenueRange({ ...revenueRange, periodEnd: e.target.value })} />
+        <input aria-label="Revenue report period start" className={styles.textInput} type="date" value={revenueRange.periodStart} onChange={(e) => setRevenueRange({ ...revenueRange, periodStart: e.target.value })} />
+        <input aria-label="Revenue report period end" className={styles.textInput} type="date" value={revenueRange.periodEnd} onChange={(e) => setRevenueRange({ ...revenueRange, periodEnd: e.target.value })} />
         <Button type="button" onClick={loadRevenue} disabled={!revenueRange.periodStart || !revenueRange.periodEnd}>
           Load
         </Button>
@@ -570,7 +571,7 @@ function BillingTab({ tenants, canBilling }: { tenants: Tenant[]; canBilling: bo
             Generate invoice
           </p>
           <div className={styles.formRow}>
-            <select className={styles.select} value={genForm.tenantId} onChange={(e) => setGenForm({ ...genForm, tenantId: e.target.value })}>
+            <select aria-label="Tenant" className={styles.select} value={genForm.tenantId} onChange={(e) => setGenForm({ ...genForm, tenantId: e.target.value })}>
               <option value="">Tenant…</option>
               {tenants.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -578,8 +579,8 @@ function BillingTab({ tenants, canBilling }: { tenants: Tenant[]; canBilling: bo
                 </option>
               ))}
             </select>
-            <input className={styles.textInput} type="date" value={genForm.periodStart} onChange={(e) => setGenForm({ ...genForm, periodStart: e.target.value })} />
-            <input className={styles.textInput} type="date" value={genForm.periodEnd} onChange={(e) => setGenForm({ ...genForm, periodEnd: e.target.value })} />
+            <input aria-label="Invoice period start" className={styles.textInput} type="date" value={genForm.periodStart} onChange={(e) => setGenForm({ ...genForm, periodStart: e.target.value })} />
+            <input aria-label="Invoice period end" className={styles.textInput} type="date" value={genForm.periodEnd} onChange={(e) => setGenForm({ ...genForm, periodEnd: e.target.value })} />
             <Button type="button" onClick={handleGenerate} disabled={busy || !genForm.tenantId || !genForm.periodStart || !genForm.periodEnd}>
               Generate
             </Button>
@@ -612,7 +613,7 @@ function BillingTab({ tenants, canBilling }: { tenants: Tenant[]; canBilling: bo
               <div className={styles.formRow}>
                 {inv.status === 'issued' && (
                   <>
-                    <input className={styles.textInput} placeholder="Payment reference" value={payRef[inv.id] ?? ''} onChange={(e) => setPayRef({ ...payRef, [inv.id]: e.target.value })} />
+                    <input aria-label="Payment reference" className={styles.textInput} placeholder="Payment reference" value={payRef[inv.id] ?? ''} onChange={(e) => setPayRef({ ...payRef, [inv.id]: e.target.value })} />
                     <Button type="button" variant="secondary" onClick={() => handlePay(inv.id)} disabled={busy || !payRef[inv.id]}>
                       Record payment
                     </Button>
@@ -623,7 +624,7 @@ function BillingTab({ tenants, canBilling }: { tenants: Tenant[]; canBilling: bo
                 )}
                 {inv.status === 'overdue' && (
                   <>
-                    <input className={styles.textInput} placeholder="Payment reference" value={payRef[inv.id] ?? ''} onChange={(e) => setPayRef({ ...payRef, [inv.id]: e.target.value })} />
+                    <input aria-label="Payment reference" className={styles.textInput} placeholder="Payment reference" value={payRef[inv.id] ?? ''} onChange={(e) => setPayRef({ ...payRef, [inv.id]: e.target.value })} />
                     <Button type="button" variant="secondary" onClick={() => handlePay(inv.id)} disabled={busy || !payRef[inv.id]}>
                       Record payment
                     </Button>
@@ -648,6 +649,10 @@ function ImpersonationTab({ tenants, canImpersonate, isSuperAdmin }: { tenants: 
   const [error, setError] = useState<string | null>(null);
   const [approvalGrantId, setApprovalGrantId] = useState<string>('');
   const [actionType, setActionType] = useState('financial_reversal');
+  const [requestedApprovalId, setRequestedApprovalId] = useState<string | null>(null);
+  const [approveId, setApproveId] = useState('');
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [approveResult, setApproveResult] = useState<string | null>(null);
 
   function reload() {
     return apiGet<Grant[]>('/v1/platform/impersonation').then(setGrants);
@@ -678,11 +683,31 @@ function ImpersonationTab({ tenants, canImpersonate, isSuperAdmin }: { tenants: 
     if (!approvalGrantId) return;
     setBusy(true);
     setError(null);
+    setRequestedApprovalId(null);
     try {
       const res = await apiFetch(`/v1/platform/impersonation/${approvalGrantId}/sensitive-approvals`, { method: 'POST', body: JSON.stringify({ actionType }) });
       if (!res.ok) throw new Error(await errorMessage(res, `Failed (${res.status})`));
+      const approval = (await res.json()) as { id: string };
+      setRequestedApprovalId(approval.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not request approval.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleApprove() {
+    if (!approveId) return;
+    setBusy(true);
+    setApproveError(null);
+    setApproveResult(null);
+    try {
+      const res = await apiFetch(`/v1/platform/impersonation/sensitive-approvals/${approveId}/approve`, { method: 'POST' });
+      if (!res.ok) throw new Error(await errorMessage(res, `Failed (${res.status})`));
+      setApproveResult('Approved.');
+      setApproveId('');
+    } catch (err) {
+      setApproveError(err instanceof Error ? err.message : 'Could not approve.');
     } finally {
       setBusy(false);
     }
@@ -718,11 +743,19 @@ function ImpersonationTab({ tenants, canImpersonate, isSuperAdmin }: { tenants: 
         ))
       )}
 
-      {isSuperAdmin && (
+      {/* Gated by canImpersonate (support_engineer or platform_super_admin),
+          matching requestSensitiveApproval's real backend guard — NOT
+          isSuperAdmin. Gating this to isSuperAdmin alone would mean the
+          only user who could ever click it is also the only user who can
+          approve, and the backend's own four-eyes check
+          (requester !== approver) would then reject every request this UI
+          could produce. Support Engineer is the role TEN-021 actually
+          names as the requester. */}
+      {canImpersonate && (
         <div style={{ marginTop: 'var(--pb-space-4)' }}>
           <p className={styles.hint}>Sensitive-action four-eyes approval (TEN-021) — the requester cannot also approve.</p>
           <div className={styles.formRow}>
-            <select className={styles.select} value={approvalGrantId} onChange={(e) => setApprovalGrantId(e.target.value)}>
+            <select aria-label="Grant" className={styles.select} value={approvalGrantId} onChange={(e) => setApprovalGrantId(e.target.value)}>
               <option value="">Grant…</option>
               {grants
                 .filter((g) => !g.revoked_at)
@@ -732,7 +765,7 @@ function ImpersonationTab({ tenants, canImpersonate, isSuperAdmin }: { tenants: 
                   </option>
                 ))}
             </select>
-            <select className={styles.select} value={actionType} onChange={(e) => setActionType(e.target.value)}>
+            <select aria-label="Action type" className={styles.select} value={actionType} onChange={(e) => setActionType(e.target.value)}>
               <option value="financial_reversal">Financial reversal</option>
               <option value="data_export">Data export</option>
               <option value="permission_change">Permission change</option>
@@ -741,6 +774,31 @@ function ImpersonationTab({ tenants, canImpersonate, isSuperAdmin }: { tenants: 
               Request approval
             </Button>
           </div>
+          {requestedApprovalId && (
+            <p className={styles.hint}>
+              Requested — approval id <strong>{requestedApprovalId}</strong>. Share this with a different platform_super_admin to approve.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* No backend endpoint lists pending sensitive-action approvals
+          (only create + approve exist) — the requester above passes the
+          approval id along (e.g. via the support ticket) the same way
+          support_ticket_ref itself is communicated out of band, rather
+          than this screen inventing a list view over a read path that
+          doesn't exist. */}
+      {isSuperAdmin && (
+        <div style={{ marginTop: 'var(--pb-space-4)' }}>
+          <p className={styles.hint}>Approve a sensitive-action request (platform_super_admin only, cannot approve your own request).</p>
+          <div className={styles.formRow}>
+            <input aria-label="Approval id" className={styles.textInput} placeholder="Approval id" value={approveId} onChange={(e) => setApproveId(e.target.value)} />
+            <Button type="button" variant="secondary" onClick={handleApprove} disabled={busy || !approveId}>
+              Approve
+            </Button>
+          </div>
+          {approveError && <ErrorState message={approveError} />}
+          {approveResult && <p className={styles.hint}>{approveResult}</p>}
         </div>
       )}
     </div>
@@ -825,8 +883,8 @@ function PlatformStaffTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
       {isSuperAdmin && (
         <div className={styles.formRow} style={{ marginTop: 'var(--pb-space-3)' }}>
-          <input className={styles.textInput} placeholder="User id (must already exist, is_platform_user=true)" value={grantForm.userId} onChange={(e) => setGrantForm({ ...grantForm, userId: e.target.value })} />
-          <select className={styles.select} value={grantForm.roleCode} onChange={(e) => setGrantForm({ ...grantForm, roleCode: e.target.value })}>
+          <input aria-label="User id" className={styles.textInput} placeholder="User id (must already exist, is_platform_user=true)" value={grantForm.userId} onChange={(e) => setGrantForm({ ...grantForm, userId: e.target.value })} />
+          <select aria-label="Role to grant" className={styles.select} value={grantForm.roleCode} onChange={(e) => setGrantForm({ ...grantForm, roleCode: e.target.value })}>
             <option value="platform_super_admin">Platform super admin</option>
             <option value="support_engineer">Support engineer</option>
             <option value="billing_administrator">Billing administrator</option>
@@ -865,6 +923,7 @@ function AuditLogTab({ tenants }: { tenants: Tenant[] }) {
     <div>
       <div className={styles.formRow}>
         <select
+          aria-label="Filter by tenant"
           className={styles.select}
           value={tenantFilter}
           onChange={(e) => {

@@ -467,7 +467,8 @@
   async function api(path, opts) {
     opts = opts || {};
     const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
-    if (state.token) headers["Authorization"] = "Bearer " + state.token;
+    const bearer = opts.token || state.token;
+    if (bearer) headers["Authorization"] = "Bearer " + bearer;
     let res;
     try {
       res = await fetch(state.baseUrl + path, {
@@ -501,6 +502,86 @@
     } catch (e) {
       return {};
     }
+  }
+
+  /* ============================= MFA (SEC-030) =============================
+   * Headmaster/proprietor logins are LEADERSHIP-tier and go through the API's
+   * mandatory MFA flow (apps/api/src/common/auth/totp.ts — RFC 6238, SHA1,
+   * 30s step, 6 digits) rather than returning accessToken straight away.
+   * This console is a local-only demo over throwaway seed data, so instead
+   * of asking someone to type codes from a real authenticator app, it
+   * enrolls automatically on first login and re-derives codes itself on
+   * every login after, mirroring the same algorithm the server uses. The
+   * per-account secret is kept in localStorage only (never sent anywhere
+   * but this API), the same trust boundary as the demo password already
+   * visible in the sign-in form. */
+  const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  function base32Decode(encoded) {
+    const clean = encoded.toUpperCase().replace(/=+$/, "");
+    let bits = 0, value = 0;
+    const bytes = [];
+    for (const char of clean) {
+      const idx = BASE32_ALPHABET.indexOf(char);
+      if (idx === -1) continue;
+      value = (value << 5) | idx;
+      bits += 5;
+      if (bits >= 8) {
+        bytes.push((value >>> (bits - 8)) & 0xff);
+        bits -= 8;
+      }
+    }
+    return new Uint8Array(bytes);
+  }
+  async function totp(base32Secret, driftSteps) {
+    const key = base32Decode(base32Secret);
+    const counter = Math.floor(Date.now() / 1000 / 30) + (driftSteps || 0);
+    const counterBuf = new ArrayBuffer(8);
+    new DataView(counterBuf).setBigUint64(0, BigInt(counter), false);
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw", key, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
+    );
+    const sig = new Uint8Array(await crypto.subtle.sign("HMAC", cryptoKey, counterBuf));
+    const offset = sig[sig.length - 1] & 0x0f;
+    const binCode =
+      ((sig[offset] & 0x7f) << 24) |
+      ((sig[offset + 1] & 0xff) << 16) |
+      ((sig[offset + 2] & 0xff) << 8) |
+      (sig[offset + 3] & 0xff);
+    return String(binCode % 1000000).padStart(6, "0");
+  }
+  function mfaSecretKey(email) { return "pbsms_mfa_secret:" + email; }
+
+  // Enrolls + enables MFA using a setup-scoped token (mfaSetupRequired), or
+  // verifies an existing enrollment against a login challenge (mfaRequired).
+  // Returns the real, fully-privileged accessToken either way.
+  async function completeMfa(loginRes, email) {
+    if (loginRes.mfaSetupRequired) {
+      const setupToken = loginRes.accessToken;
+      const enroll = await api("/v1/auth/mfa/enroll", { method: "POST", token: setupToken, body: {} });
+      localStorage.setItem(mfaSecretKey(email), enroll.secret);
+      const code = await totp(enroll.secret);
+      const enabled = await api("/v1/auth/mfa/enable", { method: "POST", token: setupToken, body: { code } });
+      return enabled.accessToken;
+    }
+    if (loginRes.mfaRequired) {
+      const secret = localStorage.getItem(mfaSecretKey(email));
+      if (!secret) {
+        throw new Error("MFA is required for this account but no enrolled secret was found in this browser. Sign out of it server-side or clear localStorage and sign in again to re-enroll.");
+      }
+      // ±1 step tolerance, same as the server (apps/api's verifyTotp).
+      for (const drift of [0, -1, 1]) {
+        const code = await totp(secret, drift);
+        try {
+          const verified = await api("/v1/auth/mfa/verify", {
+            method: "POST",
+            body: { challengeToken: loginRes.challengeToken, code },
+          });
+          return verified.accessToken;
+        } catch (e) { /* try next drift */ }
+      }
+      throw new Error("MFA verification failed (clock drift beyond tolerance?). Try signing in again.");
+    }
+    return loginRes.accessToken;
   }
 
   /* ============================= Helpers ============================= */
@@ -601,7 +682,7 @@
       btn.textContent = "Signing in…";
       try {
         const res = await api("/v1/auth/login", { method: "POST", body: { email, password } });
-        state.token = res.accessToken;
+        state.token = await completeMfa(res, email);
         const claims = decodeJwt(state.token);
         state.userId = claims.sub;
         const picked = DEMO_USERS.find((u) => u.email === email);

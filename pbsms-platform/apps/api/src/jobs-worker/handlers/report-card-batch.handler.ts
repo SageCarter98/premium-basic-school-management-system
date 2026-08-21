@@ -18,6 +18,7 @@
 
 import { Pool } from 'pg';
 import { DocumentsService } from '../../modules/documents/documents.service';
+import { NaccaService } from '../../modules/nacca/nacca.service';
 import { WorkerTenantConnection } from '../../common/database/worker-tenant-connection';
 
 const APPROVED_RESULT_STATUSES = ['published', 'locked', 'archived'];
@@ -55,7 +56,7 @@ export async function handleReportCardBatch(
     );
   }
 
-  const documents = new DocumentsService(db, pgPool);
+  const documents = new DocumentsService(db, pgPool, new NaccaService(db));
   const failures: string[] = [];
 
   for (const row of resultRows) {

@@ -141,10 +141,12 @@ export default function PlatformConsolePage() {
     return apiGet<Tenant[]>('/v1/platform/tenants').then(setTenants);
   }
 
+  function reloadPlans() {
+    return apiGet<Plan[]>('/v1/platform/billing/plans').then(setPlans);
+  }
+
   useEffect(() => {
-    Promise.all([reloadTenants(), apiGet<Plan[]>('/v1/platform/billing/plans')])
-      .then(([, p]) => setPlans(p))
-      .finally(() => setLoading(false));
+    Promise.all([reloadTenants(), reloadPlans()]).finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -166,7 +168,7 @@ export default function PlatformConsolePage() {
       </div>
       <Card style={{ padding: 'var(--pb-space-4)' }}>
         {tab === 'Tenants' && <TenantsTab tenants={tenants} plans={plans} canOnboard={canOnboard} canBilling={canBilling} canImpersonate={canImpersonate} reload={reloadTenants} />}
-        {tab === 'Billing' && <BillingTab tenants={tenants} canBilling={canBilling} />}
+        {tab === 'Billing' && <BillingTab tenants={tenants} canBilling={canBilling} plans={plans} reloadPlans={reloadPlans} />}
         {tab === 'Impersonation' && <ImpersonationTab tenants={tenants} canImpersonate={canImpersonate} isSuperAdmin={isSuperAdmin} />}
         {tab === 'Platform Staff' && <PlatformStaffTab isSuperAdmin={isSuperAdmin} />}
         {tab === 'Audit Log' && <AuditLogTab tenants={tenants} />}
@@ -436,7 +438,17 @@ function TenantsTab({
   );
 }
 
-function BillingTab({ tenants, canBilling }: { tenants: Tenant[]; canBilling: boolean }) {
+function BillingTab({
+  tenants,
+  canBilling,
+  plans,
+  reloadPlans,
+}: {
+  tenants: Tenant[];
+  canBilling: boolean;
+  plans: Plan[];
+  reloadPlans: () => Promise<void>;
+}) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [metering, setMetering] = useState<Metering[]>([]);
   const [loading, setLoading] = useState(true);
@@ -445,6 +457,9 @@ function BillingTab({ tenants, canBilling }: { tenants: Tenant[]; canBilling: bo
   const [payRef, setPayRef] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [planForm, setPlanForm] = useState({ code: '', name: '', billingBasis: 'flat', amount: '', currency: 'GHS' });
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [editingPlan, setEditingPlan] = useState<Record<string, { name: string; amount: string }>>({});
   const [revenue, setRevenue] = useState<{ mrr: string; invoiceTotalsByStatus: { status: string; total: string; count: string }[]; tenantCountsByStatus: { status: string; count: string }[] } | null>(null);
   const [revenueRange, setRevenueRange] = useState({ periodStart: '', periodEnd: '' });
 
@@ -521,6 +536,60 @@ function BillingTab({ tenants, canBilling }: { tenants: Tenant[]; canBilling: bo
     }
   }
 
+  async function handleCreatePlan() {
+    setBusy(true);
+    setPlanError(null);
+    try {
+      const res = await apiFetch('/v1/platform/billing/plans', {
+        method: 'POST',
+        body: JSON.stringify({
+          code: planForm.code,
+          name: planForm.name,
+          billingBasis: planForm.billingBasis,
+          flatFeeAmount: planForm.billingBasis === 'flat' ? Number(planForm.amount) : undefined,
+          perStudentRate: planForm.billingBasis === 'per_active_student' ? Number(planForm.amount) : undefined,
+          currency: planForm.currency,
+        }),
+      });
+      if (!res.ok) throw new Error(await errorMessage(res, `Failed (${res.status})`));
+      setPlanForm({ code: '', name: '', billingBasis: 'flat', amount: '', currency: 'GHS' });
+      await reloadPlans();
+    } catch (err) {
+      setPlanError(err instanceof Error ? err.message : 'Could not create plan.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUpdatePlan(planId: string) {
+    const edit = editingPlan[planId];
+    if (!edit) return;
+    const plan = plans.find((p) => p.id === planId);
+    setBusy(true);
+    setPlanError(null);
+    try {
+      const res = await apiFetch(`/v1/platform/billing/plans/${planId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: edit.name,
+          flatFeeAmount: plan?.billing_basis === 'flat' ? Number(edit.amount) : undefined,
+          perStudentRate: plan?.billing_basis === 'per_active_student' ? Number(edit.amount) : undefined,
+        }),
+      });
+      if (!res.ok) throw new Error(await errorMessage(res, `Failed (${res.status})`));
+      setEditingPlan((prev) => {
+        const next = { ...prev };
+        delete next[planId];
+        return next;
+      });
+      await reloadPlans();
+    } catch (err) {
+      setPlanError(err instanceof Error ? err.message : 'Could not update plan.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function loadRevenue() {
     if (!revenueRange.periodStart || !revenueRange.periodEnd) return;
     const data = await apiGet<typeof revenue>(`/v1/platform/billing/revenue-report?periodStart=${revenueRange.periodStart}&periodEnd=${revenueRange.periodEnd}`);
@@ -531,7 +600,73 @@ function BillingTab({ tenants, canBilling }: { tenants: Tenant[]; canBilling: bo
 
   return (
     <div>
-      <p className={styles.hint}>Revenue dashboard (MRR, invoice totals, tenant status counts)</p>
+      <p className={styles.hint}>Plan &amp; pricing configuration</p>
+      {planError && <ErrorState message={planError} />}
+      {plans.map((p) => {
+        const edit = editingPlan[p.id];
+        return (
+          <div key={p.id} className={styles.listRow}>
+            {edit ? (
+              <>
+                <input aria-label={`Edit name for ${p.code}`} className={styles.textInput} value={edit.name} onChange={(e) => setEditingPlan({ ...editingPlan, [p.id]: { ...edit, name: e.target.value } })} />
+                <input aria-label={`Edit rate for ${p.code}`} className={styles.textInput} type="number" step="0.01" value={edit.amount} onChange={(e) => setEditingPlan({ ...editingPlan, [p.id]: { ...edit, amount: e.target.value } })} />
+                <Button type="button" onClick={() => handleUpdatePlan(p.id)} disabled={busy}>
+                  Save
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() =>
+                    setEditingPlan((prev) => {
+                      const next = { ...prev };
+                      delete next[p.id];
+                      return next;
+                    })
+                  }
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <span>
+                  {p.name} ({p.code}) — {p.billing_basis === 'flat' ? `${p.flat_fee_amount} ${p.currency} flat` : `${p.per_student_rate} ${p.currency}/active student`}
+                </span>
+                {canBilling && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      setEditingPlan({
+                        ...editingPlan,
+                        [p.id]: { name: p.name, amount: p.billing_basis === 'flat' ? (p.flat_fee_amount ?? '') : (p.per_student_rate ?? '') },
+                      })
+                    }
+                  >
+                    Edit
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
+      {canBilling && (
+        <div className={styles.formRow} style={{ marginTop: 'var(--pb-space-2)' }}>
+          <input aria-label="New plan code" className={styles.textInput} placeholder="Code (e.g. standard)" value={planForm.code} onChange={(e) => setPlanForm({ ...planForm, code: e.target.value })} />
+          <input aria-label="New plan name" className={styles.textInput} placeholder="Name" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} />
+          <select aria-label="New plan billing basis" className={styles.select} value={planForm.billingBasis} onChange={(e) => setPlanForm({ ...planForm, billingBasis: e.target.value })}>
+            <option value="flat">Flat fee</option>
+            <option value="per_active_student">Per active student</option>
+          </select>
+          <input aria-label="New plan rate" className={styles.textInput} type="number" step="0.01" placeholder="Amount" value={planForm.amount} onChange={(e) => setPlanForm({ ...planForm, amount: e.target.value })} />
+          <Button type="button" onClick={handleCreatePlan} disabled={busy || !planForm.code || !planForm.name || !planForm.amount}>
+            Create plan
+          </Button>
+        </div>
+      )}
+
+      <p className={styles.hint} style={{ marginTop: 'var(--pb-space-4)' }}>Revenue dashboard (MRR, invoice totals, tenant status counts)</p>
       <div className={styles.formRow}>
         <input aria-label="Revenue report period start" className={styles.textInput} type="date" value={revenueRange.periodStart} onChange={(e) => setRevenueRange({ ...revenueRange, periodStart: e.target.value })} />
         <input aria-label="Revenue report period end" className={styles.textInput} type="date" value={revenueRange.periodEnd} onChange={(e) => setRevenueRange({ ...revenueRange, periodEnd: e.target.value })} />

@@ -41,6 +41,7 @@ interface TeacherAssignment {
   subject_id: string;
   academic_year_id: string;
   status: string;
+  is_class_teacher: boolean;
 }
 
 interface StaffMember {
@@ -66,6 +67,7 @@ interface Period {
   start_time: string;
   end_time: string;
   period_type: string;
+  day_of_week: string | null;
 }
 
 interface TimetableEntry {
@@ -210,6 +212,11 @@ function ClassesTab() {
   const [loading, setLoading] = useState(true);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [years, setYears] = useState<AcademicYear[]>([]);
+  const [teachers, setTeachers] = useState<StaffMember[]>([]);
+  // Chapter 21.1 Class Teacher — read-only lookup per class+year, keyed
+  // by class id (one active class teacher per class+year at most, per
+  // 0039_class_teacher.sql's own uniqueness rule).
+  const [classTeachers, setClassTeachers] = useState<Record<string, string>>({});
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ academicYearId: '', name: '', level: '' });
   const [saving, setSaving] = useState(false);
@@ -217,11 +224,24 @@ function ClassesTab() {
 
   function reload() {
     setLoading(true);
-    Promise.all([apiGet<SchoolClass[]>('/v1/classes'), apiGet<AcademicYear[]>('/v1/academic-years')])
-      .then(([c, y]) => {
+    Promise.all([
+      apiGet<SchoolClass[]>('/v1/classes'),
+      apiGet<AcademicYear[]>('/v1/academic-years'),
+      apiGet<StaffMember[]>('/v1/staff?role=teacher'),
+    ])
+      .then(async ([c, y, t]) => {
         setClasses(c);
         setYears(y);
+        setTeachers(t);
         setForm((f) => ({ ...f, academicYearId: f.academicYearId || y[0]?.id || '' }));
+        const entries = await Promise.all(
+          c.map((klass) =>
+            apiGet<{ teacher_id: string } | null>(`/v1/teacher-assignments/class-teacher?classId=${klass.id}&academicYearId=${klass.academic_year_id}`)
+              .then((ct) => [klass.id, ct?.teacher_id ?? null] as const)
+              .catch(() => [klass.id, null] as const),
+          ),
+        );
+        setClassTeachers(Object.fromEntries(entries.filter(([, teacherId]) => teacherId !== null)) as Record<string, string>);
       })
       .finally(() => setLoading(false));
   }
@@ -276,6 +296,9 @@ function ClassesTab() {
           <div key={c.id} className={styles.listRow}>
             <span>{c.name}</span>
             <span style={{ color: 'var(--pb-ink-muted)' }}>{years.find((y) => y.id === c.academic_year_id)?.name ?? c.academic_year_id}</span>
+            <span style={{ color: 'var(--pb-ink-muted)' }}>
+              Class teacher: {classTeachers[c.id] ? (teachers.find((t) => t.id === classTeachers[c.id])?.full_name ?? classTeachers[c.id]) : '—'}
+            </span>
           </div>
         ))
       )}
@@ -360,7 +383,7 @@ function TeacherAssignmentsTab() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ teacherId: '', classId: '', subjectId: '', academicYearId: '' });
+  const [form, setForm] = useState({ teacherId: '', classId: '', subjectId: '', academicYearId: '', isClassTeacher: false });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -383,6 +406,7 @@ function TeacherAssignmentsTab() {
         classId: f.classId || c[0]?.id || '',
         subjectId: f.subjectId || s[0]?.id || '',
         academicYearId: f.academicYearId || y[0]?.id || '',
+        isClassTeacher: f.isClassTeacher,
       }));
       setLoading(false);
     });
@@ -395,6 +419,7 @@ function TeacherAssignmentsTab() {
     try {
       const res = await apiFetch('/v1/teacher-assignments', { method: 'POST', body: JSON.stringify(form) });
       if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? `Failed (${res.status})`);
+      setForm((f) => ({ ...f, isClassTeacher: false }));
       setShowCreate(false);
       reload();
     } catch (err) {
@@ -448,6 +473,10 @@ function TeacherAssignmentsTab() {
               </option>
             ))}
           </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--pb-space-1)' }}>
+            <input type="checkbox" checked={form.isClassTeacher} onChange={(e) => setForm({ ...form, isClassTeacher: e.target.checked })} />
+            Class teacher
+          </label>
           <Button type="button" onClick={handleCreate} disabled={saving || !form.teacherId || !form.classId || !form.subjectId || !form.academicYearId}>
             Save
           </Button>
@@ -465,6 +494,7 @@ function TeacherAssignmentsTab() {
             </span>
             <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
               <Pill variant={a.status === 'active' ? 'success' : 'neutral'}>{a.status}</Pill>
+              {a.is_class_teacher && <Pill variant="neutral">Class teacher</Pill>}
               {canConfigure && a.status === 'active' && (
                 <Button type="button" variant="secondary" onClick={() => handleEnd(a.id)}>
                   End
@@ -496,7 +526,7 @@ function TimetableTab() {
   const [showRoomForm, setShowRoomForm] = useState(false);
   const [roomForm, setRoomForm] = useState({ name: '', capacity: '' });
   const [showPeriodForm, setShowPeriodForm] = useState(false);
-  const [periodForm, setPeriodForm] = useState({ name: '', sequence: '1', startTime: '08:00', endTime: '08:40', periodType: 'teaching' });
+  const [periodForm, setPeriodForm] = useState({ name: '', sequence: '1', startTime: '08:00', endTime: '08:40', periodType: 'teaching', dayOfWeek: '' });
   const [showEntryForm, setShowEntryForm] = useState(false);
   const [entryForm, setEntryForm] = useState({ subjectId: '', teacherId: '', periodId: '', roomId: '', dayOfWeek: 'monday' as (typeof DAYS)[number] });
   const [saving, setSaving] = useState(false);
@@ -558,10 +588,10 @@ function TimetableTab() {
     try {
       const res = await apiFetch('/v1/timetable/periods', {
         method: 'POST',
-        body: JSON.stringify({ ...periodForm, sequence: Number(periodForm.sequence) }),
+        body: JSON.stringify({ ...periodForm, sequence: Number(periodForm.sequence), dayOfWeek: periodForm.dayOfWeek || undefined }),
       });
       if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? `Failed (${res.status})`);
-      setPeriodForm({ name: '', sequence: '1', startTime: '08:00', endTime: '08:40', periodType: 'teaching' });
+      setPeriodForm({ name: '', sequence: '1', startTime: '08:00', endTime: '08:40', periodType: 'teaching', dayOfWeek: '' });
       setShowPeriodForm(false);
       reload();
     } catch (err) {
@@ -604,7 +634,13 @@ function TimetableTab() {
 
   if (loading) return <LoadingState label="Loading timetable" rows={3} />;
 
-  const teachingPeriods = periods.filter((p) => p.period_type === 'teaching').sort((a, b) => a.sequence - b.sequence);
+  // Only offer periods that actually apply to the selected day — either
+  // generic (day_of_week null) or specific to it — mirroring
+  // timetable.service.ts's own assertPeriodMatchesDay() pre-check
+  // (0040_period_day_variation.sql) so the form can't submit a mismatch.
+  const teachingPeriods = periods
+    .filter((p) => p.period_type === 'teaching' && (p.day_of_week === null || p.day_of_week === entryForm.dayOfWeek))
+    .sort((a, b) => a.sequence - b.sequence);
   const filteredEntries = entries.filter((e) => e.academic_year_id === selectedYearId && e.class_id === selectedClassId && e.status === 'active');
 
   return (
@@ -661,6 +697,14 @@ function TimetableTab() {
               <option value="assembly">Assembly</option>
               <option value="other">Other</option>
             </select>
+            <select className={styles.select} value={periodForm.dayOfWeek} onChange={(e) => setPeriodForm({ ...periodForm, dayOfWeek: e.target.value })}>
+              <option value="">Every day</option>
+              {DAYS.map((d) => (
+                <option key={d} value={d}>
+                  {d[0].toUpperCase() + d.slice(1)} only
+                </option>
+              ))}
+            </select>
             <Button type="button" onClick={handleCreatePeriod} disabled={saving || !periodForm.name}>
               Save
             </Button>
@@ -677,7 +721,10 @@ function TimetableTab() {
                 <span>
                   {p.name} · {p.start_time.slice(0, 5)}–{p.end_time.slice(0, 5)}
                 </span>
-                <Pill variant={p.period_type === 'teaching' ? 'success' : 'neutral'}>{p.period_type}</Pill>
+                <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
+                  {p.day_of_week && <Pill variant="neutral">{p.day_of_week} only</Pill>}
+                  <Pill variant={p.period_type === 'teaching' ? 'success' : 'neutral'}>{p.period_type}</Pill>
+                </span>
               </div>
             ))
         )}

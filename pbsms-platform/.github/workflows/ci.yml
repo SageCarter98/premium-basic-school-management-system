@@ -175,7 +175,7 @@ jobs:
             SELECT relname FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity
-            AND relname NOT IN ('plans','tenants','tenant_subscriptions','platform_audit_logs','users','login_attempts','platform_user_roles','impersonation_grants','impersonation_sensitive_approvals','platform_invoices','refresh_tokens','password_reset_tokens','data_inventory','retention_policies','data_breach_incidents');
+            AND relname NOT IN ('plans','tenants','tenant_subscriptions','platform_audit_logs','users','login_attempts','platform_user_roles','impersonation_grants','impersonation_sensitive_approvals','platform_invoices','refresh_tokens','password_reset_tokens','data_inventory','retention_policies','data_breach_incidents','document_verify_attempts','revoked_sessions');
           ")
           if [ -n "$LEAKY_TABLES" ]; then
             echo "::error::Tenant-owned table(s) without RLS enabled: $LEAKY_TABLES"

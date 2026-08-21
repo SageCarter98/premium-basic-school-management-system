@@ -70,6 +70,10 @@ export interface PlatformInvoice {
   paid_at: string | null;
 }
 
+function isPgError(err: unknown): err is { code: string } {
+  return typeof err === 'object' && err !== null && 'code' in err;
+}
+
 @Injectable()
 export class BillingService {
   constructor(
@@ -77,15 +81,88 @@ export class BillingService {
     private readonly tenants: TenantsService,
   ) {}
 
-  /** Stage 9 addition — see billing.controller.ts's header. Plans are
-   * seed-configured (no create/edit UI, unchanged), this only makes the
-   * existing rows readable so assignPlan() callers can pick one by name
-   * instead of a blind UUID. */
+  /** Stage 9 addition, plans list stayed read-only until this pass — see
+   * billing.controller.ts's header. */
   async listPlans(): Promise<{ id: string; code: string; name: string; billing_basis: string; flat_fee_amount: string | null; per_student_rate: string | null; currency: string }[]> {
     const result = await this.pool.query(
       `select id, code, name, billing_basis, flat_fee_amount, per_student_rate, currency from plans order by name`,
     );
     return result.rows;
+  }
+
+  /** Closes the "plans stay seed-configured, no CRUD" gap this file's own
+   * prior comment (see git history) flagged. plans_pricing_matches_basis
+   * (0024_billing.sql) is the real backstop for basis/amount consistency;
+   * a 'code' collision raises the DB's own unique-constraint 23505, caught
+   * below and turned into a clean 409 — same isPgError() shape
+   * grading.service.ts/results.service.ts/promotion.service.ts/
+   * enrolments.service.ts already use for their own unique-constraint
+   * violations (there is no codebase-wide exception filter; every module
+   * that needs this handles it locally). Needs 0041_billing_plan_grants.sql
+   * (insert/update on plans to pbsms_platform) — live-tested and confirmed
+   * missing before that migration existed: this write path 500'd with a raw
+   * "permission denied for table plans" otherwise. */
+  async createPlan(input: {
+    code: string;
+    name: string;
+    billingBasis: string;
+    flatFeeAmount?: number;
+    perStudentRate?: number;
+    currency?: string;
+  }): Promise<{ id: string; code: string; name: string; billing_basis: string; flat_fee_amount: string | null; per_student_rate: string | null; currency: string }> {
+    try {
+      const result = await this.pool.query(
+        `insert into plans (code, name, billing_basis, flat_fee_amount, per_student_rate, currency)
+         values ($1, $2, $3, $4, $5, coalesce($6, 'GHS'))
+         returning id, code, name, billing_basis, flat_fee_amount, per_student_rate, currency`,
+        [
+          input.code,
+          input.name,
+          input.billingBasis,
+          input.flatFeeAmount ?? null,
+          input.perStudentRate ?? null,
+          input.currency ?? null,
+        ],
+      );
+      return result.rows[0];
+    } catch (err) {
+      if (isPgError(err) && err.code === '23505') {
+        throw new ConflictException(`Plan code '${input.code}' is already in use`);
+      }
+      throw err;
+    }
+  }
+
+  /** code is immutable post-creation (UpdatePlanDto's own header) —
+   * every other field is a plain coalesce-onto-existing update, same
+   * partial-update shape documents.service.ts's upsertBranding() uses. */
+  async updatePlan(
+    planId: string,
+    input: { name?: string; billingBasis?: string; flatFeeAmount?: number; perStudentRate?: number; currency?: string },
+  ): Promise<{ id: string; code: string; name: string; billing_basis: string; flat_fee_amount: string | null; per_student_rate: string | null; currency: string }> {
+    const existing = await this.pool.query<{ id: string }>(`select id from plans where id = $1`, [planId]);
+    if (existing.rows.length === 0) {
+      throw new NotFoundException(`Plan ${planId} not found`);
+    }
+    const result = await this.pool.query(
+      `update plans set
+         name = coalesce($2, name),
+         billing_basis = coalesce($3, billing_basis),
+         flat_fee_amount = coalesce($4, flat_fee_amount),
+         per_student_rate = coalesce($5, per_student_rate),
+         currency = coalesce($6, currency)
+       where id = $1
+       returning id, code, name, billing_basis, flat_fee_amount, per_student_rate, currency`,
+      [
+        planId,
+        input.name ?? null,
+        input.billingBasis ?? null,
+        input.flatFeeAmount ?? null,
+        input.perStudentRate ?? null,
+        input.currency ?? null,
+      ],
+    );
+    return result.rows[0];
   }
 
   /** Stage 9 addition — see billing.controller.ts's header. A live

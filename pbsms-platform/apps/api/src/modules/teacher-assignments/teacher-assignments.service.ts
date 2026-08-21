@@ -5,7 +5,9 @@
  * FR-ASM-020 ("restrict score entry to teachers with an active assignment
  * for that class subject in the current term") — see
  * 0020_teacher_assignments.sql's header for scope notes (no Term entity,
- * no is_class_teacher, no timetable-conflict detection).
+ * no timetable-conflict detection). Chapter 21.1's "Class Teacher" concept
+ * (is_class_teacher, 0039_class_teacher.sql) is now closed too — see
+ * findClassTeacher() below.
  *
  * hasActiveAssignment() is the method assessment.service.ts's
  * upsertScore() calls to actually enforce FR-ASM-020 — the second
@@ -28,6 +30,7 @@ export interface TeacherAssignment {
   status: string;
   ended_at: string | null;
   ended_reason: string | null;
+  is_class_teacher: boolean;
 }
 
 export interface TeacherAssignmentFilter {
@@ -46,18 +49,36 @@ export class TeacherAssignmentsService {
     classId: string;
     subjectId: string;
     academicYearId: string;
+    isClassTeacher?: boolean;
   }): Promise<TeacherAssignment> {
     await this.assertIsTeacher(input.teacherId);
 
     const { userId } = TenantContextStore.current();
+    // A double active-class-teacher assignment raises the DB's own
+    // uq_teacher_assignments_active_class_teacher violation (0039) — same
+    // un-pre-checked-raw-error posture this method already has for
+    // uq_teacher_assignments_active_slot, not a new inconsistency.
     const rows = await this.db.query<TeacherAssignment>(
       `insert into teacher_assignments
-         (tenant_id, teacher_id, class_id, subject_id, academic_year_id, created_by, updated_by)
-       values (current_tenant_id(), $1, $2, $3, $4, $5, $5)
+         (tenant_id, teacher_id, class_id, subject_id, academic_year_id, is_class_teacher, created_by, updated_by)
+       values (current_tenant_id(), $1, $2, $3, $4, $5, $6, $6)
        returning *`,
-      [input.teacherId, input.classId, input.subjectId, input.academicYearId, userId],
+      [input.teacherId, input.classId, input.subjectId, input.academicYearId, input.isClassTeacher ?? false, userId],
     );
     return rows[0];
+  }
+
+  /** Chapter 21.1 — the class-level homeroom teacher, if one is set for
+   * this class+year. null, not a 404, when none is assigned: "no class
+   * teacher yet" is a normal state, not an error. */
+  async findClassTeacher(classId: string, academicYearId: string): Promise<TeacherAssignment | null> {
+    const rows = await this.db.query<TeacherAssignment>(
+      `select * from teacher_assignments
+       where class_id = $1 and academic_year_id = $2 and is_class_teacher and status = 'active'
+       limit 1`,
+      [classId, academicYearId],
+    );
+    return rows[0] ?? null;
   }
 
   private isCallerAcademicAdmin(): boolean {
@@ -152,11 +173,11 @@ export class TeacherAssignmentsService {
    * (not a specific subject) — for write paths like attendance marking
    * and result submission where the check is "does this teacher teach
    * ANY subject in this class," not "this exact class+subject" the way
-   * FR-ASM-020's score-entry check is. This schema has no separate
-   * "Class Teacher" role distinct from a subject assignment
-   * (0020_teacher_assignments.sql's header already documents that
-   * deferral) — any active assignment to the class, regardless of
-   * subject, is treated as sufficient claim to act on it at this grain. */
+   * FR-ASM-020's score-entry check is. Deliberately still not restricted
+   * to the class teacher specifically (is_class_teacher, 0039) — any
+   * active assignment to the class, regardless of subject, is treated as
+   * sufficient claim to act on it at this grain; a genuinely different,
+   * narrower rule from what findClassTeacher() surfaces for display. */
   async hasAnyActiveAssignmentForClass(teacherId: string, classId: string, academicYearId: string): Promise<boolean> {
     const rows = await this.db.query<{ hit: number }>(
       `select 1 as hit from teacher_assignments

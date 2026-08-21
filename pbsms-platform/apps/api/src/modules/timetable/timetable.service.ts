@@ -37,6 +37,7 @@ export interface Period {
   start_time: string;
   end_time: string;
   period_type: string;
+  day_of_week: string | null;
 }
 
 export interface TimetableEntry {
@@ -90,10 +91,18 @@ export class TimetableService {
   async createPeriod(input: CreatePeriodDto): Promise<Period> {
     const { userId } = TenantContextStore.current();
     const rows = await this.db.query<Period>(
-      `insert into periods (tenant_id, name, sequence, start_time, end_time, period_type, created_by, updated_by)
-       values (current_tenant_id(), $1, $2, $3, $4, $5, $6, $6)
+      `insert into periods (tenant_id, name, sequence, start_time, end_time, period_type, day_of_week, created_by, updated_by)
+       values (current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $7)
        returning *`,
-      [input.name, input.sequence, input.startTime, input.endTime, input.periodType ?? 'teaching', userId],
+      [
+        input.name,
+        input.sequence,
+        input.startTime,
+        input.endTime,
+        input.periodType ?? 'teaching',
+        input.dayOfWeek ?? null,
+        userId,
+      ],
     );
     return rows[0];
   }
@@ -110,6 +119,7 @@ export class TimetableService {
     const { userId } = TenantContextStore.current();
     await this.assertIsTeacher(input.teacherId);
     await this.assertIsTeachingPeriod(input.periodId);
+    await this.assertPeriodMatchesDay(input.periodId, input.dayOfWeek);
 
     const slot = { academicYearId: input.academicYearId, dayOfWeek: input.dayOfWeek, periodId: input.periodId };
 
@@ -218,6 +228,25 @@ export class TimetableService {
       [value, slot.academicYearId, slot.dayOfWeek, slot.periodId],
     );
     return rows[0] ?? null;
+  }
+
+  /** 0040_period_day_variation.sql — a day-specific period (day_of_week
+   * set) can only back an entry on that same day; a generic period
+   * (day_of_week null) applies to every day, unchanged from before this
+   * migration. Prevents e.g. a Friday-only shortened period silently
+   * backing a Monday entry. */
+  private async assertPeriodMatchesDay(periodId: string, dayOfWeek: string): Promise<void> {
+    const rows = await this.db.query<{ day_of_week: string | null }>(`select day_of_week from periods where id = $1`, [
+      periodId,
+    ]);
+    if (rows.length === 0) {
+      throw new NotFoundException(`Period ${periodId} not found`);
+    }
+    if (rows[0].day_of_week !== null && rows[0].day_of_week !== dayOfWeek) {
+      throw new ConflictException(
+        `Cannot assign period ${periodId} to a ${dayOfWeek} entry: it is specific to ${rows[0].day_of_week}.`,
+      );
+    }
   }
 
   private async assertIsTeachingPeriod(periodId: string): Promise<void> {

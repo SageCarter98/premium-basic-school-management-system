@@ -1104,6 +1104,141 @@ showing both tabs rendering real seeded data. Backend isolation suite:
 `unmatched`, 1 settlement batch reverted to `open`, 8 stray `audit_log`
 rows — all removed/reverted, re-verified green.
 
+## Five more flagged gaps closed (2026-08-21)
+
+Closed five gaps that prior modules' own header comments had flagged as
+deferred, each with a real migration + backend + frontend + live-HTTP
+verification pass (session was interrupted mid-flight and resumed —
+everything below was verified fresh on resume, not assumed from the
+uncommitted diff):
+
+1. **Billing plan CRUD** (`billing.controller.ts`/`.service.ts`,
+   `apps/web/src/app/platform/page.tsx`'s Billing tab) — plans were
+   seed-configured/read-only since Phase A4; `POST/PATCH
+   /v1/platform/billing/plans[/:id]` now let a `billing_administrator`
+   create/edit pricing. `code` is immutable post-creation.
+2. **Document verify rate limiting + QR codes + NaCCA competency profile
+   on report cards** (migration `0037`, `documents.service.ts`) —
+   `GET /v1/documents/verify` (this codebase's only unauthenticated
+   endpoint) is now rate-limited (20/15min per token hash); every
+   generated document now returns a `qrCodeDataUri` pointing at its
+   verify URL; `generateReportCard()` composes NaCCA competency profiles
+   per subject (additive-only, empty for non-adopting tenants).
+3. **Instant access-token revocation for LEADERSHIP/platform roles**
+   (migration `0038`, `revoked_sessions`) — logout/refresh-reuse-
+   detection/password-reset now also write a per-user revocation
+   timestamp that `tenant.middleware.ts` checks live, but only for
+   LEADERSHIP-tier and platform-role tokens (bounded blast radius,
+   same reasoning as impersonation's live grant check) — an ordinary
+   staff/teacher token still rides out its own 1h natural expiry.
+4. **Chapter 21.1 Class Teacher** (migration `0039`,
+   `is_class_teacher` on `teacher_assignments`) — at most one active
+   class teacher per class+year (DB-enforced partial unique index),
+   surfaced via `GET /v1/teacher-assignments/class-teacher` and shown on
+   the Classes tab.
+5. **Period day-of-week variation** (migration `0040`, `periods.day_of_week`)
+   — a period can now be scoped to one specific day (e.g. a shorter
+   Friday schedule) instead of applying to every day; `timetable.service.ts`
+   rejects a day-mismatched entry with a 409.
+
+**Real bug found and fixed on resume, not present in the original commits
+this pass would have produced**: `billing.service.ts`'s `createPlan()`
+header claimed "the controller-level exception filter already turns [a
+duplicate code] into a clean 409 codebase-wide" — there is no such filter
+anywhere in this codebase (confirmed by grep — every module that handles
+Postgres unique-violation 23505 does it locally via its own `isPgError()`
+helper). Worse, live-HTTP testing surfaced a second, blocking issue behind
+that same code path: `pbsms_platform` was never granted INSERT/UPDATE on
+`plans` at all (0021_tenant_lifecycle.sql only ever granted SELECT, correct
+at the time since plans were genuinely read-only) — so both `createPlan()`
+and `updatePlan()` 500'd with a raw "permission denied for table plans" on
+every call, not just the duplicate-code case. Fixed with a new migration,
+`0041_billing_plan_grants.sql`, plus a real `isPgError()` catch in
+`createPlan()` matching every other module's pattern.
+
+Verified end to end after both fixes: clean `npm run build`/`lint`,
+483/483 e2e isolation suite, then live-HTTP through all five features as
+real seeded accounts (`platform-admin@pbsms.test` through full MFA for
+billing/revocation, `admin@sunrise.pbsms.test` through full MFA for
+class-teacher/timetable) — plan create → duplicate-code 409 → update →
+list; logout → same still-unexpired access token immediately 401s
+("session has been revoked") → a fresh login works again → an ordinary
+teacher token is unaffected throughout; class-teacher assignment created
+and read back via the new endpoint; a Friday-only period correctly
+rejected a Monday entry and accepted a Friday one; document verify
+rate-limited at the 20-attempt threshold and every generated document
+document now includes a real `qrCodeDataUri`. Smoke-test cleanup: 1 stray
+plan row, 21 `document_verify_attempts` rows, 1 `revoked_sessions` row, 1
+timetable entry, 1 period, 1 teacher assignment, and 5 stray `audit_log`
+rows — all removed, isolation suite re-verified green afterward.
+
+**Still open, not touched this pass**: the three bugs from the 2026-08-20
+walkthrough below (refresh-token race, orphaned Platform Console nav,
+`/dashboard` stub) — none of the five gaps closed here overlapped with
+those three.
+
+## Known gaps found during multi-account browser walkthrough (2026-08-20) — prioritized fix list
+
+A real login walkthrough as every seeded account (teacher, accountant,
+headmaster/MFA, librarian, transport, health, storekeeper, teacher@goldengate,
+platform-admin/MFA) surfaced three real bugs, none of them silently worked
+around — recorded here so a future session picks up with real priorities
+instead of re-discovering them. Role-gating on the nav itself was verified
+correct for every one of those 9 accounts; these three are the actual open
+items.
+
+**1. Refresh-token race condition — most severe, fix first.**
+`src/lib/api-client.ts`'s `refreshSession()` has no in-flight dedup. When two
+or more requests 401 around the same moment (any page firing concurrent
+`apiGet`/`apiFetch` calls while the access token needs renewal), each one
+independently calls `refreshSession()` with the same stored refresh token.
+The first call rotates it server-side (`apps/api`'s refresh-token rotation);
+the second presents the now-already-rotated token, which trips the backend's
+reuse-detection (`auth.module.ts` — designed to catch a stolen refresh token)
+and revokes the ENTIRE token family, including the just-minted replacement.
+Net effect: the user is silently, forcibly logged out any time two widgets
+happen to fetch concurrently at the wrong moment. Not role-specific — can hit
+any account. Confirmed live via direct DB inspection of `refresh_tokens`:
+6 rows issued and revoked within the same second while testing
+`platform-admin@pbsms.test` (see item 2 below for how it was triggered).
+Fix: a shared in-flight promise so concurrent 401s await one shared refresh
+call instead of each firing their own.
+
+**2. Platform Console is orphaned from the nav — fix second.**
+`/platform` (Stage 9's real Tenants/Billing/Impersonation/Platform Staff/
+Audit Log console) and its backend both work — verified the JWT correctly
+carries `roleCodes: ["platform_super_admin"]` — but `src/lib/nav-config.ts`
+has ZERO entries requiring any platform role code, so there is no way to
+reach it except typing the URL by hand. Worse: a platform user who lands on
+the generic tenant `(shell)` — which is what happens today, since nothing
+routes them anywhere else after login — triggers that shell's
+`ContextSwitcher` calls to tenant-scoped `/v1/schools`/`/v1/academic-years`,
+which always 401 for a platform actor (correctly, by `tenant.middleware.ts`'s
+design — a platform token was never meant to resolve a tenant context). This
+is what actually triggered bug #1 above: `(shell)`'s two concurrent
+context-switcher fetches both 401 at once and race each other into the
+refresh call. Fix needs both a nav-config.ts entry gated on platform role
+codes AND a platform-aware landing/layout so a platform user never touches
+the tenant shell at all.
+
+**3. `/dashboard` is still the literal Stage-2 placeholder.**
+`src/app/(shell)/dashboard/page.tsx` reads:
+> "Real dashboards (proprietor roll-up, headmaster approvals, accountant
+> collections, teacher home) arrive in Stage 5 — this is the app shell
+> proving it can host them."
+
+Stage 5 shipped Students/Academic Structure/Assessment/Grading/Results as
+real pages but never replaced this landing dashboard with the per-role views
+it promised, and none of Stages 6-9 went back for it either. Every role
+(teacher, accountant, headmaster, librarian, transport, health, storekeeper)
+lands on this identical stub today — confirmed live across all of them.
+Needs 4 real views: proprietor/headmaster roll-up, accountant collections,
+teacher home, and a sensible default for the single-department specialist
+roles (library/transport/health/inventory) that currently get it too.
+
+None of these three were fixed this session — found during a live walkthrough,
+recorded here per user instruction rather than fixed in the moment.
+
 ## Setup
 
 ```bash

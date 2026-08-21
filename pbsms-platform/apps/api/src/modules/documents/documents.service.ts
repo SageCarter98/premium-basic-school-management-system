@@ -15,13 +15,33 @@
  * verify_document(), the exact same shape auth.module.ts's login() uses
  * for login_lookup() and for the identical reason — see that file's
  * header comment.
+ *
+ * generateReportCard() now also composes NaccaService.competencyProfile()
+ * per subject item — the same server-side composition
+ * parent-view.service.ts's getReportCard() already established (that
+ * function's own header explains why: no adoption gate needed,
+ * competencyProfile()'s join naturally returns [] for a tenant that
+ * hasn't opted into NaCCA). This DOES change the existing, tested
+ * generateReportCard() path (unlike Parent View's read-only composition),
+ * but it's additive-only — an empty/omitted competencyProfile array for
+ * every non-adopting tenant, identical output to before this change.
+ *
+ * Every generate*() method and findOne() also now return a qrCodeDataUri
+ * — a QR-encoded verify URL, generated on read from the existing
+ * verification_token rather than stored (cheap to regenerate, avoids a
+ * schema migration). See this module's own scope note: PDF rendering
+ * itself stays out of scope (browser @media print, already built for
+ * Parent View's report card, is the print path) — this only adds the
+ * scannable link a printed copy needs to be independently verifiable.
  */
 
-import { randomBytes } from 'node:crypto';
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { createHash, randomBytes } from 'node:crypto';
+import { ConflictException, HttpException, HttpStatus, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Pool } from 'pg';
+import * as QRCode from 'qrcode';
 import { PG_POOL, TenantDatabaseService } from '../../common/database/tenant-database.service';
 import { TenantContextStore } from '../../common/tenant/tenant-context';
+import { NaccaService } from '../nacca/nacca.service';
 import { UpsertBrandingDto } from './dto/upsert-branding.dto';
 import { GenerateReportCardDto } from './dto/generate-report-card.dto';
 import { GenerateTranscriptDto } from './dto/generate-transcript.dto';
@@ -29,6 +49,12 @@ import { GenerateAdmissionLetterDto } from './dto/generate-admission-letter.dto'
 import { GenerateCompletionCertificateDto } from './dto/generate-completion-certificate.dto';
 import { GenerateReceiptDto } from './dto/generate-receipt.dto';
 import { RevokeDocumentDto } from './dto/revoke-document.dto';
+
+// Same "read from env, documented fallback for local dev" pattern
+// auth.module.ts's JWT_SECRET uses. Points at apps/web's dev server —
+// the /verify page there resolves the token via the existing public
+// GET /v1/documents/verify route, nothing new to build there.
+const PUBLIC_APP_URL = process.env.PUBLIC_APP_URL ?? 'http://localhost:3001';
 
 export interface TenantBranding {
   id: string;
@@ -76,12 +102,32 @@ const REFERENCE_PREFIXES: Record<string, string> = {
 
 const APPROVED_RESULT_STATUSES = ['published', 'locked', 'archived'];
 
+// FR-DOC-020 rate limiting — looser than auth.module.ts's login threshold
+// (this isn't a credential-guessing surface, but the token space still
+// shouldn't be brute-forceable unbounded) — see 0037's own header.
+const VERIFY_RATE_LIMIT_WINDOW_MINUTES = 15;
+const VERIFY_RATE_LIMIT_MAX_ATTEMPTS = 20;
+
+function hashVerifyToken(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex');
+}
+
 @Injectable()
 export class DocumentsService {
   constructor(
     private readonly db: TenantDatabaseService,
     @Inject(PG_POOL) private readonly pool: Pool,
+    private readonly nacca: NaccaService,
   ) {}
+
+  private buildVerifyUrl(verificationToken: string): string {
+    return `${PUBLIC_APP_URL}/verify?token=${verificationToken}`;
+  }
+
+  private async withQrCode<T extends { verification_token: string }>(doc: T): Promise<T & { qrCodeDataUri: string }> {
+    const qrCodeDataUri = await QRCode.toDataURL(this.buildVerifyUrl(doc.verification_token));
+    return { ...doc, qrCodeDataUri };
+  }
 
   async getBranding(): Promise<TenantBranding | null> {
     const rows = await this.db.query<TenantBranding>(`select * from tenant_branding limit 1`);
@@ -105,12 +151,12 @@ export class DocumentsService {
     return this.db.query<GeneratedDocument>(`select * from generated_documents order by generated_at desc`);
   }
 
-  async findOne(id: string): Promise<GeneratedDocument> {
+  async findOne(id: string): Promise<GeneratedDocument & { qrCodeDataUri: string }> {
     const rows = await this.db.query<GeneratedDocument>(`select * from generated_documents where id = $1`, [id]);
     if (rows.length === 0) {
       throw new NotFoundException(`Document ${id} not found`);
     }
-    return rows[0];
+    return this.withQrCode(rows[0]);
   }
 
   async revoke(id: string, input: RevokeDocumentDto): Promise<GeneratedDocument> {
@@ -130,6 +176,20 @@ export class DocumentsService {
   async verify(token: string): Promise<VerificationResult> {
     const client = await this.pool.connect();
     try {
+      const tokenHash = hashVerifyToken(token);
+      const { rows: attemptRows } = await client.query<{ n: string }>(
+        `select count(*)::int as n from document_verify_attempts
+         where token_hash = $1 and attempted_at > now() - interval '${VERIFY_RATE_LIMIT_WINDOW_MINUTES} minutes'`,
+        [tokenHash],
+      );
+      if (Number(attemptRows[0].n) >= VERIFY_RATE_LIMIT_MAX_ATTEMPTS) {
+        throw new HttpException(
+          `Too many verification attempts for this document. Try again after ${VERIFY_RATE_LIMIT_WINDOW_MINUTES} minutes.`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      await client.query(`insert into document_verify_attempts (token_hash) values ($1)`, [tokenHash]);
+
       const { rows } = await client.query(`select * from verify_document($1)`, [token]);
       if (rows.length === 0) {
         return { valid: false };
@@ -148,7 +208,7 @@ export class DocumentsService {
     }
   }
 
-  async generateReportCard(input: GenerateReportCardDto): Promise<GeneratedDocument> {
+  async generateReportCard(input: GenerateReportCardDto): Promise<GeneratedDocument & { qrCodeDataUri: string }> {
     const { userId } = TenantContextStore.current();
 
     const resultRows = await this.db.query<{
@@ -197,24 +257,39 @@ export class DocumentsService {
       this.getBranding(),
     ]);
 
+    // DOM-030: same server-side composition parent-view.service.ts's
+    // getReportCard() already established — competencyProfile() needs no
+    // adoption-gate check itself, an empty array is the natural "tenant
+    // hasn't opted into NaCCA / no indicators configured for this
+    // subject" case. Attached per-item so a non-adopting tenant's report
+    // card content is byte-for-byte identical to before this change.
+    const profiles = await Promise.all(
+      items.map((item) => this.nacca.competencyProfile(result.student_id, item.subject_id, result.academic_year_id)),
+    );
+    const itemsWithCompetency = items.map((item, i) => ({
+      ...item,
+      competencyProfile: profiles[i].length > 0 ? profiles[i] : undefined,
+    }));
+
     const content = {
       student: { id: result.student_id, ...student[0] },
       class: { id: result.class_id, ...klass[0] },
       academicYear: { id: result.academic_year_id, ...year[0] },
       resultVersion: result.version,
-      items,
+      items: itemsWithCompetency,
       averagePercentage: result.average_percentage,
       subjectsFailedCount: result.subjects_failed_count,
       overallPass: result.overall_pass,
       branding,
     };
 
-    return this.insertDocument('report_card', content, { studentResultId: result.id }, userId);
+    const doc = await this.insertDocument('report_card', content, { studentResultId: result.id }, userId);
+    return this.withQrCode(doc);
   }
 
   /** Spans every currently-current approved result the student has across
    * academic years — not one version, unlike a report card. */
-  async generateTranscript(input: GenerateTranscriptDto): Promise<GeneratedDocument> {
+  async generateTranscript(input: GenerateTranscriptDto): Promise<GeneratedDocument & { qrCodeDataUri: string }> {
     const { userId } = TenantContextStore.current();
 
     const studentRows = await this.db.query<{ first_name: string; last_name: string; admission_no: string }>(
@@ -272,10 +347,11 @@ export class DocumentsService {
     const branding = await this.getBranding();
     const content = { student: { id: input.studentId, ...studentRows[0] }, years, branding };
 
-    return this.insertDocument('transcript', content, { studentId: input.studentId }, userId);
+    const doc = await this.insertDocument('transcript', content, { studentId: input.studentId }, userId);
+    return this.withQrCode(doc);
   }
 
-  async generateAdmissionLetter(input: GenerateAdmissionLetterDto): Promise<GeneratedDocument> {
+  async generateAdmissionLetter(input: GenerateAdmissionLetterDto): Promise<GeneratedDocument & { qrCodeDataUri: string }> {
     const { userId } = TenantContextStore.current();
 
     const applicantRows = await this.db.query<{
@@ -313,10 +389,11 @@ export class DocumentsService {
       branding,
     };
 
-    return this.insertDocument('admission_letter', content, { applicantId: input.applicantId }, userId);
+    const doc = await this.insertDocument('admission_letter', content, { applicantId: input.applicantId }, userId);
+    return this.withQrCode(doc);
   }
 
-  async generateCompletionCertificate(input: GenerateCompletionCertificateDto): Promise<GeneratedDocument> {
+  async generateCompletionCertificate(input: GenerateCompletionCertificateDto): Promise<GeneratedDocument & { qrCodeDataUri: string }> {
     const { userId } = TenantContextStore.current();
 
     const decisionRows = await this.db.query<{
@@ -351,19 +428,20 @@ export class DocumentsService {
       branding,
     };
 
-    return this.insertDocument(
+    const doc = await this.insertDocument(
       'completion_certificate',
       content,
       { promotionDecisionId: input.promotionDecisionId },
       userId,
     );
+    return this.withQrCode(doc);
   }
 
   /** Reuses the Document Engine's existing snapshot/reference-number/
    * verification-token machinery for a payment receipt — see
    * 0008_finance.sql's header for why this is a 5th generated_documents
    * type rather than a parallel receipts table. */
-  async generateReceipt(input: GenerateReceiptDto): Promise<GeneratedDocument> {
+  async generateReceipt(input: GenerateReceiptDto): Promise<GeneratedDocument & { qrCodeDataUri: string }> {
     const { userId } = TenantContextStore.current();
 
     const paymentRows = await this.db.query<{
@@ -406,7 +484,8 @@ export class DocumentsService {
       branding,
     };
 
-    return this.insertDocument('receipt', content, { paymentId: input.paymentId }, userId);
+    const doc = await this.insertDocument('receipt', content, { paymentId: input.paymentId }, userId);
+    return this.withQrCode(doc);
   }
 
   /**

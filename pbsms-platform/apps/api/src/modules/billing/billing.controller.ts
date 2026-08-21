@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { BillingService } from './billing.service';
 import { AssignPlanDto } from './dto/assign-plan.dto';
+import { CreatePlanDto } from './dto/create-plan.dto';
+import { UpdatePlanDto } from './dto/update-plan.dto';
 import { GenerateInvoiceDto } from './dto/generate-invoice.dto';
 import { RecordInvoicePaymentDto } from './dto/record-invoice-payment.dto';
 import { DunningStepDto } from './dto/dunning-step.dto';
@@ -26,6 +28,21 @@ export class BillingController {
   @Get('plans')
   listPlans() {
     return this.billing.listPlans();
+  }
+
+  // Closes the "plans stay seed-configured, no CRUD" gap — write-gated
+  // the same as assignPlan()/generateInvoice() below (Billing
+  // Administrator owns pricing changes, same Chapter 3.1 role).
+  @PlatformRoles(...PLATFORM_BILLING)
+  @Post('plans')
+  createPlan(@Body() body: CreatePlanDto) {
+    return this.billing.createPlan(body);
+  }
+
+  @PlatformRoles(...PLATFORM_BILLING)
+  @Patch('plans/:planId')
+  updatePlan(@Param('planId') planId: string, @Body() body: UpdatePlanDto) {
+    return this.billing.updatePlan(planId, body);
   }
 
   @PlatformRoles(...PLATFORM_ALL)

@@ -29,14 +29,16 @@ import { LEADERSHIP } from '../../common/auth/role-groups';
  * 8h); a refresh token (30 days, single-use, rotated on every refresh with
  * reuse detection) renews them.
  *
- * Known, documented limitation: logout()/refresh-reuse-detection revoke
- * the REFRESH token chain, not any already-issued ACCESS token — an
- * access token stays valid until its own (now much shorter) natural
- * expiry even after "logout." True instant access-token revocation would
- * need a live per-request revocation check on every single endpoint
- * (the same pattern impersonation's live grant-validation already uses,
- * Phase A3) — applying that globally is a bigger, separate architectural
- * decision, not silently taken on as scope creep here.
+ * logout()/refresh-reuse-detection/confirmPasswordReset() revoke the
+ * REFRESH token chain AND now also record a revoked_sessions row
+ * (0038_revoked_sessions.sql) — but tenant.middleware.ts only checks it
+ * for LEADERSHIP/platform-role tokens, not every request (see that
+ * migration's header for the scoping decision: bounded to the tiers that
+ * already require MFA, mirroring impersonation's own live-grant-check
+ * pattern, Phase A3, rather than a DB round-trip added to every single
+ * API call). An ordinary staff/teacher access token still rides out its
+ * own (now much shorter, 1h) natural expiry after "logout" — a
+ * documented, intentional remaining gap for that slice of roles.
  *
  * role_codes now travels in the JWT (added Authorization Pass 1) —
  * RolesGuard (common/auth/roles.guard.ts) is what actually makes it mean
@@ -100,6 +102,18 @@ class AuthService {
 
   private async recordAttempt(email: string, succeeded: boolean): Promise<void> {
     await this.pool.query(`insert into login_attempts (email, succeeded) values ($1, $2)`, [email, succeeded]);
+  }
+
+  /** See this file's header + 0038_revoked_sessions.sql's header — this is
+   * the write side of the LEADERSHIP/platform-scoped instant-revocation
+   * check tenant.middleware.ts performs on every request from those
+   * tiers. Per-user, not per-token (access tokens are never persisted). */
+  private async recordSessionRevocation(userId: string): Promise<void> {
+    await this.pool.query(
+      `insert into revoked_sessions (user_id, revoked_at) values ($1, now())
+       on conflict (user_id) do update set revoked_at = now()`,
+      [userId],
+    );
   }
 
   async login(emailRaw: string, password: string) {
@@ -282,6 +296,7 @@ class AuthService {
         `update refresh_tokens set revoked_at = now() where user_id = $1 and revoked_at is null`,
         [token.user_id],
       );
+      await this.recordSessionRevocation(token.user_id);
       throw new UnauthorizedException('This refresh token was already used — all sessions for this account have been revoked');
     }
     if (new Date(token.expires_at).getTime() < Date.now()) {
@@ -326,9 +341,13 @@ class AuthService {
    * the token existed, same "don't leak account state" principle as
    * requestPasswordReset() below. */
   async logout(rawToken: string): Promise<void> {
-    await this.pool.query(`update refresh_tokens set revoked_at = now() where token_hash = $1 and revoked_at is null`, [
-      hashToken(rawToken),
-    ]);
+    const { rows } = await this.pool.query<{ user_id: string }>(
+      `update refresh_tokens set revoked_at = now() where token_hash = $1 and revoked_at is null returning user_id`,
+      [hashToken(rawToken)],
+    );
+    if (rows.length > 0) {
+      await this.recordSessionRevocation(rows[0].user_id);
+    }
   }
 
   /** SEC-020's "secure reset." Never reveals whether the email is
@@ -386,6 +405,7 @@ class AuthService {
       `update refresh_tokens set revoked_at = now() where user_id = $1 and revoked_at is null`,
       [token.user_id],
     );
+    await this.recordSessionRevocation(token.user_id);
   }
 }
 

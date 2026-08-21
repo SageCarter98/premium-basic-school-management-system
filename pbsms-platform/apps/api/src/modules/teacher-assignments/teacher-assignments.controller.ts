@@ -36,6 +36,14 @@ export class TeacherAssignmentsController {
     return this.teacherAssignments.findAll({ teacherId, classId, subjectId, academicYearId });
   }
 
+  // Declared before ':id' — Nest matches routes in registration order,
+  // and 'class-teacher' would otherwise be swallowed as an :id value.
+  @Roles(...ACADEMIC_STAFF)
+  @Get('class-teacher')
+  findClassTeacher(@Query('classId') classId: string, @Query('academicYearId') academicYearId: string) {
+    return this.teacherAssignments.findClassTeacher(classId, academicYearId);
+  }
+
   @Roles(...ACADEMIC_STAFF)
   @Get(':id')
   findOne(@Param('id') id: string) {

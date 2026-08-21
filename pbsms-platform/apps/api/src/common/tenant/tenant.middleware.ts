@@ -21,6 +21,7 @@ import { TenantContextStore } from './tenant-context';
 import { PlatformContextStore } from './platform-context';
 import { PLATFORM_POOL } from '../database/database.module';
 import { PG_POOL } from '../database/tenant-database.service';
+import { LEADERSHIP } from '../auth/role-groups';
 
 interface AccessTokenClaims {
   sub: string; // user id
@@ -34,6 +35,7 @@ interface AccessTokenClaims {
    * a token are the IMPERSONATED tenant/representative admin-view role,
    * not the platform actor's own — see the branch below. */
   impersonationGrantId?: string;
+  iat?: number; // set automatically by jsonwebtoken (seconds since epoch) — used by the revocation check below
 }
 
 // '/v1/documents/verify' (FR-DOC-020): a third party verifies a document
@@ -157,6 +159,31 @@ export class TenantMiddleware implements NestMiddleware {
       claims = this.jwtService.verify<AccessTokenClaims>(authHeader.slice('Bearer '.length));
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    // Instant access-token revocation — LEADERSHIP/platform roles only
+    // (0038_revoked_sessions.sql's header explains the scoping choice: a
+    // live DB check bounded to the tiers that already require MFA and get
+    // the most sensitive access, mirroring the impersonation-grant live
+    // check further below, rather than a global check on every request).
+    // claims.iat (seconds since epoch) is compared against
+    // revoked_sessions.revoked_at so a token issued AFTER a revocation
+    // event — e.g. a fresh login right after logout — is still accepted;
+    // this kills sessions that existed at revocation time, not the user.
+    const isLeadershipOrPlatform =
+      claims.isPlatformUser || (claims.roleCodes ?? []).some((r) => LEADERSHIP.includes(r));
+    if (isLeadershipOrPlatform) {
+      const revokedRows = await this.appPool.query<{ revoked_at: string }>(
+        `select revoked_at from revoked_sessions where user_id = $1`,
+        [claims.sub],
+      );
+      if (
+        (revokedRows.rowCount ?? 0) > 0 &&
+        claims.iat !== undefined &&
+        new Date(revokedRows.rows[0].revoked_at).getTime() > claims.iat * 1000
+      ) {
+        throw new UnauthorizedException('This session has been revoked — please log in again');
+      }
     }
 
     // SEC-030 MFA-setup gate: checked FIRST and unconditionally — before

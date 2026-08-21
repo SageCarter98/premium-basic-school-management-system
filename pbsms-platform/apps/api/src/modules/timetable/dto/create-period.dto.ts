@@ -2,6 +2,7 @@ import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Min } from 'cla
 
 const TIME_SHAPE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const PERIOD_TYPES = ['teaching', 'break', 'assembly', 'other'] as const;
+const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 /** create-period.dto.ts — a tenant-wide time-of-day template (e.g. "Period
  * 1, 08:00-08:40"), reused across every day_of_week a class meets at that
@@ -27,4 +28,11 @@ export class CreatePeriodDto {
   @IsOptional()
   @IsIn(PERIOD_TYPES)
   periodType?: (typeof PERIOD_TYPES)[number];
+
+  // 0040_period_day_variation.sql — omit for a period that applies to
+  // every day (the pre-existing, still-default behaviour); set to give
+  // one specific day its own time (e.g. a shorter Friday schedule).
+  @IsOptional()
+  @IsIn(DAYS_OF_WEEK)
+  dayOfWeek?: (typeof DAYS_OF_WEEK)[number];
 }

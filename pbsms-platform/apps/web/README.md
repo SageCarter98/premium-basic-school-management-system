@@ -1172,12 +1172,96 @@ plan row, 21 `document_verify_attempts` rows, 1 `revoked_sessions` row, 1
 timetable entry, 1 period, 1 teacher assignment, and 5 stray `audit_log`
 rows — all removed, isolation suite re-verified green afterward.
 
-**Still open, not touched this pass**: the three bugs from the 2026-08-20
-walkthrough below (refresh-token race, orphaned Platform Console nav,
-`/dashboard` stub) — none of the five gaps closed here overlapped with
-those three.
+**Update 2026-08-21, later same day**: all three bugs below are now
+closed — see the section immediately following this one.
 
-## Known gaps found during multi-account browser walkthrough (2026-08-20) — prioritized fix list
+## All three 2026-08-20 walkthrough bugs closed (2026-08-21)
+
+User asked "did you catch all bugs in the live session? Go through it and
+let's find fixes to them," then confirmed doing the full 4-view dashboard
+build in the same pass rather than splitting it off.
+
+1. **Refresh-token race** — `api-client.ts`'s `refreshSession()` now
+   dedups via a shared in-flight promise (`inFlightRefresh`); every
+   concurrent 401 awaits the same single refresh call instead of each
+   firing its own and tripping reuse-detection.
+2. **Platform Console orphaned** — `RequireAuth.tsx` (guards every
+   `(shell)` route) now checks `decodeAccessToken()?.isPlatformUser` on
+   every mount, not just at fresh login, and redirects to `/platform`.
+   Root-caused as the actual trigger for bug 1 above: `ContextSwitcher`'s
+   two concurrent tenant-scoped calls both 401ing for a platform actor is
+   what raced the refresh call in the first place. Live-verified: a
+   platform token navigated straight at `/dashboard` now lands on
+   `/platform`'s real console instead of the tenant shell.
+3. **Dashboard stub replaced with 4 real views** —
+   `(shell)/dashboard/page.tsx`, routed by the caller's own `roleCodes`:
+   LEADERSHIP gets the Chapter 14 group roll-up (`/v1/analytics/
+   group-rollup`, per-school collection/attendance/academic-performance
+   stat tiles with an adjustable date range); `accountant` gets
+   `/v1/finance/dashboard/outstanding-balances` (total outstanding,
+   overdue count, top-10 largest balances with student names resolved
+   client-side against `/v1/students`); `teacher` gets their own active
+   `teacher-assignments` (record-scoped server-side to "my own" already)
+   plus today's attendance-marked status per class, computed client-side
+   since the attendance read endpoint isn't itself date/class-scoped;
+   everyone else (library/transport/health/inventory specialists, plus
+   the ACADEMIC_ADMIN-but-not-LEADERSHIP academic-office roles that don't
+   cleanly fit any of the three named views) gets an honest welcome + a
+   direct link into their one module — no fabricated metrics, same
+   discipline this codebase applies to every other stub-shaped surface.
+
+**Two real bugs the live-HTTP/browser verification caught in the new
+dashboard code itself, neither visible from reading the diff:**
+- `pct()` multiplied every rate by 100 a second time —
+  `analytics.service.ts`'s `computeCollectionRate()`/
+  `computeAttendanceRate()`/`computeAcademicPerformance()` already return
+  a 0-100 percentage (e.g. `Math.round((present/total)*10000)/100`), not
+  a 0-1 fraction. Rendered as `3000.0%`/`10000.0%` instead of `30.0%`/
+  `100.0%` until fixed.
+- `academicPerformance` can be `null` (a school with no current, approved
+  result yet for the period — `computeAcademicPerformance()`'s own
+  header calls this out as an honest "no data," not a 0) but
+  `SchoolRollup`'s type and `pct()`'s signature both claimed a bare
+  `number`, so `null.toFixed(1)` threw and crashed the whole page for
+  Sunrise (which has real invoices/attendance but no posted results yet).
+  Fixed by making both genuinely nullable, rendering `—` for null.
+
+Both were caught by the same discipline this codebase uses everywhere —
+a clean TypeScript build alone did NOT catch either (the first is a
+runtime unit-conversion error, not a type error; the second slipped past
+because `SchoolRollup.academicPerformance: number` was simply the wrong
+type, not caught until a school with zero results actually rendered) —
+only live-HTTP-plus-browser verification against real seeded data (which
+happens to include exactly this "school with invoices but no results
+yet" case) surfaced both. Also hit and worked around real environment
+flakiness while verifying: this app's Stage 3 service worker
+(`pbsms-v1-shell` cache) was serving a stale pre-fix JS bundle to the
+browser even after full page navigations and a production rebuild —
+`navigator.serviceWorker.getRegistrations()[].unregister()` +
+`caches.keys()`/`caches.delete()` followed by one more reload was needed
+to force a genuinely fresh bundle. Worth remembering for any future
+browser-based verification session against this app: if a code fix
+doesn't seem to be taking effect despite a clean rebuild, suspect the
+service worker before suspecting the fix.
+
+Live-verified in a real browser (not just curl) across all four dashboard
+views: teacher (`teacher@sunrise.pbsms.test` — 1 active assignment, 0/1
+classes marked today, correct "Not marked yet" pill); accountant
+(`accountant@sunrise.pbsms.test` — GH₵1300.00 total outstanding across 2
+invoices, both for "Ama Mensah" with names correctly resolved); leadership
+(`admin@sunrise.pbsms.test` — Sunrise showing 30.0% collection / 100.0%
+attendance / "—" academic performance, matching a hand-computed check
+against the same `/v1/analytics/group-rollup` call via curl); specialist
+(`librarian@sunrise.pbsms.test` — welcome message + a single Library link
+card, nav correctly pruned to just Dashboard/Students/Library for this
+role); and the platform-routing fix (`platform-admin@pbsms.test`'s token
+navigated directly at `/dashboard` correctly redirected to `/platform`'s
+real console). Clean `npm run build` after every change. Backend
+untouched by this pass (no migration, no service/controller changes) —
+only `api-client.ts`, `RequireAuth.tsx`, and the new `dashboard/page.tsx`
++ `dashboard.module.css`.
+
+## Known gaps found during multi-account browser walkthrough (2026-08-20) — historical, all closed above
 
 A real login walkthrough as every seeded account (teacher, accountant,
 headmaster/MFA, librarian, transport, health, storekeeper, teacher@goldengate,
@@ -1236,8 +1320,9 @@ Needs 4 real views: proprietor/headmaster roll-up, accountant collections,
 teacher home, and a sensible default for the single-department specialist
 roles (library/transport/health/inventory) that currently get it too.
 
-None of these three were fixed this session — found during a live walkthrough,
-recorded here per user instruction rather than fixed in the moment.
+None of these three were fixed in the 2026-08-20 session — found during a
+live walkthrough, recorded here per user instruction rather than fixed in
+the moment. **All three closed 2026-08-21 — see the section above.**
 
 ## Setup
 

@@ -31,7 +31,25 @@ export async function login(email: string, password: string): Promise<LoginResul
   return body as LoginResult;
 }
 
+// Dedups concurrent refresh attempts. Without this, two widgets 401'ing at
+// the same moment each call refreshSession() independently — the first
+// rotates the refresh token server-side, the second then presents the
+// now-already-rotated token, which trips the backend's reuse-detection
+// (auth.module.ts) and revokes the ENTIRE token family, including the
+// replacement the first call just legitimately got. A shared in-flight
+// promise means every concurrent 401 awaits the same single refresh call
+// instead of racing each other into that reuse-detection trap.
+let inFlightRefresh: Promise<boolean> | null = null;
+
 async function refreshSession(): Promise<boolean> {
+  if (inFlightRefresh) return inFlightRefresh;
+  inFlightRefresh = doRefresh().finally(() => {
+    inFlightRefresh = null;
+  });
+  return inFlightRefresh;
+}
+
+async function doRefresh(): Promise<boolean> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
   const res = await fetch(`${API_BASE_URL}/v1/auth/refresh`, {

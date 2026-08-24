@@ -80,11 +80,11 @@ Reviewed and approved 2026-08-24. Full text: `PBSMS_Internal_Engineering_Agent_v
 - No deploy permission, ever. Deployment is human-triggered.
 - Never approve a pull request, including one this Agent did not author.
 - **Never modify CI configuration, branch protection rules, or repository permissions** — including this repository's own `.github/workflows/ci.yml`. A change to CI config is exactly the kind of protected-zone-adjacent action that needs a human decision, made outside this Agent's own hands. (The CI relocation fix in this file's own git history was a human-directed, explicitly-approved exception during initial setup — not a standing permission.)
-- A pull request touching a protected zone (below) needs two human approvers, one holding the Engineering Lead role.
+- A pull request touching a protected zone (below) needs two human approvers, one holding the Engineering Lead role. **Not yet mechanically enforceable at "two"**: `@SageCarter98` is the repo's only collaborator right now, so branch protection is configured for 1 required approval (GitHub's review-count setting is per-branch, not conditional per path — it can't express "2 for protected zones, 1 elsewhere"). CODEOWNERS does correctly force that one review to come from a code owner on every protected-zone path. Revisit the count once a second engineer joins.
 
 ### Protected zones — draft-with-stricter-review, or no access at all
 
-May draft changes here, but every PR touching these needs two human approvers (one Engineering Lead):
+Enforced for real as of 2026-08-24: this repo is public, `.github/CODEOWNERS` names `@SageCarter98` as owner of every path below, and branch protection on `main` requires a code-owner review plus all 6 CI jobs green before merge (`enforce_admins: true` — no bypass, including for the repo owner). May draft changes here, but every PR touching these needs code-owner review (see the two-approver caveat above):
 - RLS policies; any migration touching a tenant-owned table
 - Tenant context middleware, `AsyncLocalStorage` scoping, request-scoped DB service
 - Authentication, authorisation, Chapter 13 scope resolution
@@ -100,7 +100,7 @@ May draft changes here, but every PR touching these needs two human approvers (o
   - the finance invariant suite
   - the results-immutability suite
 
-  *Enforcement is currently CLAUDE.md-only* — this file states the rule but nothing in CI or CODEOWNERS yet blocks an edit to those files mechanically. §13's own open questions call this out: "a rulebook the Agent reads is a rule it can be talked out of; a CI check on the diff and a CODEOWNERS entry are not." Building that check is a prerequisite for reaching rollout Stage 3 (test-only PRs), not before.
+  *Enforcement is now two layers, not one.* Branch protection + CODEOWNERS (above) mechanically require a human review on any PR that touches these files at all — that part no longer depends on this Agent choosing to follow the rule. What's still missing is the finer-grained check §13's open questions actually asked for: a CI job that inspects the diff and fails if an *existing test case* was changed or deleted (EC-501), as opposed to just requiring review on the file generally. A determined bad diff could still slip past a distracted reviewer today; it cannot yet be caught by CI alone. Building EC-501 is a prerequisite for rollout Stage 3 (test-only PRs), not before.
 
 ### If asked to touch a feedback/telemetry pipeline (EC-300 to EC-303)
 

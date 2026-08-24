@@ -25,6 +25,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { TenantDatabaseService } from '../../common/database/tenant-database.service';
 import { TenantContextStore } from '../../common/tenant/tenant-context';
 import { InviteStaffDto } from './dto/invite-staff.dto';
+import { PASSWORD_HASH_OPTIONS } from '../../common/auth/password-hash';
 
 // Long enough that an admin handing this to a new hire in person, or over
 // a call, doesn't create pressure to set a password immediately — a real
@@ -101,7 +102,7 @@ export class StaffService {
     // An unusable placeholder — argon2-hashed random bytes nobody knows,
     // never meant to authenticate anything. The set-password token below
     // is the only real way into this account until it's used.
-    const placeholderHash = await argon2.hash(randomBytes(32).toString('hex'));
+    const placeholderHash = await argon2.hash(randomBytes(32).toString('hex'), PASSWORD_HASH_OPTIONS);
 
     const userRows = await this.db.query<{ id: string }>(
       `insert into users (email, password_hash, full_name) values ($1, $2, $3) returning id`,

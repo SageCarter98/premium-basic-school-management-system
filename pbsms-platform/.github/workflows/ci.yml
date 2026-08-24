@@ -133,6 +133,15 @@ jobs:
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0030_nacca_curriculum.sql
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0031_guardian_access.sql
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0032_fee_penalties.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0033_timetable.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0034_settlement_reconciliation.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0035_transport_gps.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0036_assessment_component_types.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0037_document_verify_rate_limit.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0038_revoked_sessions.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0039_class_teacher.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0040_period_day_variation.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0041_billing_plan_grants.sql
       - name: Set the CI-only pbsms_app password to match TEST_DATABASE_URL/DATABASE_URL
         # 0001_init_tenancy.sql hardcodes pbsms_app's local-dev password; CI
         # uses a different generated postgres password for pbsms itself

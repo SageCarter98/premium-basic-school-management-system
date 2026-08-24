@@ -1328,8 +1328,8 @@ the moment. **All three closed 2026-08-21 — see the section above.**
 
 ```bash
 npm install
-npm run api:dev    # from repo root — apps/api, port 3000
-npm run web:dev    # from repo root — apps/web, falls back to :3001 (api holds :3000)
+npm run api:dev    # from repo root — apps/api, port 3001
+npm run web:dev    # from repo root — apps/web, port 3000
 ```
 
 Log in at `/login` with a seeded demo account (password `demo1234` for all

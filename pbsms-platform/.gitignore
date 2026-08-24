@@ -6,6 +6,7 @@ node_modules/
 dist/
 .next/
 out/
+*.tsbuildinfo
 
 # Env — never commit real secrets (SRS Chapter 33.4)
 .env

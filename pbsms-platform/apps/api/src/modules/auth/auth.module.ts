@@ -8,6 +8,7 @@ import { Inject } from '@nestjs/common';
 import { PlatformContextStore } from '../../common/tenant/platform-context';
 import { generateTotpSecret, verifyTotp, otpauthUri } from '../../common/auth/totp';
 import { LEADERSHIP } from '../../common/auth/role-groups';
+import { PASSWORD_HASH_OPTIONS } from '../../common/auth/password-hash';
 
 /**
  * auth.module.ts
@@ -395,7 +396,7 @@ class AuthService {
     }
     const token = rows[0];
 
-    const passwordHash = await argon2.hash(newPassword);
+    const passwordHash = await argon2.hash(newPassword, PASSWORD_HASH_OPTIONS);
     await this.pool.query(`update users set password_hash = $1, updated_at = now() where id = $2`, [
       passwordHash,
       token.user_id,

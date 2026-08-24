@@ -190,19 +190,19 @@ npm run api:test:e2e
 
 # 5. Run the API
 npm run api:dev
-curl http://localhost:3000/health
+curl http://localhost:3001/health
 # Log in as one of the two seeded demo users (password 'demo1234' for both)
 # and hit a tenant-scoped route with the returned token:
-curl -X POST http://localhost:3000/v1/auth/login -H "Content-Type: application/json" \
+curl -X POST http://localhost:3001/v1/auth/login -H "Content-Type: application/json" \
   -d '{"email":"admin@sunrise.pbsms.test","password":"demo1234"}'
-curl http://localhost:3000/v1/students -H "Authorization: Bearer <accessToken from above>"
+curl http://localhost:3001/v1/students -H "Authorization: Bearer <accessToken from above>"
 # Try admin@goldengate.pbsms.test instead and confirm you get a DIFFERENT
 # student back — that's the whole point.
 
 # 6. Run the frontend shell
 npm run web:dev
-# Next.js will fall back to :3001 if :3000 (the API) is already listening —
-# it says so on startup, just read its own output.
+# apps/web now gets its usual :3000 free and clear, since the API has moved
+# to :3001 — no more fallback-port dance between the two.
 ```
 
 ### Non-Docker local Postgres (what actually verified this scaffold)

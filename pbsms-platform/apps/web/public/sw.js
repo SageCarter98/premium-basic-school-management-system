@@ -132,7 +132,7 @@ const DB_VERSION = 2; // bumped for Stage 4's pending_scores store — MUST matc
 const STORE_QUEUE = 'pending_attendance';
 const STORE_SCORE_QUEUE = 'pending_scores';
 const STORE_AUTH = 'auth_mirror';
-const DEFAULT_API_BASE_URL = 'http://localhost:3000'; // matches apps/web/src/lib/api-client.ts's own default
+const DEFAULT_API_BASE_URL = 'http://localhost:3001'; // matches apps/web/src/lib/api-base-url.ts's own default
 
 function openTenantDb(name) {
   return new Promise((resolve, reject) => {

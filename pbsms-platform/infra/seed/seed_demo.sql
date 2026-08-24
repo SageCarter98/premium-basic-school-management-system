@@ -58,7 +58,7 @@ insert into tenant_subscriptions (id, tenant_id, plan_id, billing_cycle, current
 -- usable for live-HTTP testing of /v1/platform/* too.
 insert into users (id, email, password_hash, full_name, is_platform_user) values
   ('99999999-0000-0000-0000-000000000005', 'platform-admin@pbsms.test',
-   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   '$argon2id$v=19$m=19456,t=2,p=1$J8pMizkD8HfLcG7biD86Ig$SO/smxbJwwmFwoTMBlC8AtRLB9Ie8fCiOPO+pHG12Uw',
    'PBSMS Platform Admin', true);
 
 insert into platform_user_roles (id, user_id, role_code, granted_by) values
@@ -67,22 +67,22 @@ insert into platform_user_roles (id, user_id, role_code, granted_by) values
 
 insert into users (id, email, password_hash, full_name) values
   ('99999999-0000-0000-0000-000000000001', 'admin@sunrise.pbsms.test',
-   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   '$argon2id$v=19$m=19456,t=2,p=1$J8pMizkD8HfLcG7biD86Ig$SO/smxbJwwmFwoTMBlC8AtRLB9Ie8fCiOPO+pHG12Uw',
    'Sunrise Admin'),
   ('99999999-0000-0000-0000-000000000002', 'admin@goldengate.pbsms.test',
-   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   '$argon2id$v=19$m=19456,t=2,p=1$J8pMizkD8HfLcG7biD86Ig$SO/smxbJwwmFwoTMBlC8AtRLB9Ie8fCiOPO+pHG12Uw',
    'Golden Gate Admin'),
   ('99999999-0000-0000-0000-000000000003', 'teacher@sunrise.pbsms.test',
-   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   '$argon2id$v=19$m=19456,t=2,p=1$J8pMizkD8HfLcG7biD86Ig$SO/smxbJwwmFwoTMBlC8AtRLB9Ie8fCiOPO+pHG12Uw',
    'Sunrise Teacher'),
   ('99999999-0000-0000-0000-000000000004', 'accountant@sunrise.pbsms.test',
-   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   '$argon2id$v=19$m=19456,t=2,p=1$J8pMizkD8HfLcG7biD86Ig$SO/smxbJwwmFwoTMBlC8AtRLB9Ie8fCiOPO+pHG12Uw',
    'Sunrise Accountant'),
   -- Second Golden Gate user (0026_delegation.sql needs a real distinct
   -- recipient in the SAME tenant as its delegator — Golden Gate had only
   -- one seeded user, admin@goldengate, before this).
   ('99999999-0000-0000-0000-000000000010', 'teacher@goldengate.pbsms.test',
-   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   '$argon2id$v=19$m=19456,t=2,p=1$J8pMizkD8HfLcG7biD86Ig$SO/smxbJwwmFwoTMBlC8AtRLB9Ie8fCiOPO+pHG12Uw',
    'Golden Gate Teacher'),
   -- Stage 8 (frontend): LIBRARY_TEAM/TRANSPORT_TEAM/HEALTH_TEAM/
   -- INVENTORY_TEAM are each [...LEADERSHIP, <specialist role>] — before
@@ -91,16 +91,16 @@ insert into users (id, email, password_hash, full_name) values
   -- own addition above (Authorization Pass 1) for making a role tier
   -- distinguishable via live-HTTP testing without needing MFA.
   ('99999999-0000-0000-0000-000000000006', 'librarian@sunrise.pbsms.test',
-   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   '$argon2id$v=19$m=19456,t=2,p=1$J8pMizkD8HfLcG7biD86Ig$SO/smxbJwwmFwoTMBlC8AtRLB9Ie8fCiOPO+pHG12Uw',
    'Sunrise Librarian'),
   ('99999999-0000-0000-0000-000000000007', 'transport@sunrise.pbsms.test',
-   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   '$argon2id$v=19$m=19456,t=2,p=1$J8pMizkD8HfLcG7biD86Ig$SO/smxbJwwmFwoTMBlC8AtRLB9Ie8fCiOPO+pHG12Uw',
    'Sunrise Transport Officer'),
   ('99999999-0000-0000-0000-000000000008', 'health@sunrise.pbsms.test',
-   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   '$argon2id$v=19$m=19456,t=2,p=1$J8pMizkD8HfLcG7biD86Ig$SO/smxbJwwmFwoTMBlC8AtRLB9Ie8fCiOPO+pHG12Uw',
    'Sunrise Health Officer'),
   ('99999999-0000-0000-0000-000000000009', 'storekeeper@sunrise.pbsms.test',
-   '$argon2id$v=19$m=65536,t=3,p=4$EZ5QO6kVQaS6E5yaQHrxsg$KI+FP1qay0ivdgkV5K+mjEm2t9OX8NDvePeKozjzgn8',
+   '$argon2id$v=19$m=19456,t=2,p=1$J8pMizkD8HfLcG7biD86Ig$SO/smxbJwwmFwoTMBlC8AtRLB9Ie8fCiOPO+pHG12Uw',
    'Sunrise Storekeeper');
 
 -- Chapter 13/33 (authorization Pass 1): 'accountant' is a distinct,

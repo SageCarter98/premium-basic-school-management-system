@@ -161,6 +161,7 @@ jobs:
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0044_staff_feedback.sql
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0045_tenant_applications.sql
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0046_product_feedback.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0047_product_feedback_clustering.sql
       - name: Set the CI-only pbsms_app password to match TEST_DATABASE_URL/DATABASE_URL
         # 0001_init_tenancy.sql hardcodes pbsms_app's local-dev password; CI
         # uses a different generated postgres password for pbsms itself

@@ -9,11 +9,25 @@ name: CI
 # dependency scanning, build, and the migration/isolation test. Staging
 # deploy, DAST, and production deploy are environment-specific and are a
 # Phase 1 build item once real hosting (Appendix E.2) is provisioned.
+#
+# Moved here from pbsms-platform/.github/workflows/ci.yml (2026-08-24) —
+# GitHub Actions only discovers workflows at the true repository root's
+# .github/workflows/, and the actual git repo root is this directory's
+# parent, one level above pbsms-platform. This file had never actually run
+# on GitHub at its old path (confirmed via `gh workflow list` / `gh run
+# list` returning zero results despite the repo being pushed) — every
+# "clean CI" check up to this point was a manual local run, not a real gate.
+# `defaults.run.working-directory` below is the only change from the old
+# file's content; every step is unchanged otherwise.
 
 on:
   pull_request:
   push:
     branches: [main]
+
+defaults:
+  run:
+    working-directory: pbsms-platform
 
 jobs:
   lint-and-typecheck:

@@ -160,6 +160,7 @@ jobs:
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0043_guardian_access_requests.sql
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0044_staff_feedback.sql
           psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0045_tenant_applications.sql
+          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0046_product_feedback.sql
       - name: Set the CI-only pbsms_app password to match TEST_DATABASE_URL/DATABASE_URL
         # 0001_init_tenancy.sql hardcodes pbsms_app's local-dev password; CI
         # uses a different generated postgres password for pbsms itself
@@ -202,7 +203,7 @@ jobs:
             SELECT relname FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity
-            AND relname NOT IN ('plans','tenants','tenant_subscriptions','platform_audit_logs','users','login_attempts','platform_user_roles','impersonation_grants','impersonation_sensitive_approvals','platform_invoices','refresh_tokens','password_reset_tokens','data_inventory','retention_policies','data_breach_incidents','document_verify_attempts','revoked_sessions','guardian_access_request_attempts','tenant_applications');
+            AND relname NOT IN ('plans','tenants','tenant_subscriptions','platform_audit_logs','users','login_attempts','platform_user_roles','impersonation_grants','impersonation_sensitive_approvals','platform_invoices','refresh_tokens','password_reset_tokens','data_inventory','retention_policies','data_breach_incidents','document_verify_attempts','revoked_sessions','guardian_access_request_attempts','tenant_applications','product_feedback');
           ")
           if [ -n "$LEAKY_TABLES" ]; then
             echo "::error::Tenant-owned table(s) without RLS enabled: $LEAKY_TABLES"

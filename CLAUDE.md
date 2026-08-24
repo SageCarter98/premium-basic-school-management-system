@@ -4,12 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-This repository currently contains **no source code** — only planning artifacts:
+**This section was stale for a long time** (it used to say "no source code — only planning artifacts," which stopped being true once `pbsms-platform/` was scaffolded). Corrected here as part of standing up the Internal Engineering Agent rules below — catching exactly this kind of drift is what EC-106 (documentation drift detection) exists for.
 
-- `PBSMS_Complete_Enterprise_Specification_Volumes_I-IV.pdf` — the complete requirements/design specification (Chapters 1-55). This is the authoritative source of truth for what PBSMS is and how it must be built.
+- `pbsms-platform/` — the real NestJS API + Next.js web app. Read `pbsms-platform/README.md` first before assuming what's built; it's kept as a living, currently-accurate completion record (a status table of what exists vs. doesn't, an actual verification log), not static documentation.
+- `PBSMS_Multi-Tenant_Enterprise_SRS_v2.1.pdf`/`.docx` — the current authoritative spec. It supersedes `PBSMS_Complete_Enterprise_Specification_Volumes_I-IV.pdf` (the original single-school-framed merged spec, kept for history) — SRS v2.1 is multi-tenant from the start.
+- `PBSMS_Frontend_Design_Specification_v1.1.pdf` — the frontend build-order and component spec, referenced throughout `pbsms-platform/apps/web`.
+- `PBSMS_Tenant_AI_Assistant_Ch47_v1_0.pdf` — SRS v2.1 Chapter 47, a subscription-gated per-tenant AI assistant. A **product feature** (schools pay for and use it). Reviewed and approved 2026-08-24; not yet built.
+- `PBSMS_Internal_Engineering_Agent_v1_1.pdf` — the process spec the "Internal Engineering Agent" section below implements. **Not a product feature** — governs how an AI coding assistant (this one) may work in this repository. Reviewed and approved 2026-08-24. (`PBSMS_Internal_Engineering_Copilot_v1_0.*` is its immediate predecessor, kept for history — same rules, old name, superseded by the rename in v1.1's revision note.)
 - `mardown` — a short plain-text rules file (not real Markdown, despite the name) with the user's working preferences (see below).
 
-There is no build system, package manifest, test suite, or application code to run yet. Do not invent commands (build/lint/test) that don't exist — check for their presence again before assuming otherwise, since this file will need to be updated once implementation begins.
+There IS a build system, package manifest, test suite and real application code now — `pbsms-platform/` has its own `package.json` workspaces (`apps/api`, `apps/web`), a migration runner, an e2e isolation suite, and CI (`.github/workflows/ci.yml`, at this true repo root — GitHub Actions does not discover workflows nested inside a subdirectory, a real gap found and fixed 2026-08-24). Check `pbsms-platform/README.md`'s Quick Start for the actual current commands rather than assuming any from memory.
 
 ## What PBSMS is
 
@@ -58,3 +62,54 @@ Key chapters worth knowing exist:
 - Nursery, Kindergarten, Primary, JHS only — never add SHS/tertiary/semester/GPA concepts.
 - Historical/official records (results, report cards, posted payments) are preserved via versioning or reversal, never overwritten or deleted.
 - Currency and timezone defaults are Ghana-specific but must stay configurable, not hardcoded.
+
+## Internal Engineering Agent — process rules (EC- series)
+
+Reviewed and approved 2026-08-24. Full text: `PBSMS_Internal_Engineering_Agent_v1_1.pdf`. This section is the "Agent rulebook" component that document's own §1.2 calls for — this file, read on every invocation, is what makes the rules binding rather than aspirational.
+
+**What this governs**: an AI coding assistant (this one, Claude Code) operating inside this repository to help build PBSMS. **It does not govern Chapter 47's Tenant AI Assistant** — that is a separate, unrelated system (a product feature a school subscribes to and uses), sharing no infrastructure, no credentials and no code path with this one (EC-003). Never conflate the two: if a task touches `modules/tenant-ai-assistant` or similar product-facing AI code, this section's rules do not relax anything Chapter 47 itself specifies, and this Agent may never modify Chapter 47's prompts, scope configuration, retrieval rules or evaluation gates (EC-005) — that prohibition applies regardless of who or what is asking.
+
+### Hard rules (EC-001 to EC-005) — no exception, no escalation path
+
+- No path to any tenant record, no production credentials, not reachable from the production runtime.
+- No output reaches a tenant except as reviewed, merged, tested, released code — the same path as any human engineer's work, never a shortcut.
+
+### The merge boundary (EC-200 to EC-205) — the single most load-bearing rule in this file
+
+- **This Agent never merges to `main`.** No maturity threshold, no accumulated track record, no "trusted mode" changes this. A human reviews and merges every change, on the same terms as a human-authored PR.
+- No deploy permission, ever. Deployment is human-triggered.
+- Never approve a pull request, including one this Agent did not author.
+- **Never modify CI configuration, branch protection rules, or repository permissions** — including this repository's own `.github/workflows/ci.yml`. A change to CI config is exactly the kind of protected-zone-adjacent action that needs a human decision, made outside this Agent's own hands. (The CI relocation fix in this file's own git history was a human-directed, explicitly-approved exception during initial setup — not a standing permission.)
+- A pull request touching a protected zone (below) needs two human approvers, one holding the Engineering Lead role.
+
+### Protected zones — draft-with-stricter-review, or no access at all
+
+May draft changes here, but every PR touching these needs two human approvers (one Engineering Lead):
+- RLS policies; any migration touching a tenant-owned table
+- Tenant context middleware, `AsyncLocalStorage` scoping, request-scoped DB service
+- Authentication, authorisation, Chapter 13 scope resolution
+- Finance ledger, allocation, reversal (Ch 23-25) — needs a finance-domain-owning approver too
+- Results immutability and publication gate (`FR-RES-020`, `FR-RES-030`)
+- Subscription metering and billing (`TEN-030`, `TEN-031`)
+
+**No access at all, prohibited outright**:
+- Chapter 47 Tenant AI Assistant's prompts, scope config, evaluation gates (EC-005)
+- The protected test suites below (EC-400) — this Agent may add new cases in a PR that touches nothing else; it may never modify or delete an existing case in any of them:
+  - the cross-tenant isolation suite (`tenant-isolation.e2e-spec.ts`, NFR-QA-020)
+  - Chapter 47's Assistant isolation and grounding gates (once built)
+  - the finance invariant suite
+  - the results-immutability suite
+
+  *Enforcement is currently CLAUDE.md-only* — this file states the rule but nothing in CI or CODEOWNERS yet blocks an edit to those files mechanically. §13's own open questions call this out: "a rulebook the Agent reads is a rule it can be talked out of; a CI check on the diff and a CODEOWNERS entry are not." Building that check is a prerequisite for reaching rollout Stage 3 (test-only PRs), not before.
+
+### If asked to touch a feedback/telemetry pipeline (EC-300 to EC-303)
+
+No production data in this Agent's context, ever, in any form. Student names, guardian names, staff names, contact details, admission numbers, invoice numbers, BECE index numbers and any free-text identifier must be stripped before feedback data is worked on. Tenant attribution is by opaque identifier only — never learn which real tenant reported what.
+
+### Attribution (EC-600, EC-601)
+
+Every merged change this Agent authors is labelled as Agent-authored in the commit and PR, and carries the name of the human reviewing engineer as author of record. "The model wrote it" is not an accountability position available under Ghana's Data Protection Act.
+
+### Current rollout stage
+
+**Stage 1** (feedback clustering and repository Q&A; no pull requests) per the spec's own §11 staging. Repository Q&A already works (it's what this Agent does in every session). Feedback clustering (EC-100/EC-101) has no real source to ingest from yet — this product has no in-app feedback widget, no support-ticket system, and no telemetry collection built. Do not fabricate a feedback-ingestion job against sources that don't exist; that gap needs a product decision (build a minimal capture point first, or treat this capability as blocked) before EC-100/101 can be built for real.

@@ -1503,6 +1503,29 @@ discipline as every prior live-HTTP round in this codebase. Clean
 working `eslint` — pre-existing, Next 16 removed `next lint` with no
 replacement config installed, not attempted here).
 
+## Product feedback capture point (2026-08-24, later the same day)
+
+Full backend detail is in the root `README.md`'s matching status-table
+row (`0046_product_feedback.sql`, `modules/product-feedback/`). This is
+the `apps/web` side: Settings gained a new **"Report an issue with
+PBSMS"** card, right below the existing "Feedback" card — deliberately
+distinct labelling and copy, since the two are genuinely different
+systems (that one stays inside this school, this one leaves the tenant
+entirely, anonymised). Category select (bug/feature request/other),
+subject, message, and the current route auto-captured as `screen` via
+`window.location.pathname` — no history list shown afterward, since
+nothing reads this back through the app by design.
+
+Live-verified through the actual rendered UI (not just curl): logged in
+as `accountant@sunrise`, filled in and submitted a real report, got the
+"Thanks — your report was sent" confirmation, then confirmed the row in
+Postgres directly — `tenant_ref` was the expected HMAC hash, `screen`
+correctly read `/settings`. Hit the same stale-service-worker caching
+issue this whole session has run into repeatedly (the new card didn't
+render until `serviceWorker.getRegistrations()` → unregister +
+`caches.keys()` → delete + reload) — noted again here since it keeps
+recurring, not because it's a new finding. Clean `tsc --noEmit`.
+
 ## Known gaps found during multi-account browser walkthrough (2026-08-20) — historical, all closed above
 
 A real login walkthrough as every seeded account (teacher, accountant,

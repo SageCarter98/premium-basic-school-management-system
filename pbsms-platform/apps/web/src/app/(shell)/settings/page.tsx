@@ -211,6 +211,11 @@ export default function SettingsPage() {
         <FeedbackCard canManage={canManage} />
       </Card>
 
+      <Card style={{ padding: 'var(--pb-space-4)', marginBottom: 'var(--pb-space-4)' }}>
+        <p className={styles.hint}>Report an issue with PBSMS</p>
+        <ProductFeedbackCard />
+      </Card>
+
       {canManage && (
         <Card style={{ padding: 'var(--pb-space-4)', marginBottom: 'var(--pb-space-4)' }}>
           <p className={styles.hint}>Class assignments</p>
@@ -790,6 +795,66 @@ function FeedbackCard({ canManage }: { canManage: boolean }) {
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+/**
+ * Distinct from FeedbackCard above on purpose — that one goes to this
+ * school's own admin and stays inside the tenant; this one goes to the
+ * PBSMS engineering team, anonymised, and is never readable from inside
+ * any tenant (no GET here — see product-feedback.controller.ts's header).
+ * Write-only: submit and get a confirmation, nothing to review afterward.
+ */
+function ProductFeedbackCard() {
+  const [form, setForm] = useState<{ category: 'bug' | 'feature_request' | 'other'; subject: string; message: string }>({
+    category: 'bug',
+    subject: '',
+    message: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  async function submit() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiFetch('/v1/product-feedback', {
+        method: 'POST',
+        body: JSON.stringify({ ...form, screen: window.location.pathname }),
+      });
+      if (!res.ok) throw new Error(await errorMessage(res, `Failed (${res.status})`));
+      setForm({ category: 'bug', subject: '', message: '' });
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send this report.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className={styles.hint} style={{ marginBottom: 'var(--pb-space-3)' }}>
+        Report a bug or suggest a feature for PBSMS itself — this goes to the engineering team, not your school&apos;s admin, and doesn&apos;t include your name or your school&apos;s identity. Please don&apos;t include a student&apos;s or guardian&apos;s name in your report.
+      </p>
+      <div className={styles.formRow}>
+        <select className={styles.select} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as typeof form.category })}>
+          <option value="bug">Bug</option>
+          <option value="feature_request">Feature request</option>
+          <option value="other">Other</option>
+        </select>
+        <input className={styles.textInput} placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
+      </div>
+      <div className={styles.formRow} style={{ marginTop: 'var(--pb-space-2)' }}>
+        <textarea className={styles.textArea} placeholder="Describe what happened, or what you'd like to see" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} />
+      </div>
+      <Button type="button" onClick={submit} disabled={saving || !form.subject || !form.message} style={{ marginTop: 'var(--pb-space-2)' }}>
+        {saving ? 'Sending…' : 'Send report'}
+      </Button>
+      {sent && <p className={styles.hint} style={{ marginTop: 'var(--pb-space-2)' }}>Thanks — your report was sent.</p>}
+      {error && <ErrorState message={error} />}
     </div>
   );
 }

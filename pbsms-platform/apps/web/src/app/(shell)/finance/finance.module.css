@@ -54,6 +54,8 @@
   font-size: var(--pb-text-body);
   flex: 1;
   min-width: 140px;
+  background: var(--pb-surface);
+  color: var(--pb-ink);
 }
 
 .checklistItem {

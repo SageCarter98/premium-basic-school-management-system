@@ -4,7 +4,51 @@
   background: var(--pb-surface);
   border-right: 1px solid var(--pb-rule);
   padding: var(--pb-space-4) 0;
+  /* position:sticky + height:100vh is what actually makes overflow-y:auto
+     do anything — a plain stretched flex item (the default here) grows to
+     match its tallest sibling instead of ever overflowing itself, so the
+     whole PAGE scrolled together and this rule was silently dead. Sticky
+     pins the sidebar to the viewport while .main scrolls independently. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
   overflow-y: auto;
+  transition: width var(--pb-dur-base) var(--pb-ease);
+}
+
+.collapseToggle {
+  display: none;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0 var(--pb-space-4) var(--pb-space-3);
+  color: var(--pb-ink-muted);
+  font-size: var(--pb-text-caption);
+  cursor: pointer;
+}
+
+/* Desktop-only — tablet/mobile already have their own icon-rail/drawer
+   collapse behaviour below, this toggle would be redundant there. */
+@media (min-width: 1024px) {
+  .collapseToggle {
+    display: block;
+  }
+}
+
+.sidebarCollapsed {
+  width: 64px;
+}
+.sidebarCollapsed .groupLabel,
+.sidebarCollapsed .itemLabel {
+  display: none;
+}
+.sidebarCollapsed .item {
+  justify-content: center;
+}
+.sidebarCollapsed .collapseToggle {
+  text-align: center;
+  padding: 0 0 var(--pb-space-3);
 }
 
 .group {

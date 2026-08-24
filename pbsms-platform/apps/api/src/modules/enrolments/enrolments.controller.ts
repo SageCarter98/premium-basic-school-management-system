@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { EnrolmentsService } from './enrolments.service';
 import { CreateEnrolmentDto } from './dto/create-enrolment.dto';
+import { ReassignClassDto } from './dto/reassign-class.dto';
 import { Roles } from '../../common/auth/roles.decorator';
 import { ALL_STAFF, ACADEMIC_ADMIN } from '../../common/auth/role-groups';
 
@@ -29,5 +30,11 @@ export class EnrolmentsController {
   @Post()
   create(@Body() body: CreateEnrolmentDto) {
     return this.enrolments.create(body);
+  }
+
+  @Roles(...ACADEMIC_ADMIN)
+  @Patch(':id/class')
+  reassignClass(@Param('id') id: string, @Body() body: ReassignClassDto) {
+    return this.enrolments.reassignClass(id, body.classId);
   }
 }

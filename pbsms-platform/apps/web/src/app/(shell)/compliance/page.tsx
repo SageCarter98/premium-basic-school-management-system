@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/Card/Card';
 import { Button } from '@/components/Button/Button';
 import { Pill } from '@/components/Pill/Pill';
@@ -8,6 +8,7 @@ import { LoadingState } from '@/components/states/LoadingState';
 import { ErrorState } from '@/components/states/ErrorState';
 import { EmptyState } from '@/components/states/EmptyState';
 import { RestrictedState } from '@/components/states/RestrictedState';
+import { SortDropdown } from '@/components/SortDropdown/SortDropdown';
 import { apiFetch, apiGet } from '@/lib/api-client';
 import { decodeAccessToken } from '@/lib/auth-token-store';
 import { ACADEMIC_STAFF, LEADERSHIP, hasAnyRole } from '@/lib/role-groups';
@@ -186,6 +187,10 @@ function DsrTab({ students, guardians, staff, canManage }: { students: Student[]
   const [form, setForm] = useState({ requestType: 'access', subjectType: 'guardian' as 'student' | 'staff' | 'guardian', subjectId: '', requesterName: '', requesterContact: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [assigneeUserId, setAssigneeUserId] = useState('');
+  const [sortField, setSortField] = useState<'dueDate' | 'status' | 'requestType'>('dueDate');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   function reload() {
     setLoading(true);
@@ -221,12 +226,13 @@ function DsrTab({ students, guardians, staff, canManage }: { students: Student[]
     }
   }
 
-  async function assign(id: string) {
-    const assigneeUserId = window.prompt('Staff id to assign this request to:');
+  async function confirmAssign(id: string) {
     if (!assigneeUserId) return;
     setError(null);
     const res = await apiFetch(`/v1/data-protection/requests/${id}/assign`, { method: 'POST', body: JSON.stringify({ assigneeUserId }) });
     if (!res.ok) return setError(await errorMessage(res, `Failed (${res.status})`));
+    setAssigningId(null);
+    setAssigneeUserId('');
     reload();
   }
 
@@ -250,6 +256,15 @@ function DsrTab({ students, guardians, staff, canManage }: { students: Student[]
 
   const isOverdue = (r: DataSubjectRequest) => ['received', 'in_progress'].includes(r.status) && r.due_date < new Date().toISOString();
 
+  const sortedRequests = useMemo(() => {
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    return requests.slice().sort((a, b) => {
+      if (sortField === 'status') return a.status.localeCompare(b.status) * dir;
+      if (sortField === 'requestType') return a.request_type.localeCompare(b.request_type) * dir;
+      return a.due_date.localeCompare(b.due_date) * dir;
+    });
+  }, [requests, sortField, sortDirection]);
+
   if (loading) return <LoadingState label="Loading data subject requests" rows={3} />;
 
   return (
@@ -262,6 +277,19 @@ function DsrTab({ students, guardians, staff, canManage }: { students: Student[]
         <label className={styles.checklistItem}>
           <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} /> Overdue only
         </label>
+        <SortDropdown
+          options={[
+            { value: 'dueDate', label: 'Due date' },
+            { value: 'status', label: 'Status' },
+            { value: 'requestType', label: 'Request type' },
+          ]}
+          value={sortField}
+          direction={sortDirection}
+          onChange={(v, d) => {
+            setSortField(v as 'dueDate' | 'status' | 'requestType');
+            setSortDirection(d);
+          }}
+        />
       </div>
       {showCreate && (
         <div style={{ marginBottom: 'var(--pb-space-3)' }}>
@@ -298,7 +326,7 @@ function DsrTab({ students, guardians, staff, canManage }: { students: Student[]
       {requests.length === 0 ? (
         <EmptyState title="No requests" message={overdueOnly ? 'Nothing overdue right now.' : 'Log a data subject request above.'} />
       ) : (
-        requests.map((r) => (
+        sortedRequests.map((r) => (
           <div key={r.id} className={styles.listRow}>
             <span>
               {r.request_type} — {subjectLabel(students, guardians, staff, r.subject_type, r.subject_id)} · requested by {r.requester_name}
@@ -311,9 +339,35 @@ function DsrTab({ students, guardians, staff, canManage }: { students: Student[]
               <span className={styles.hint}>due {new Date(r.due_date).toLocaleDateString()}</span>
               {canManage && ['received', 'in_progress'].includes(r.status) && (
                 <>
-                  <Button type="button" variant="secondary" onClick={() => assign(r.id)}>
-                    Assign
-                  </Button>
+                  {assigningId === r.id ? (
+                    <>
+                      <select className={styles.select} value={assigneeUserId} onChange={(e) => setAssigneeUserId(e.target.value)}>
+                        <option value="">Choose staff member</option>
+                        {staff.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.full_name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button type="button" onClick={() => confirmAssign(r.id)} disabled={!assigneeUserId}>
+                        Confirm
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          setAssigningId(null);
+                          setAssigneeUserId('');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <Button type="button" variant="secondary" onClick={() => setAssigningId(r.id)}>
+                      Assign
+                    </Button>
+                  )}
                   <Button type="button" onClick={() => fulfill(r.id)}>
                     Fulfil
                   </Button>

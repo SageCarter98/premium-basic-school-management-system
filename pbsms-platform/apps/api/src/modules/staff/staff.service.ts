@@ -19,7 +19,7 @@
  * manually" posture as MFA enrollment and NaCCA's otpauth URI.
  */
 
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'node:crypto';
 import { TenantDatabaseService } from '../../common/database/tenant-database.service';
@@ -132,6 +132,70 @@ export class StaffService {
       setPasswordToken: rawToken,
       expiresAt: new Date(Date.now() + INVITE_TOKEN_MINUTES * 60_000).toISOString(),
     };
+  }
+
+  /** Replaces a staff member's entire role_code set for this tenant —
+   * "edit role" from the Settings screen. Deliberately whole-set replace
+   * (delete then re-insert), not a diff/patch, since role_codes has no
+   * natural ordering or per-row identity a caller could reference — the
+   * same "whole-set replace" shape grading-scale-items config uses. An
+   * empty array is rejected by UpdateStaffRolesDto's own validator;
+   * removing every role goes through deactivate() instead, a distinct,
+   * more consequential action worth its own audit trail. */
+  async updateRoles(id: string, roleCodes: string[]): Promise<StaffMember> {
+    await this.findOne(id); // 404s if not a real staff member of this tenant
+    const { userId: actorId } = TenantContextStore.current();
+
+    await this.db.query('BEGIN');
+    try {
+      await this.db.query(`delete from tenant_users where user_id = $1`, [id]);
+      for (const roleCode of roleCodes) {
+        await this.db.query(
+          `insert into tenant_users (tenant_id, user_id, role_code, created_by, updated_by)
+           values (current_tenant_id(), $1, $2, $3, $3)`,
+          [id, roleCode, actorId],
+        );
+      }
+      await this.db.query('COMMIT');
+    } catch (err) {
+      await this.db.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    }
+    return this.findOne(id);
+  }
+
+  /** Revokes a staff member's access to this tenant. Deletes their
+   * tenant_users grant rows (the access-control fact) rather than the
+   * users row itself — every historical actor_* / created_by / updated_by
+   * reference across the schema FKs to users(id) directly
+   * (0018_staff_directory.sql), not tenant_users, so this can never
+   * orphan an audit trail or a past record the way deleting the person
+   * would. Also writes a revoked_sessions row (0038) so a LEADERSHIP-tier
+   * deactivation takes effect immediately via tenant.middleware.ts's live
+   * check, rather than waiting out that tier's already-issued access
+   * token; other tiers still naturally lose access on their next token
+   * refresh, since refresh() re-derives role_codes from tenant_users live
+   * — same bounded-blast-radius posture 0038's own header documents. */
+  async deactivate(id: string): Promise<void> {
+    const { userId: actorId } = TenantContextStore.current();
+    if (id === actorId) {
+      throw new BadRequestException('You cannot deactivate your own account');
+    }
+    await this.findOne(id); // 404s if not a real staff member of this tenant
+
+    await this.db.query('BEGIN');
+    try {
+      await this.db.query(`delete from tenant_users where user_id = $1`, [id]);
+      await this.db.query(
+        `insert into revoked_sessions (user_id, revoked_at) values ($1, now())
+         on conflict (user_id) do update set revoked_at = now()`,
+        [id],
+      );
+      await this.db.query('COMMIT');
+    } catch (err) {
+      await this.db.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    }
   }
 
   /** For other services validating a polymorphic recipientType/

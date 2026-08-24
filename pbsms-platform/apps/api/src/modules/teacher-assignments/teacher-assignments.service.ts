@@ -33,6 +33,13 @@ export interface TeacherAssignment {
   is_class_teacher: boolean;
 }
 
+export interface TeacherScope {
+  unrestricted: boolean;
+  classIds: Set<string>;
+  classTeacherOf: Set<string>;
+  subjectPairs: Set<string>;
+}
+
 export interface TeacherAssignmentFilter {
   teacherId?: string;
   classId?: string;
@@ -186,6 +193,57 @@ export class TeacherAssignmentsService {
       [teacherId, classId, academicYearId],
     );
     return rows.length > 0;
+  }
+
+  /**
+   * Chapter 13.3's "assigned students" record-relationship scope — the
+   * read-side half that FR-ASM-020's write-side checks (hasActiveAssignment/
+   * hasAnyActiveAssignmentForClass, above) never covered.
+   *
+   * Restriction applies ONLY when 'teacher' is the caller's SOLE role —
+   * not merely "lacks ACADEMIC_ADMIN". Several endpoints this scope is
+   * applied to (students.findAll() in particular) are ALL_STAFF-gated,
+   * reachable by librarian/accountant/health_officer/storekeeper/
+   * transport_officer too — none of those hold ACADEMIC_ADMIN either, but
+   * all of them legitimately need the SAME unrestricted cross-cutting
+   * reference-data access role-groups.ts's own ALL_STAFF comment already
+   * documents (a librarian issuing a book still needs to look up any
+   * student). A user holding 'teacher' PLUS another role (e.g. a teacher
+   * who is also academic_coordinator) also stays unrestricted — the more
+   * permissive role wins, same union-of-roles posture RolesGuard itself
+   * already uses everywhere (`roles.some(...)`), not a new exception.
+   *
+   * For an actual pure-teacher caller, scope is computed from their own
+   * active teacher_assignments rows:
+   * - classIds: every class they hold ANY active assignment for (class or
+   *   subject teacher) — the class-level boundary attendance/results
+   *   reads use, since neither of those tables has a subject dimension.
+   * - classTeacherOf: classes where they're the designated Class Teacher
+   *   (is_class_teacher) — grants the FULL class picture (every subject's
+   *   scores), not just their own.
+   * - subjectPairs: `${classId}:${subjectId}` keys for their exact
+   *   subject assignments — the boundary a plain subject teacher's
+   *   assessment/score reads are held to for a class they don't head.
+   *
+   * Callers apply this themselves (a plain SQL filter, not a second
+   * round-trip) — this method only computes the scope, once per request,
+   * the same "compute once, filter in the query" shape every other
+   * multi-row read in this codebase already uses.
+   */
+  async getCallerScope(): Promise<TeacherScope> {
+    const { userId, roles } = TenantContextStore.current();
+    const isPureTeacher = roles.length > 0 && roles.every((r) => r === 'teacher');
+    if (!isPureTeacher) {
+      return { unrestricted: true, classIds: new Set(), classTeacherOf: new Set(), subjectPairs: new Set() };
+    }
+    const rows = await this.db.query<{ class_id: string; subject_id: string; is_class_teacher: boolean }>(
+      `select class_id, subject_id, is_class_teacher from teacher_assignments where teacher_id = $1 and status = 'active'`,
+      [userId],
+    );
+    const classIds = new Set(rows.map((r) => r.class_id));
+    const classTeacherOf = new Set(rows.filter((r) => r.is_class_teacher).map((r) => r.class_id));
+    const subjectPairs = new Set(rows.map((r) => `${r.class_id}:${r.subject_id}`));
+    return { unrestricted: false, classIds, classTeacherOf, subjectPairs };
   }
 
   private async assertIsTeacher(userId: string): Promise<void> {

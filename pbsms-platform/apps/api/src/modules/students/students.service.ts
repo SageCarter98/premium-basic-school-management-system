@@ -18,6 +18,7 @@
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDatabaseService } from '../../common/database/tenant-database.service';
+import { TeacherAssignmentsService } from '../teacher-assignments/teacher-assignments.service';
 
 export interface Student {
   id: string;
@@ -31,7 +32,10 @@ export interface Student {
 
 @Injectable()
 export class StudentsService {
-  constructor(private readonly db: TenantDatabaseService) {}
+  constructor(
+    private readonly db: TenantDatabaseService,
+    private readonly teacherAssignments: TeacherAssignmentsService,
+  ) {}
 
   async findAll(filter: { schoolId?: string; classId?: string; academicYearId?: string } = {}): Promise<Student[]> {
     // No tenant_id in this query. RLS supplies it. This is intentional —
@@ -61,6 +65,19 @@ export class StudentsService {
       }
       conditions.push(`exists (select 1 from enrolments where ${enrolmentConditions.join(' and ')})`);
     }
+    // Chapter 13.3 scope (TeacherAssignmentsService.getCallerScope()'s
+    // header) — for a pure-teacher caller only, restrict to students with
+    // an active enrolment in one of their assigned classes. Every other
+    // ALL_STAFF role (librarian, accountant, health_officer, ...) stays
+    // unrestricted, same as before this pass.
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (!scope.unrestricted) {
+      if (scope.classIds.size === 0) return [];
+      params.push([...scope.classIds] as unknown as string);
+      conditions.push(
+        `exists (select 1 from enrolments where enrolments.student_id = students.id and enrolments.deleted_at is null and enrolments.class_id = any($${params.length}::uuid[]))`,
+      );
+    }
     return this.db.query<Student>(
       `select id, tenant_id, school_id, admission_no, first_name, last_name, status
        from students
@@ -84,7 +101,18 @@ export class StudentsService {
     if (rows.length === 0) {
       throw new NotFoundException(`Student ${id} not found`);
     }
-    return rows[0];
+    const student = rows[0];
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (!scope.unrestricted) {
+      const enrolmentRows = await this.db.query<{ hit: number }>(
+        `select 1 as hit from enrolments where student_id = $1 and deleted_at is null and class_id = any($2::uuid[])`,
+        [id, [...scope.classIds]],
+      );
+      if (enrolmentRows.length === 0) {
+        throw new NotFoundException(`Student ${id} not found`);
+      }
+    }
+    return student;
   }
 
   async create(input: {

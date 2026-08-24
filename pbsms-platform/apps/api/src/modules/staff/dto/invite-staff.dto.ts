@@ -6,7 +6,7 @@ import { ArrayMinSize, IsArray, IsEmail, IsIn, IsNotEmpty, IsString } from 'clas
 // DB constraint would have to also allow platform codes), so this is the
 // application-level equivalent for the one write path that creates a
 // brand new tenant_users row from scratch.
-const INVITABLE_ROLE_CODES = [
+export const INVITABLE_ROLE_CODES = [
   'proprietor',
   'administrator',
   'headmaster',

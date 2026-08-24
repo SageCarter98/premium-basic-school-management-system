@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/Card/Card';
 import { Button } from '@/components/Button/Button';
 import { Pill } from '@/components/Pill/Pill';
@@ -8,6 +8,7 @@ import { LoadingState } from '@/components/states/LoadingState';
 import { ErrorState } from '@/components/states/ErrorState';
 import { EmptyState } from '@/components/states/EmptyState';
 import { RestrictedState } from '@/components/states/RestrictedState';
+import { SortDropdown } from '@/components/SortDropdown/SortDropdown';
 import { apiFetch, apiGet } from '@/lib/api-client';
 import { decodeAccessToken } from '@/lib/auth-token-store';
 import { ACADEMIC_ADMIN, ACADEMIC_STAFF, hasAnyRole } from '@/lib/role-groups';
@@ -162,6 +163,8 @@ function CasesTab({ students, guardians, canAdmin }: { students: Student[]; guar
   const [responseForm, setResponseForm] = useState({ responseType: 'warning', description: '' });
   const [contactGuardianId, setContactGuardianId] = useState('');
   const [contactNotes, setContactNotes] = useState('');
+  const [sortField, setSortField] = useState<'date' | 'severity' | 'status'>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   function reload() {
     setLoading(true);
@@ -266,13 +269,39 @@ function CasesTab({ students, guardians, canAdmin }: { students: Student[]; guar
     setContactNotes('');
   }
 
+  const sortedCases = useMemo(() => {
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    return cases.slice().sort((a, b) => {
+      if (sortField === 'severity') return a.severity.localeCompare(b.severity) * dir;
+      if (sortField === 'status') return a.status.localeCompare(b.status) * dir;
+      return a.incident_date.localeCompare(b.incident_date) * dir;
+    });
+  }, [cases, sortField, sortDirection]);
+
   if (loading) return <LoadingState label="Loading discipline cases" rows={3} />;
 
   return (
     <div>
-      <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} style={{ marginBottom: 'var(--pb-space-3)' }}>
-        {showCreate ? 'Cancel' : 'Report case'}
-      </Button>
+      <div className={styles.formRow}>
+        <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)}>
+          {showCreate ? 'Cancel' : 'Report case'}
+        </Button>
+        {cases.length > 0 && (
+          <SortDropdown
+            options={[
+              { value: 'date', label: 'Incident date' },
+              { value: 'severity', label: 'Severity' },
+              { value: 'status', label: 'Status' },
+            ]}
+            value={sortField}
+            direction={sortDirection}
+            onChange={(v, d) => {
+              setSortField(v as 'date' | 'severity' | 'status');
+              setSortDirection(d);
+            }}
+          />
+        )}
+      </div>
       {showCreate && (
         <div style={{ marginBottom: 'var(--pb-space-3)' }}>
           <div className={styles.formRow}>
@@ -305,7 +334,7 @@ function CasesTab({ students, guardians, canAdmin }: { students: Student[]; guar
       {cases.length === 0 ? (
         <EmptyState title="No cases reported yet" message="Report one above." />
       ) : (
-        cases.map((c) => (
+        sortedCases.map((c) => (
           <div key={c.id}>
             <div className={styles.listRow} style={{ cursor: 'pointer' }} onClick={() => expand(c.id)}>
               <span>

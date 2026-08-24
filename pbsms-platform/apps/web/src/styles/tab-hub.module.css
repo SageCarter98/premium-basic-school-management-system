@@ -64,6 +64,12 @@
   font-size: var(--pb-text-body);
   flex: 1;
   min-width: 140px;
+  /* Without these, a <select>/<input> falls back to the browser's native
+     form-control colors regardless of theme — the one thing on this page
+     dark mode couldn't touch, since every other themed element uses a
+     custom-styled div/button instead of a native control. */
+  background: var(--pb-surface);
+  color: var(--pb-ink);
 }
 
 .textArea {
@@ -75,6 +81,8 @@
   font-family: inherit;
   flex: 1 1 100%;
   resize: vertical;
+  background: var(--pb-surface);
+  color: var(--pb-ink);
 }
 
 .checklistItem {

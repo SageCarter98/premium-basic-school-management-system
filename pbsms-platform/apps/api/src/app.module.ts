@@ -36,6 +36,9 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { DataProtectionModule } from './modules/data-protection/data-protection.module';
 import { NaccaModule } from './modules/nacca/nacca.module';
 import { TimetableModule } from './modules/timetable/timetable.module';
+import { TimelineModule } from './modules/timeline/timeline.module';
+import { StaffFeedbackModule } from './modules/staff-feedback/staff-feedback.module';
+import { TenantApplicationsModule } from './modules/tenant-applications/tenant-applications.module';
 
 @Controller()
 class HealthController {
@@ -83,6 +86,9 @@ class HealthController {
     DataProtectionModule,
     NaccaModule,
     TimetableModule,
+    TimelineModule,
+    StaffFeedbackModule,
+    TenantApplicationsModule,
   ],
   controllers: [HealthController],
 })

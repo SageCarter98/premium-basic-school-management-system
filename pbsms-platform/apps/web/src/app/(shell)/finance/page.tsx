@@ -8,6 +8,7 @@ import { LoadingState } from '@/components/states/LoadingState';
 import { ErrorState } from '@/components/states/ErrorState';
 import { EmptyState } from '@/components/states/EmptyState';
 import { RestrictedState } from '@/components/states/RestrictedState';
+import { SortDropdown } from '@/components/SortDropdown/SortDropdown';
 import { apiFetch, apiGet } from '@/lib/api-client';
 import { decodeAccessToken } from '@/lib/auth-token-store';
 import { LEADERSHIP, hasAnyRole } from '@/lib/role-groups';
@@ -654,6 +655,8 @@ function InvoicesTab({ students, classes, years, enrolments, canApprove }: Share
   const [genError, setGenError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<'invoiceNumber' | 'dueDate' | 'amount' | 'status'>('invoiceNumber');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   function reload() {
     setLoading(true);
@@ -667,6 +670,16 @@ function InvoicesTab({ students, classes, years, enrolments, canApprove }: Share
   useEffect(reload, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeStructure = structures.find((s) => s.id === form.feeStructureId);
+
+  const sortedInvoices = useMemo(() => {
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    return invoices.slice().sort((a, b) => {
+      if (sortField === 'dueDate') return (a.due_date ?? '').localeCompare(b.due_date ?? '') * dir;
+      if (sortField === 'amount') return (Number(a.total_amount) - Number(b.total_amount)) * dir;
+      if (sortField === 'status') return a.status.localeCompare(b.status) * dir;
+      return a.invoice_number.localeCompare(b.invoice_number) * dir;
+    });
+  }, [invoices, sortField, sortDirection]);
 
   function buildClassPreview() {
     const targetEnrolments = enrolments.filter((e) => e.class_id === form.classId && e.academic_year_id === form.academicYearId && e.status === 'active');
@@ -807,10 +820,29 @@ function InvoicesTab({ students, classes, years, enrolments, canApprove }: Share
         </div>
       )}
 
+      {invoices.length > 0 && (
+        <div style={{ marginBottom: 'var(--pb-space-3)' }}>
+          <SortDropdown
+            options={[
+              { value: 'invoiceNumber', label: 'Invoice no.' },
+              { value: 'dueDate', label: 'Due date' },
+              { value: 'amount', label: 'Amount' },
+              { value: 'status', label: 'Status' },
+            ]}
+            value={sortField}
+            direction={sortDirection}
+            onChange={(v, d) => {
+              setSortField(v as 'invoiceNumber' | 'dueDate' | 'amount' | 'status');
+              setSortDirection(d);
+            }}
+          />
+        </div>
+      )}
+
       {invoices.length === 0 ? (
         <EmptyState title="No invoices yet" message="Generate one from an active fee structure." />
       ) : (
-        invoices.map((inv) => (
+        sortedInvoices.map((inv) => (
           <div key={inv.id}>
             <div className={styles.listRow} style={{ cursor: 'pointer' }} onClick={() => setExpandedId(expandedId === inv.id ? null : inv.id)}>
               <span>
@@ -996,6 +1028,8 @@ function PaymentsTab({ students, canApprove }: SharedProps) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<'receivedAt' | 'amount' | 'method'>('receivedAt');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   function reload() {
     setLoading(true);
@@ -1026,6 +1060,17 @@ function PaymentsTab({ students, canApprove }: SharedProps) {
       setSaving(false);
     }
   }
+
+  // Must run unconditionally, above the loading early return below — see
+  // ReceiptsTab's identical fix earlier in this file for why.
+  const sortedPayments = useMemo(() => {
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    return payments.slice().sort((a, b) => {
+      if (sortField === 'amount') return (Number(a.amount) - Number(b.amount)) * dir;
+      if (sortField === 'method') return a.method.localeCompare(b.method) * dir;
+      return a.received_at.localeCompare(b.received_at) * dir;
+    });
+  }, [payments, sortField, sortDirection]);
 
   if (loading) return <LoadingState label="Loading payments" rows={4} />;
 
@@ -1060,10 +1105,27 @@ function PaymentsTab({ students, canApprove }: SharedProps) {
         </div>
       )}
       {saveError && <ErrorState message={saveError} />}
+      {payments.length > 0 && (
+        <div style={{ marginBottom: 'var(--pb-space-3)' }}>
+          <SortDropdown
+            options={[
+              { value: 'receivedAt', label: 'Date received' },
+              { value: 'amount', label: 'Amount' },
+              { value: 'method', label: 'Method' },
+            ]}
+            value={sortField}
+            direction={sortDirection}
+            onChange={(v, d) => {
+              setSortField(v as 'receivedAt' | 'amount' | 'method');
+              setSortDirection(d);
+            }}
+          />
+        </div>
+      )}
       {payments.length === 0 ? (
         <EmptyState title="No payments yet" message="Record one against a student, then allocate it to an invoice." />
       ) : (
-        payments.map((p) => (
+        sortedPayments.map((p) => (
           <div key={p.id}>
             <div className={styles.listRow} style={{ cursor: 'pointer' }} onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}>
               <span>
@@ -1512,10 +1574,12 @@ function ReceiptsTab() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Must run unconditionally, above the loading/error early returns below —
+  // a hook called only on some renders breaks React's Rules of Hooks.
+  const receipts = useMemo(() => documents.slice().sort((a, b) => (a.generated_at < b.generated_at ? 1 : -1)), [documents]);
+
   if (loading) return <LoadingState label="Loading receipts" rows={3} />;
   if (error) return <ErrorState message={error} />;
-
-  const receipts = useMemo(() => documents.slice().sort((a, b) => (a.generated_at < b.generated_at ? 1 : -1)), [documents]);
 
   return (
     <div>

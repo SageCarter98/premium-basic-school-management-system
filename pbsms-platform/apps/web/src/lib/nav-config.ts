@@ -1,6 +1,7 @@
 import {
   ACADEMIC_ADMIN,
   ACADEMIC_STAFF,
+  ADMISSIONS_TEAM,
   ALL_STAFF,
   HEALTH_TEAM,
   INVENTORY_TEAM,
@@ -42,6 +43,7 @@ export const NAV_CONFIG: NavGroup[] = [
     label: 'People',
     items: [
       { label: 'Students', href: '/students', requiredRoles: ALL_STAFF, stageNote: 'Stage 5' },
+      { label: 'Admissions', href: '/admissions', requiredRoles: ADMISSIONS_TEAM, stageNote: 'gap closure' },
     ],
   },
   {
@@ -93,7 +95,13 @@ export const NAV_CONFIG: NavGroup[] = [
   {
     label: 'Settings',
     items: [
-      { label: 'Settings', href: '/settings', requiredRoles: LEADERSHIP, stageNote: 'Stage 9' },
+      // ALL_STAFF, not LEADERSHIP — Settings' Appearance (theme) section
+      // has no role restriction of its own and every staff member should
+      // be able to reach it to set their own preference; the page's own
+      // canManage gate already restricts Staff directory/Class
+      // assignments to ACADEMIC_ADMIN, so widening nav visibility here
+      // doesn't expose anything new.
+      { label: 'Settings', href: '/settings', requiredRoles: ALL_STAFF, stageNote: 'Stage 9' },
     ],
   },
 ];

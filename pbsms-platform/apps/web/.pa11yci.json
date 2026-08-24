@@ -15,6 +15,7 @@
     "http://localhost:3000/teacher/scores",
     "http://localhost:3000/teacher/more",
     "http://localhost:3000/students",
+    "http://localhost:3000/admissions",
     "http://localhost:3000/classes",
     "http://localhost:3000/assessment",
     "http://localhost:3000/grading",
@@ -29,6 +30,7 @@
     "http://localhost:3000/inventory",
     "http://localhost:3000/compliance",
     "http://localhost:3000/curriculum",
+    "http://localhost:3000/settings",
     "http://localhost:3000/parent"
   ]
 }

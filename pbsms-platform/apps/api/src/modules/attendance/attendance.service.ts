@@ -182,9 +182,22 @@ export class AttendanceService {
     return { outcome: 'conflict', entry, conflictId: conflictRows[0].id };
   }
 
+  /** Chapter 13.3 record-relationship scope (see TeacherAssignmentsService.
+   * getCallerScope()'s header) — a plain teacher only sees attendance for
+   * classes they hold an active assignment for, class-teacher or subject
+   * teacher alike, since this table has no subject dimension of its own.
+   * ACADEMIC_ADMIN and above stay unrestricted, same as everywhere else. */
   async findAll(): Promise<AttendanceRecord[]> {
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (scope.unrestricted) {
+      return this.db.query<AttendanceRecord>(
+        `select * from attendance_records where deleted_at is null order by attendance_date desc`,
+      );
+    }
+    if (scope.classIds.size === 0) return [];
     return this.db.query<AttendanceRecord>(
-      `select * from attendance_records where deleted_at is null order by attendance_date desc`,
+      `select * from attendance_records where deleted_at is null and class_id = any($1::uuid[]) order by attendance_date desc`,
+      [[...scope.classIds]],
     );
   }
 
@@ -196,7 +209,15 @@ export class AttendanceService {
     if (rows.length === 0) {
       throw new NotFoundException(`Attendance record ${id} not found`);
     }
-    return rows[0];
+    const record = rows[0];
+    // Same record-relationship scope findAll() applies, enforced here too —
+    // a direct-id lookup shouldn't reach a class outside the caller's scope
+    // just because they know/guess the id.
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (!scope.unrestricted && !scope.classIds.has(record.class_id)) {
+      throw new NotFoundException(`Attendance record ${id} not found`);
+    }
+    return record;
   }
 
   /** FR-ATT-030: retains both the original and corrected values. */

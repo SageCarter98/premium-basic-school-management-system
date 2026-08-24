@@ -9,8 +9,16 @@ import { ErrorState } from '@/components/states/ErrorState';
 import { EmptyState } from '@/components/states/EmptyState';
 import { apiFetch, apiGet } from '@/lib/api-client';
 import { decodeAccessToken } from '@/lib/auth-token-store';
-import { ACADEMIC_ADMIN, hasAnyRole } from '@/lib/role-groups';
+import { ACADEMIC_ADMIN, ACADEMIC_STAFF, LEADERSHIP, hasAnyRole } from '@/lib/role-groups';
+import { RestrictedState } from '@/components/states/RestrictedState';
 import styles from './profile.module.css';
+
+// Mirrors finance.controller.ts's READ_ROLES / health.controller.ts's
+// HEALTH_TEAM exactly — same local-const convention finance/page.tsx and
+// nav-config.ts already use rather than adding these to the shared
+// role-groups.ts mirror for two call sites.
+const FINANCE_READERS = [...LEADERSHIP, 'accountant'] as const;
+const HEALTH_READERS = [...LEADERSHIP, 'health_officer'] as const;
 
 interface Student {
   id: string;
@@ -88,24 +96,57 @@ interface GeneratedDocument {
   revoked_at: string | null;
 }
 
+interface Invoice {
+  id: string;
+  student_id: string;
+  invoice_number: string;
+  status: string;
+  total_amount: string;
+  due_date: string | null;
+  issued_at: string;
+}
+
+interface Payment {
+  id: string;
+  student_id: string;
+  method: string;
+  status: string;
+  amount: string;
+  received_at: string;
+}
+
+interface DisciplineCase {
+  id: string;
+  student_id: string;
+  category: string;
+  severity: string;
+  incident_date: string;
+  status: string;
+}
+
+interface HealthIncident {
+  id: string;
+  student_id: string;
+  incident_date: string;
+  severity: string;
+  status: string;
+}
+
+interface TimelineEvent {
+  type: 'attendance' | 'result' | 'discipline' | 'finance' | 'health';
+  date: string;
+  summary: string;
+}
+
 const TABS = ['Identity', 'Guardians', 'Academics', 'Attendance', 'Documents', 'Finance', 'Health', 'Discipline', 'Timeline'] as const;
 type Tab = (typeof TABS)[number];
 
-const STUB_TABS: Partial<Record<Tab, string>> = {
-  Finance: 'Invoices, payments and balance — arrives with Stage 7 (Finance console).',
-  Health: 'Restricted-access health records — arrives with Stage 8 (Chapter 28 operational screens).',
-  Discipline: 'Restricted-access discipline cases — arrives with Stage 8 (Chapter 28 operational screens).',
-  Timeline: 'A chronological feed of every significant event for this student — arrives with Stage 8, alongside the audit/compliance screens it naturally groups with.',
-};
-
 /**
- * FR-STU-010 student profile shell (spec §7.5). Nine tabs per the spec's
- * own inventory; five are real this stage (Identity, Guardians, Academics,
- * Attendance, Documents) — Finance/Health/Discipline belong to later
- * stages' surfaces (Stage 7/8) and Timeline is a genuinely separate
- * cross-module aggregation feature, so all four render as an honest
- * EmptyState naming which stage owns them rather than a broken link or a
- * silently-missing tab.
+ * FR-STU-010 student profile shell (spec §7.5). All nine tabs are real —
+ * Finance/Health/Discipline/Timeline reuse the same modules' existing
+ * endpoints their own consoles already call (see FinanceTab/HealthTab/
+ * DisciplineTab/TimelineTab below), each gated to the same role tier its
+ * source module's own read endpoint requires.
  */
 export default function StudentProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -182,7 +223,10 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         {tab === 'Academics' && <AcademicsTab studentId={id} />}
         {tab === 'Attendance' && <AttendanceTab studentId={id} />}
         {tab === 'Documents' && <DocumentsTab studentId={id} />}
-        {STUB_TABS[tab] && <EmptyState title={`${tab} — not in this stage`} message={STUB_TABS[tab]} />}
+        {tab === 'Finance' && <FinanceTab studentId={id} roleCodes={roleCodes} />}
+        {tab === 'Discipline' && <DisciplineTab studentId={id} roleCodes={roleCodes} />}
+        {tab === 'Health' && <HealthTab studentId={id} roleCodes={roleCodes} />}
+        {tab === 'Timeline' && <TimelineTab studentId={id} />}
       </Card>
     </div>
   );
@@ -588,6 +632,200 @@ function DocumentsTab({ studentId }: { studentId: string }) {
             {d.document_type} — {d.reference_number}
           </span>
           <Pill variant={d.revoked_at ? 'danger' : 'success'}>{d.revoked_at ? 'Revoked' : 'Valid'}</Pill>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FinanceTab({ studentId, roleCodes }: { studentId: string; roleCodes: string[] }) {
+  const [loading, setLoading] = useState(true);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const canAccess = hasAnyRole(roleCodes, FINANCE_READERS);
+
+  useEffect(() => {
+    if (!canAccess) return;
+    let cancelled = false;
+    Promise.all([apiGet<Invoice[]>('/v1/finance/invoices'), apiGet<Payment[]>('/v1/finance/payments')])
+      .then(([i, p]) => {
+        if (cancelled) return;
+        setInvoices(i.filter((row) => row.student_id === studentId));
+        setPayments(p.filter((row) => row.student_id === studentId));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [studentId, canAccess]);
+
+  if (!canAccess) return <RestrictedState message="Finance records are visible to accountants and school leadership only." />;
+  if (loading) return <LoadingState label="Loading finance records" rows={3} />;
+
+  if (invoices.length === 0 && payments.length === 0) {
+    return <EmptyState title="No finance activity" message="Invoices and payments for this student appear here once recorded." />;
+  }
+
+  return (
+    <div>
+      <p style={{ fontWeight: 600, marginBottom: 'var(--pb-space-2)' }}>Invoices</p>
+      {invoices.length === 0 ? (
+        <p className={styles.studentMeta}>None yet.</p>
+      ) : (
+        invoices.map((inv) => (
+          <div key={inv.id} className={styles.listRow}>
+            <span>
+              {inv.invoice_number}
+              {inv.due_date && <> · due {new Date(inv.due_date).toLocaleDateString()}</>}
+            </span>
+            <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
+              <span>GHS {Number(inv.total_amount).toFixed(2)}</span>
+              <Pill variant={inv.status === 'posted' ? 'success' : 'neutral'}>{inv.status}</Pill>
+            </span>
+          </div>
+        ))
+      )}
+      <p style={{ fontWeight: 600, margin: 'var(--pb-space-4) 0 var(--pb-space-2)' }}>Payments</p>
+      {payments.length === 0 ? (
+        <p className={styles.studentMeta}>None yet.</p>
+      ) : (
+        payments.map((p) => (
+          <div key={p.id} className={styles.listRow}>
+            <span>
+              {p.method} · {new Date(p.received_at).toLocaleDateString()}
+            </span>
+            <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
+              <span>GHS {Number(p.amount).toFixed(2)}</span>
+              <Pill variant="success">{p.status}</Pill>
+            </span>
+          </div>
+        ))
+      )}
+      <p style={{ marginTop: 'var(--pb-space-4)', color: 'var(--pb-ink-muted)', fontSize: 'var(--pb-text-caption)' }}>
+        Full allocation, reversal and receipt detail lives on the Finance console.
+      </p>
+    </div>
+  );
+}
+
+function DisciplineTab({ studentId, roleCodes }: { studentId: string; roleCodes: string[] }) {
+  const [loading, setLoading] = useState(true);
+  const [cases, setCases] = useState<DisciplineCase[]>([]);
+  const canAccess = hasAnyRole(roleCodes, ACADEMIC_STAFF);
+
+  useEffect(() => {
+    if (!canAccess) return;
+    let cancelled = false;
+    apiGet<DisciplineCase[]>('/v1/discipline/cases')
+      .then((all) => {
+        if (!cancelled) setCases(all.filter((c) => c.student_id === studentId));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [studentId, canAccess]);
+
+  if (!canAccess) return <RestrictedState message="Discipline records are visible to academic staff only." />;
+  if (loading) return <LoadingState label="Loading discipline cases" rows={2} />;
+  if (cases.length === 0) return <EmptyState title="No discipline cases" message="Cases reported against this student appear here." />;
+
+  return (
+    <div>
+      {cases.map((c) => (
+        <div key={c.id} className={styles.listRow}>
+          <span>
+            {c.category} ({c.severity}) — {new Date(c.incident_date).toLocaleDateString()}
+          </span>
+          <Pill variant={c.status === 'closed' ? 'neutral' : 'warning'}>{c.status.replace('_', ' ')}</Pill>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HealthTab({ studentId, roleCodes }: { studentId: string; roleCodes: string[] }) {
+  const [loading, setLoading] = useState(true);
+  const [incidents, setIncidents] = useState<HealthIncident[]>([]);
+  const canAccess = hasAnyRole(roleCodes, HEALTH_READERS);
+
+  useEffect(() => {
+    if (!canAccess) return;
+    let cancelled = false;
+    apiGet<HealthIncident[]>('/v1/health/incidents')
+      .then((all) => {
+        if (!cancelled) setIncidents(all.filter((h) => h.student_id === studentId));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [studentId, canAccess]);
+
+  if (!canAccess) return <RestrictedState message="Health records are visible to health officers and school leadership only (FR-STU-040)." />;
+  if (loading) return <LoadingState label="Loading health records" rows={2} />;
+  if (incidents.length === 0) return <EmptyState title="No health incidents" message="Incidents recorded for this student appear here." />;
+
+  return (
+    <div>
+      {incidents.map((h) => (
+        <div key={h.id} className={styles.listRow}>
+          <span>
+            {new Date(h.incident_date).toLocaleDateString()} — severity {h.severity}
+          </span>
+          <Pill variant={h.status === 'resolved' ? 'success' : 'warning'}>{h.status.replace('_', ' ')}</Pill>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const TIMELINE_VARIANT: Record<TimelineEvent['type'], 'success' | 'warning' | 'danger' | 'neutral' | 'gold'> = {
+  attendance: 'warning',
+  result: 'gold',
+  discipline: 'danger',
+  finance: 'neutral',
+  health: 'warning',
+};
+
+function TimelineTab({ studentId }: { studentId: string }) {
+  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<TimelineEvent[]>(`/v1/students/${studentId}/timeline`)
+      .then((e) => {
+        if (!cancelled) setEvents(e);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [studentId]);
+
+  if (loading) return <LoadingState label="Loading timeline" rows={4} />;
+  if (events.length === 0) {
+    return <EmptyState title="Nothing to show yet" message="Attendance, results, discipline, finance and health events appear here as they happen — only the categories your role can access." />;
+  }
+
+  return (
+    <div>
+      {events.map((e, i) => (
+        <div key={`${e.type}-${e.date}-${i}`} className={styles.listRow}>
+          <span>{e.summary}</span>
+          <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
+            <Pill variant={TIMELINE_VARIANT[e.type]}>{e.type}</Pill>
+            <span className={styles.studentMeta}>{new Date(e.date).toLocaleDateString()}</span>
+          </span>
         </div>
       ))}
     </div>

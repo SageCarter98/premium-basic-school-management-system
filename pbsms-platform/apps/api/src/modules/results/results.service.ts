@@ -133,8 +133,17 @@ export class ResultsService {
     }
   }
 
+  /** Chapter 13.3 scope, class-level like attendance (results compile
+   * every subject for a student+class+year, so there's no per-subject
+   * boundary to hold a subject teacher to here) — any active assignment
+   * for the class, class-teacher or subject teacher alike, matches the
+   * same hasAnyActiveAssignmentForClass() boundary submit() already
+   * enforces on the write side. */
   async findAll(): Promise<StudentResult[]> {
-    return this.db.query<StudentResult>(`select * from student_results order by created_at desc`);
+    const rows = await this.db.query<StudentResult>(`select * from student_results order by created_at desc`);
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (scope.unrestricted) return rows;
+    return rows.filter((r) => scope.classIds.has(r.class_id));
   }
 
   async findOne(id: string): Promise<StudentResult> {
@@ -142,10 +151,16 @@ export class ResultsService {
     if (rows.length === 0) {
       throw new NotFoundException(`Student result ${id} not found`);
     }
-    return rows[0];
+    const result = rows[0];
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (!scope.unrestricted && !scope.classIds.has(result.class_id)) {
+      throw new NotFoundException(`Student result ${id} not found`);
+    }
+    return result;
   }
 
   async findItems(studentResultId: string): Promise<StudentResultItem[]> {
+    await this.findOne(studentResultId); // cascades the Chapter 13.3 scope check, 404s if out of scope
     return this.db.query<StudentResultItem>(
       `select * from student_result_items where student_result_id = $1 order by subject_name`,
       [studentResultId],
@@ -153,7 +168,12 @@ export class ResultsService {
   }
 
   /** FR-RES-040: guardians/students see only published (or later-stage)
-   * results — never a draft still being compiled or a version mid-review. */
+   * results — never a draft still being compiled or a version mid-review.
+   * Deliberately NOT teacher-scoped — parent-view.service.ts reuses this
+   * exact method for a guardian's own token-authenticated request, which
+   * has no teacher_assignments of its own (getCallerScope() would compute
+   * an empty scope and hide everything). findPublishedForStudentAsStaff()
+   * below is the teacher-scoped variant for the staff-facing endpoint. */
   async findPublishedForStudent(studentId: string): Promise<StudentResult[]> {
     return this.db.query<StudentResult>(
       `select * from student_results
@@ -163,6 +183,17 @@ export class ResultsService {
     );
   }
 
+  /** The staff-facing counterpart to findPublishedForStudent() (Student
+   * Profile's Academics tab, GET /v1/results/students/:studentId) — same
+   * published-only data, but additionally scoped to the caller's own
+   * classes per Chapter 13.3, unlike the guardian-facing method above. */
+  async findPublishedForStudentAsStaff(studentId: string): Promise<StudentResult[]> {
+    const rows = await this.findPublishedForStudent(studentId);
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (scope.unrestricted) return rows;
+    return rows.filter((r) => scope.classIds.has(r.class_id));
+  }
+
   /** FR-RES-050 subset — class-average/pass-rate only; student-trend,
    * division-comparison, promotion-readiness and the BECE mock-exam view
    * are documented future scope (see this module's header comment),
@@ -170,6 +201,10 @@ export class ResultsService {
    * query. Scoped to published-or-later results only — an in-progress
    * draft shouldn't move a headline "class average" figure. */
   async classAnalytics(classId: string, academicYearId: string): Promise<ClassAnalytics> {
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (!scope.unrestricted && !scope.classIds.has(classId)) {
+      throw new NotFoundException(`Class ${classId} not found`);
+    }
     const rows = await this.db.query<ClassAnalytics>(
       `select
          avg(average_percentage) as class_average,

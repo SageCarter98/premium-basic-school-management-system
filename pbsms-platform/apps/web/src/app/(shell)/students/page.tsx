@@ -8,6 +8,7 @@ import { Pill } from '@/components/Pill/Pill';
 import { LoadingState } from '@/components/states/LoadingState';
 import { ErrorState } from '@/components/states/ErrorState';
 import { EmptyState } from '@/components/states/EmptyState';
+import { SortDropdown } from '@/components/SortDropdown/SortDropdown';
 import { apiFetch, apiGet } from '@/lib/api-client';
 import { decodeAccessToken } from '@/lib/auth-token-store';
 import { ACADEMIC_ADMIN, hasAnyRole } from '@/lib/role-groups';
@@ -67,6 +68,8 @@ export default function StudentsPage() {
   const [schools, setSchools] = useState<School[]>([]);
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
+  const [sortField, setSortField] = useState<'name' | 'admissionNo' | 'status'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -109,14 +112,20 @@ export default function StudentsPage() {
 
   const visibleStudents = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return students.filter((s) => {
+    const filtered = students.filter((s) => {
       if (classFilter && classByStudent.get(s.id) !== classFilter) return false;
       if (!q) return true;
       return (
         `${s.first_name} ${s.last_name}`.toLowerCase().includes(q) || s.admission_no.toLowerCase().includes(q)
       );
     });
-  }, [students, search, classFilter, classByStudent]);
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    return filtered.slice().sort((a, b) => {
+      if (sortField === 'admissionNo') return a.admission_no.localeCompare(b.admission_no) * dir;
+      if (sortField === 'status') return a.status.localeCompare(b.status) * dir;
+      return `${a.last_name}, ${a.first_name}`.localeCompare(`${b.last_name}, ${b.first_name}`) * dir;
+    });
+  }, [students, search, classFilter, classByStudent, sortField, sortDirection]);
 
   async function handleCreate() {
     setCreating(true);
@@ -230,6 +239,19 @@ export default function StudentsPage() {
               </option>
             ))}
           </select>
+          <SortDropdown
+            options={[
+              { value: 'name', label: 'Name' },
+              { value: 'admissionNo', label: 'Admission no.' },
+              { value: 'status', label: 'Status' },
+            ]}
+            value={sortField}
+            direction={sortDirection}
+            onChange={(v, d) => {
+              setSortField(v as 'name' | 'admissionNo' | 'status');
+              setSortDirection(d);
+            }}
+          />
         </div>
 
         {visibleStudents.length === 0 ? (

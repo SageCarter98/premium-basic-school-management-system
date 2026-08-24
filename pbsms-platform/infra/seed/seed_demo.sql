@@ -1062,6 +1062,26 @@ insert into settlement_lines (id, tenant_id, settlement_batch_id, line_reference
   ('a9100000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
    'a9000000-0000-0000-0000-000000000002', 'CASH-0001', 600, current_date, 'Cash lodgement', '99999999-0000-0000-0000-000000000002', '99999999-0000-0000-0000-000000000002');
 
+-- Guardian access requests (0043_guardian_access_requests.sql) — a pending
+-- request against each tenant's own seeded student, inserted directly (this
+-- script runs as the owner role, not pbsms_app, so submit_guardian_access_
+-- request()'s public/rate-limited path doesn't need to be exercised just to
+-- get a usable fixture row for the isolation suite's own direct-id lookups).
+insert into guardian_access_requests (id, tenant_id, student_id, requester_name, requester_phone, requester_email, relationship, message) values
+  ('ab000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'eeeeeeee-0000-0000-0000-000000000001', 'Kwame Mensah', '0244000001', 'kwame.mensah@example.test', 'father', 'I would like to see my daughter''s report card.'),
+  ('ab000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'eeeeeeee-0000-0000-0000-000000000002', 'Yaw Owusu', '0244000002', 'yaw.owusu@example.test', 'father', 'Requesting access to Ama''s records.');
+
+-- Staff feedback (0044_staff_feedback.sql) — one submitted item per tenant,
+-- from each tenant's own seeded teacher, still awaiting the headmaster's/
+-- proprietor's triage (submitted is the not-yet-reviewed starting state).
+insert into staff_feedback (id, tenant_id, submitted_by, subject, message) values
+  ('ac000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   '99999999-0000-0000-0000-000000000003', 'Staff room photocopier', 'The staff room photocopier has been jammed for over a week.'),
+  ('ac000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   '99999999-0000-0000-0000-000000000010', 'Library opening hours', 'Could the library stay open later during exam week?');
+
 -- ============================================================================
 -- PROOF OF ISOLATION — run these manually after seeding
 -- ============================================================================

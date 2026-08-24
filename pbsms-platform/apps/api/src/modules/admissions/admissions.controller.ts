@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { AdmissionsService } from './admissions.service';
 import { CreateApplicantDto } from './dto/create-applicant.dto';
 import { UpdateApplicantStatusDto } from './dto/update-applicant-status.dto';
+import { UpdateApplicantIntakeDto } from './dto/update-applicant-intake.dto';
 import { ConvertApplicantDto } from './dto/convert-applicant.dto';
 import { Roles } from '../../common/auth/roles.decorator';
 import { ALL_STAFF, ADMISSIONS_TEAM } from '../../common/auth/role-groups';
@@ -36,6 +37,12 @@ export class AdmissionsController {
   @Patch(':id/status')
   updateStatus(@Param('id') id: string, @Body() body: UpdateApplicantStatusDto) {
     return this.admissions.updateStatus(id, body.status);
+  }
+
+  @Roles(...ADMISSIONS_TEAM)
+  @Patch(':id/intake')
+  updateIntake(@Param('id') id: string, @Body() body: UpdateApplicantIntakeDto) {
+    return this.admissions.updateIntake(id, body);
   }
 
   @Roles(...ADMISSIONS_TEAM)

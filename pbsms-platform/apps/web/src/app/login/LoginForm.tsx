@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/Button/Button';
 import { Card } from '@/components/Card/Card';
 import { ErrorState } from '@/components/states/ErrorState';
@@ -157,6 +158,17 @@ export function LoginForm() {
               {submitting ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
+        )}
+
+        {step.kind === 'credentials' && (
+          <>
+            <p className={styles.subtitle} style={{ marginTop: 'var(--pb-space-4)', marginBottom: 0, textAlign: 'center' }}>
+              Parent or guardian without a link yet? <Link href="/request-guardian-access">Request access</Link>
+            </p>
+            <p className={styles.subtitle} style={{ marginTop: 'var(--pb-space-2)', marginBottom: 0, textAlign: 'center' }}>
+              New school? <Link href="/apply-tenant">Apply for an account</Link>
+            </p>
+          </>
         )}
 
         {step.kind === 'verify' && (

@@ -67,7 +67,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
   return (
     <div className={styles.layout}>
       <header className={styles.topBar}>
-        <span>
+        <span className={styles.greeting}>
           {greeting()}
           {firstName ? `, ${firstName}` : ''}
         </span>

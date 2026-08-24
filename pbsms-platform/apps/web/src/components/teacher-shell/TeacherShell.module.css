@@ -1,9 +1,14 @@
 /*
  * Spec §6.2: no sidebar, four bottom-nav destinations, sized for
- * one-handed use. Capped to a phone-width column even in a desktop
- * browser — this shell's whole reason to exist is being a different,
- * narrower interaction model than the Staff Console, not a sidebar-less
- * reflow of the same one.
+ * one-handed use. A fixed 480px cap on every viewport (this file's
+ * original design) was confirmed by direct user testing to read as
+ * "still displays like a mobile phone on the desktop" — a real usability
+ * complaint, not a rejection of the one-handed-use goal itself. The
+ * bottom-nav-plus-content interaction model still doesn't need a
+ * sidebar, but there's no reason it can't use more of a wide screen —
+ * scales up at the same tablet/desktop breakpoints every other shell in
+ * this app already uses (Sidebar.module.css's 768px/1024px), narrow
+ * phones keep the original 480px.
  */
 .layout {
   display: flex;
@@ -12,6 +17,18 @@
   max-width: 480px;
   margin: 0 auto;
   background: var(--pb-canvas);
+}
+
+@media (min-width: 768px) {
+  .layout {
+    max-width: 680px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .layout {
+    max-width: 960px;
+  }
 }
 
 .topBar {
@@ -25,7 +42,15 @@
   font-weight: 500;
 }
 
+.greeting {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .unsyncedBadge {
+  flex-shrink: 0;
   background: rgba(255, 255, 255, 0.16);
   border-radius: 999px;
   padding: 2px 10px;
@@ -50,6 +75,18 @@
   display: flex;
   background: var(--pb-surface);
   border-top: 1px solid var(--pb-rule);
+}
+
+@media (min-width: 768px) {
+  .bottomNav {
+    max-width: 680px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .bottomNav {
+    max-width: 960px;
+  }
 }
 
 .navItem {

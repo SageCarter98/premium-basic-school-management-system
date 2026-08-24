@@ -90,6 +90,21 @@ interface Metering {
   name: string;
   active_student_count: number;
 }
+interface TenantApplication {
+  id: string;
+  school_name: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string | null;
+  address: string | null;
+  message: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  tenant_id: string | null;
+  created_at: string;
+}
 
 // Mirrors tenants.service.ts's ALLOWED_TRANSITIONS by hand — the state
 // graph itself is a documented backend modeling decision (Chapter 4.1
@@ -122,7 +137,7 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   return (Array.isArray(m) ? m.join('; ') : m) ?? fallback;
 }
 
-const TABS = ['Tenants', 'Billing', 'Impersonation', 'Platform Staff', 'Audit Log'] as const;
+const TABS = ['Tenants', 'Applications', 'Billing', 'Impersonation', 'Platform Staff', 'Audit Log'] as const;
 type Tab = (typeof TABS)[number];
 
 export default function PlatformConsolePage() {
@@ -168,6 +183,7 @@ export default function PlatformConsolePage() {
       </div>
       <Card style={{ padding: 'var(--pb-space-4)' }}>
         {tab === 'Tenants' && <TenantsTab tenants={tenants} plans={plans} canOnboard={canOnboard} canBilling={canBilling} canImpersonate={canImpersonate} reload={reloadTenants} />}
+        {tab === 'Applications' && <ApplicationsTab canOnboard={canOnboard} reloadTenants={reloadTenants} />}
         {tab === 'Billing' && <BillingTab tenants={tenants} canBilling={canBilling} plans={plans} reloadPlans={reloadPlans} />}
         {tab === 'Impersonation' && <ImpersonationTab tenants={tenants} canImpersonate={canImpersonate} isSuperAdmin={isSuperAdmin} />}
         {tab === 'Platform Staff' && <PlatformStaffTab isSuperAdmin={isSuperAdmin} />}
@@ -433,6 +449,171 @@ function TenantsTab({
             </div>
           );
         })
+      )}
+    </div>
+  );
+}
+
+const APPLICATION_STATUS_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
+  pending: 'neutral',
+  approved: 'success',
+  rejected: 'danger',
+};
+
+function ApplicationsTab({ canOnboard, reloadTenants }: { canOnboard: boolean; reloadTenants: () => Promise<void> }) {
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [applications, setApplications] = useState<TenantApplication[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [approveForm, setApproveForm] = useState({ trialDays: '', adminRoleCode: '' });
+  const [rejectNotes, setRejectNotes] = useState('');
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [approvedLink, setApprovedLink] = useState<{ applicationId: string; link: string; expiresAt: string } | null>(null);
+
+  function reload() {
+    setLoading(true);
+    return apiGet<TenantApplication[]>(`/v1/platform/tenant-applications?status=${statusFilter}`)
+      .then(setApplications)
+      .finally(() => setLoading(false));
+  }
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
+
+  function expand(a: TenantApplication) {
+    setExpandedId((id) => (id === a.id ? null : a.id));
+    setApproveForm({ trialDays: '', adminRoleCode: '' });
+    setRejectNotes('');
+    setRowError(null);
+  }
+
+  async function handleApprove(id: string) {
+    setBusy(true);
+    setRowError(null);
+    try {
+      const res = await apiFetch(`/v1/platform/tenant-applications/${id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({
+          trialDays: approveForm.trialDays ? Number(approveForm.trialDays) : undefined,
+          adminRoleCode: approveForm.adminRoleCode || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error(await errorMessage(res, `Failed (${res.status})`));
+      const result = (await res.json()) as { setPasswordToken: string; expiresAt: string };
+      setApprovedLink({ applicationId: id, link: `${window.location.origin}/set-password?token=${result.setPasswordToken}`, expiresAt: result.expiresAt });
+      setExpandedId(null);
+      await Promise.all([reload(), reloadTenants()]);
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : 'Could not approve this application.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReject(id: string) {
+    setBusy(true);
+    setRowError(null);
+    try {
+      const res = await apiFetch(`/v1/platform/tenant-applications/${id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reviewNotes: rejectNotes || undefined }),
+      });
+      if (!res.ok) throw new Error(await errorMessage(res, `Failed (${res.status})`));
+      setExpandedId(null);
+      await reload();
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : 'Could not reject this application.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!canOnboard) {
+    return <RestrictedState />;
+  }
+
+  return (
+    <div>
+      <div className={styles.formRow} style={{ marginBottom: 'var(--pb-space-3)' }}>
+        <select aria-label="Status filter" className={styles.select} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+
+      {approvedLink && (
+        <div style={{ marginBottom: 'var(--pb-space-3)' }}>
+          <p className={styles.hint}>
+            Application approved — no email provider is wired up in this environment, share this link with the applicant yourself. It expires{' '}
+            {new Date(approvedLink.expiresAt).toLocaleString()}.
+          </p>
+          <input aria-label="Set-password link" className={styles.textInput} readOnly value={approvedLink.link} onFocus={(e) => e.currentTarget.select()} style={{ width: '100%' }} />
+        </div>
+      )}
+
+      {loading ? (
+        <LoadingState label="Loading applications" rows={3} />
+      ) : applications.length === 0 ? (
+        <EmptyState title={`No ${statusFilter} applications`} message="" />
+      ) : (
+        applications.map((a) => (
+          <div key={a.id}>
+            <div className={styles.listRow} style={{ cursor: 'pointer' }} onClick={() => expand(a)}>
+              <span>
+                {a.school_name} <span className={styles.hint}>({a.contact_name})</span>
+              </span>
+              <span style={{ display: 'flex', gap: 'var(--pb-space-2)', alignItems: 'center' }}>
+                <span className={styles.hint}>{new Date(a.created_at).toLocaleDateString()}</span>
+                <Pill variant={APPLICATION_STATUS_VARIANT[a.status] ?? 'neutral'}>{a.status}</Pill>
+              </span>
+            </div>
+            {expandedId === a.id && (
+              <div className={styles.detailPanel}>
+                <p className={styles.hint}>
+                  {a.contact_email}
+                  {a.contact_phone && <> · {a.contact_phone}</>}
+                  {a.address && <> · {a.address}</>}
+                </p>
+                {a.message && <p className={styles.hint}>&quot;{a.message}&quot;</p>}
+
+                {a.status === 'pending' && (
+                  <>
+                    <div className={styles.formRow} style={{ marginTop: 'var(--pb-space-3)' }}>
+                      <input
+                        aria-label="Trial days"
+                        className={styles.textInput}
+                        type="number"
+                        placeholder="Trial days (optional, defaults to plan)"
+                        value={approveForm.trialDays}
+                        onChange={(e) => setApproveForm({ ...approveForm, trialDays: e.target.value })}
+                      />
+                      <select aria-label="Admin role" className={styles.select} value={approveForm.adminRoleCode} onChange={(e) => setApproveForm({ ...approveForm, adminRoleCode: e.target.value })}>
+                        <option value="">Admin role (defaults to proprietor)</option>
+                        <option value="proprietor">Proprietor</option>
+                        <option value="administrator">Administrator</option>
+                        <option value="headmaster">Headmaster</option>
+                      </select>
+                      <Button type="button" onClick={() => handleApprove(a.id)} disabled={busy}>
+                        Approve
+                      </Button>
+                    </div>
+                    <div className={styles.formRow} style={{ marginTop: 'var(--pb-space-2)' }}>
+                      <input aria-label="Rejection notes" className={styles.textInput} placeholder="Rejection notes (optional)" value={rejectNotes} onChange={(e) => setRejectNotes(e.target.value)} />
+                      <Button type="button" variant="secondary" onClick={() => handleReject(a.id)} disabled={busy}>
+                        Reject
+                      </Button>
+                    </div>
+                  </>
+                )}
+                {a.status !== 'pending' && a.review_notes && <p className={styles.hint}>Review notes: {a.review_notes}</p>}
+                {rowError && <ErrorState message={rowError} />}
+              </div>
+            )}
+          </div>
+        ))
       )}
     </div>
   );

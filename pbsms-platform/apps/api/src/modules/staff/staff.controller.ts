@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { StaffService } from './staff.service';
 import { InviteStaffDto } from './dto/invite-staff.dto';
+import { UpdateStaffRolesDto } from './dto/update-staff-roles.dto';
 import { Roles } from '../../common/auth/roles.decorator';
 import { ALL_STAFF, ACADEMIC_ADMIN } from '../../common/auth/role-groups';
 
@@ -35,5 +36,17 @@ export class StaffController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.staff.findOne(id);
+  }
+
+  @Roles(...ACADEMIC_ADMIN)
+  @Patch(':id/roles')
+  updateRoles(@Param('id') id: string, @Body() body: UpdateStaffRolesDto) {
+    return this.staff.updateRoles(id, body.roleCodes);
+  }
+
+  @Roles(...ACADEMIC_ADMIN)
+  @Post(':id/deactivate')
+  deactivate(@Param('id') id: string) {
+    return this.staff.deactivate(id);
   }
 }

@@ -11,11 +11,13 @@
  * per year, enforced by the migration's unique constraint, not here).
  */
 
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantDatabaseService } from '../../common/database/tenant-database.service';
+import { TenantContextStore } from '../../common/tenant/tenant-context';
 import { CreateEnrolmentDto } from './dto/create-enrolment.dto';
 
 const UNIQUE_VIOLATION = '23505';
+const FOREIGN_KEY_VIOLATION = '23503';
 
 export interface Enrolment {
   id: string;
@@ -86,6 +88,40 @@ export class EnrolmentsService {
       // referenced tables makes those ids invisible, not just disallowed.
       if (isPgError(err) && err.code === UNIQUE_VIOLATION) {
         throw new ConflictException('Student already has an active enrolment for this academic year');
+      }
+      throw err;
+    }
+  }
+
+  /** "Student assigning to class" as a standing operation, not just a
+   * once-at-admission choice — transfers an already-enrolled student to a
+   * different class within the same academic year. Only 'active'
+   * enrolments can be reassigned; a closed/transferred enrolment is a
+   * historical record, not something this endpoint corrects (same
+   * "point-of-no-return" posture as every other terminal-status entity in
+   * this codebase — reopen it via a dedicated path first if that's
+   * genuinely needed, this isn't one). Deliberately caught as a clean
+   * 400 rather than the raw 500 createFeeStructure() is flagged for in
+   * apps/web/README.md — the (tenant_id, class_id) composite FK
+   * (0001_init_tenancy.sql) is the only thing that would reject a
+   * cross-tenant or nonexistent class id here. */
+  async reassignClass(id: string, classId: string): Promise<Enrolment> {
+    const current = await this.findOne(id);
+    if (current.status !== 'active') {
+      throw new ConflictException(`Enrolment ${id} is ${current.status}, not active — cannot reassign its class`);
+    }
+    const { userId } = TenantContextStore.current();
+    try {
+      const rows = await this.db.query<Enrolment>(
+        `update enrolments set class_id = $1, updated_at = now(), updated_by = $2
+         where id = $3 and deleted_at is null
+         returning *`,
+        [classId, userId, id],
+      );
+      return rows[0];
+    } catch (err: unknown) {
+      if (isPgError(err) && err.code === FOREIGN_KEY_VIOLATION) {
+        throw new BadRequestException(`Class ${classId} does not exist for this tenant`);
       }
       throw err;
     }

@@ -1,9 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { GuardiansService } from './guardians.service';
 import { CreateGuardianDto } from './dto/create-guardian.dto';
 import { LinkGuardianDto } from './dto/link-guardian.dto';
 import { UpdateGuardianLinkDto } from './dto/update-guardian-link.dto';
 import { CreateAccessGrantDto } from './dto/create-access-grant.dto';
+import { SubmitGuardianAccessRequestDto } from './dto/submit-guardian-access-request.dto';
+import { ApproveGuardianAccessRequestDto, RejectGuardianAccessRequestDto } from './dto/review-guardian-access-request.dto';
 import { Roles } from '../../common/auth/roles.decorator';
 import { ALL_STAFF, ACADEMIC_ADMIN } from '../../common/auth/role-groups';
 
@@ -85,5 +87,39 @@ export class GuardiansController {
   @Post('guardian-access-links/:id/revoke')
   revokeAccessGrant(@Param('id') id: string) {
     return this.guardians.revokeAccessGrant(id);
+  }
+
+  // ---------------------------------------------------------------------
+  // Guardian self-request access — closes the "nothing lets a guardian who
+  // was never contacted first ask for a link" gap. submitAccessRequest()
+  // is the one PUBLIC, unauthenticated route in this whole module (see
+  // tenant.middleware.ts's PUBLIC_PATHS and 0043_guardian_access_requests.
+  // sql's header) — deliberately carries no @Roles() decorator for that
+  // reason, same as documents.controller.ts's verify(). Review stays
+  // ACADEMIC_ADMIN, the same tier every other guardian-write action here
+  // already uses.
+  // ---------------------------------------------------------------------
+
+  @Post('guardian-access-requests/submit')
+  submitAccessRequest(@Body() body: SubmitGuardianAccessRequestDto) {
+    return this.guardians.submitAccessRequest(body);
+  }
+
+  @Roles(...ACADEMIC_ADMIN)
+  @Get('guardian-access-requests')
+  findAllAccessRequests(@Query('status') status?: string) {
+    return this.guardians.findAllAccessRequests(status);
+  }
+
+  @Roles(...ACADEMIC_ADMIN)
+  @Post('guardian-access-requests/:id/approve')
+  approveAccessRequest(@Param('id') id: string, @Body() body: ApproveGuardianAccessRequestDto) {
+    return this.guardians.approveAccessRequest(id, body);
+  }
+
+  @Roles(...ACADEMIC_ADMIN)
+  @Post('guardian-access-requests/:id/reject')
+  rejectAccessRequest(@Param('id') id: string, @Body() body: RejectGuardianAccessRequestDto) {
+    return this.guardians.rejectAccessRequest(id, body.reviewNotes);
   }
 }

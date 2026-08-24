@@ -17,6 +17,12 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { TenantDatabaseService } from '../../common/database/tenant-database.service';
 import { CreateApplicantDto } from './dto/create-applicant.dto';
 import { ConvertApplicantDto } from './dto/convert-applicant.dto';
+import { UpdateApplicantIntakeDto } from './dto/update-applicant-intake.dto';
+
+export interface DocumentChecklistItem {
+  name: string;
+  received: boolean;
+}
 
 export interface Applicant {
   id: string;
@@ -31,6 +37,23 @@ export interface Applicant {
   possible_duplicate_of: string | null;
   admission_no: string | null;
   student_id: string | null;
+  // 0042_admissions_intake.sql — FR-ADM-010's remaining fields.
+  photo_url: string | null;
+  nationality: string | null;
+  home_language: string | null;
+  address: string | null;
+  guardian_name: string | null;
+  guardian_phone: string | null;
+  guardian_email: string | null;
+  guardian_relationship: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  medical_notes: string | null;
+  learning_support_notes: string | null;
+  documents_checklist: DocumentChecklistItem[];
+  interview_date: string | null;
+  interview_notes: string | null;
+  assessment_notes: string | null;
 }
 
 export interface ConversionResult {
@@ -105,6 +128,57 @@ export class AdmissionsService {
         input.gender ?? null,
         input.previousSchool ?? null,
         possibleDuplicateOf,
+      ],
+    );
+    return rows[0];
+  }
+
+  /** FR-ADM-010's remaining intake fields — see update-applicant-intake.dto.ts's
+   * header for why this is a separate progressive-fill endpoint rather than
+   * folded into create(). Whichever fields are present in the DTO get
+   * updated; everything else is left untouched (a plain COALESCE per
+   * column, not a full-record replace). */
+  async updateIntake(id: string, input: UpdateApplicantIntakeDto): Promise<Applicant> {
+    await this.findOne(id); // 404s if not a real applicant of this tenant
+    const rows = await this.db.query<Applicant>(
+      `update applicants set
+         photo_url = coalesce($1, photo_url),
+         nationality = coalesce($2, nationality),
+         home_language = coalesce($3, home_language),
+         address = coalesce($4, address),
+         guardian_name = coalesce($5, guardian_name),
+         guardian_phone = coalesce($6, guardian_phone),
+         guardian_email = coalesce($7, guardian_email),
+         guardian_relationship = coalesce($8, guardian_relationship),
+         emergency_contact_name = coalesce($9, emergency_contact_name),
+         emergency_contact_phone = coalesce($10, emergency_contact_phone),
+         medical_notes = coalesce($11, medical_notes),
+         learning_support_notes = coalesce($12, learning_support_notes),
+         documents_checklist = coalesce($13::jsonb, documents_checklist),
+         interview_date = coalesce($14, interview_date),
+         interview_notes = coalesce($15, interview_notes),
+         assessment_notes = coalesce($16, assessment_notes),
+         updated_at = now()
+       where id = $17
+       returning *`,
+      [
+        input.photoUrl ?? null,
+        input.nationality ?? null,
+        input.homeLanguage ?? null,
+        input.address ?? null,
+        input.guardianName ?? null,
+        input.guardianPhone ?? null,
+        input.guardianEmail ?? null,
+        input.guardianRelationship ?? null,
+        input.emergencyContactName ?? null,
+        input.emergencyContactPhone ?? null,
+        input.medicalNotes ?? null,
+        input.learningSupportNotes ?? null,
+        input.documentsChecklist ? JSON.stringify(input.documentsChecklist) : null,
+        input.interviewDate ?? null,
+        input.interviewNotes ?? null,
+        input.assessmentNotes ?? null,
+        id,
       ],
     );
     return rows[0];

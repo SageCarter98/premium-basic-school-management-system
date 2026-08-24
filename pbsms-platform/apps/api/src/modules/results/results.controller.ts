@@ -32,7 +32,7 @@ export class ResultsController {
   @Roles(...ACADEMIC_STAFF)
   @Get('students/:studentId')
   findPublishedForStudent(@Param('studentId') studentId: string) {
-    return this.results.findPublishedForStudent(studentId);
+    return this.results.findPublishedForStudentAsStaff(studentId);
   }
 
   @Roles(...ACADEMIC_STAFF)

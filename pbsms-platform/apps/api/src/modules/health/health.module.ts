@@ -9,5 +9,6 @@ import { HealthService } from './health.service';
   imports: [CommunicationModule, StaffModule, GuardiansModule],
   controllers: [HealthController],
   providers: [HealthService],
+  exports: [HealthService],
 })
 export class HealthModule {}

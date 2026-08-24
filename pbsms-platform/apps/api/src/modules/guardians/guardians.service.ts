@@ -18,9 +18,12 @@
  */
 
 import { randomBytes, createHash } from 'node:crypto';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { TenantDatabaseService } from '../../common/database/tenant-database.service';
+import { ConflictException, HttpException, HttpStatus, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Pool } from 'pg';
+import { PG_POOL, TenantDatabaseService } from '../../common/database/tenant-database.service';
 import { TenantContextStore } from '../../common/tenant/tenant-context';
+import { SubmitGuardianAccessRequestDto } from './dto/submit-guardian-access-request.dto';
+import { ApproveGuardianAccessRequestDto } from './dto/review-guardian-access-request.dto';
 
 export interface Guardian {
   id: string;
@@ -54,9 +57,37 @@ export interface StudentGuardianLink {
   has_report_access: boolean;
 }
 
+export interface GuardianAccessRequest {
+  id: string;
+  tenant_id: string;
+  student_id: string;
+  requester_name: string;
+  requester_phone: string | null;
+  requester_email: string | null;
+  relationship: string | null;
+  message: string | null;
+  status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  created_at: string;
+}
+
+const ACCESS_REQUEST_RATE_LIMIT_WINDOW_MINUTES = 60;
+const ACCESS_REQUEST_RATE_LIMIT_MAX_ATTEMPTS = 5;
+
 @Injectable()
 export class GuardiansService {
-  constructor(private readonly db: TenantDatabaseService) {}
+  // pool is optional because jobs-worker's handlers construct this class
+  // by hand (new GuardiansService(workerConn) — no Nest DI, see
+  // worker-tenant-connection.ts's header) for methods that never need it;
+  // only submitAccessRequest() below actually requires it, and that
+  // method is HTTP-only (a public unauthenticated route), never called
+  // from a background job.
+  constructor(
+    private readonly db: TenantDatabaseService,
+    @Inject(PG_POOL) private readonly pool?: Pool,
+  ) {}
 
   async create(input: { fullName: string; phone?: string; email?: string }): Promise<Guardian> {
     const { userId } = TenantContextStore.current();
@@ -230,6 +261,139 @@ export class GuardiansService {
     if (rows.length === 0) {
       throw new ConflictException(`Grant ${grantId} not found or already revoked`);
     }
+    return rows[0];
+  }
+
+  /** The one public, unauthenticated write in this module — no
+   * TenantContextStore, no RLS, same "raw pool, no tenant known yet"
+   * posture documents.service.ts's verify() already established for the
+   * identical problem. Rate-limited by school_code+admission_no (see
+   * 0043_guardian_access_requests.sql's header for why not by token —
+   * there's no secret here to hash) rather than the specific outcome, so
+   * hammering either a real or a made-up admission number is throttled
+   * the same way. */
+  async submitAccessRequest(input: SubmitGuardianAccessRequestDto): Promise<void> {
+    if (!this.pool) {
+      throw new Error('GuardiansService.submitAccessRequest() requires a PG_POOL — not available in this context');
+    }
+    const client = await this.pool.connect();
+    try {
+      const { rows: attemptRows } = await client.query<{ n: string }>(
+        `select count(*)::int as n from guardian_access_request_attempts
+         where school_code = $1 and admission_no = $2
+           and attempted_at > now() - interval '${ACCESS_REQUEST_RATE_LIMIT_WINDOW_MINUTES} minutes'`,
+        [input.schoolCode, input.admissionNo],
+      );
+      if (Number(attemptRows[0].n) >= ACCESS_REQUEST_RATE_LIMIT_MAX_ATTEMPTS) {
+        throw new HttpException(
+          `Too many requests for this school/admission number. Try again after ${ACCESS_REQUEST_RATE_LIMIT_WINDOW_MINUTES} minutes.`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      await client.query(`insert into guardian_access_request_attempts (school_code, admission_no) values ($1, $2)`, [
+        input.schoolCode,
+        input.admissionNo,
+      ]);
+
+      const { rows } = await client.query(`select * from submit_guardian_access_request($1, $2, $3, $4, $5, $6, $7)`, [
+        input.schoolCode,
+        input.admissionNo,
+        input.requesterName,
+        input.requesterPhone ?? null,
+        input.requesterEmail ?? null,
+        input.relationship ?? null,
+        input.message ?? null,
+      ]);
+      if (rows.length === 0) {
+        // Deliberately the same NotFoundException shape regardless of
+        // whether the school code or the admission number was wrong —
+        // see the migration header on why this can't be more specific.
+        throw new NotFoundException(
+          'Could not find a matching student — check the school code and admission number.',
+        );
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Staff-side review queue — ordinary tenant-scoped read, unlike
+   * submitAccessRequest() above. */
+  async findAllAccessRequests(status?: string): Promise<GuardianAccessRequest[]> {
+    if (status) {
+      return this.db.query<GuardianAccessRequest>(
+        `select * from guardian_access_requests where status = $1 order by created_at desc`,
+        [status],
+      );
+    }
+    return this.db.query<GuardianAccessRequest>(`select * from guardian_access_requests order by created_at desc`);
+  }
+
+  private async findAccessRequest(id: string): Promise<GuardianAccessRequest> {
+    const rows = await this.db.query<GuardianAccessRequest>(`select * from guardian_access_requests where id = $1`, [id]);
+    if (rows.length === 0) {
+      throw new NotFoundException(`Guardian access request ${id} not found`);
+    }
+    return rows[0];
+  }
+
+  /** Approval is the one action that actually DOES something beyond
+   * flipping a status column — it creates the real guardian record this
+   * request was only ever a claim about, links it to the student, and
+   * mints a real access grant, reusing create()/linkToStudent()/
+   * createAccessGrant() rather than re-deriving any of their logic.
+   * Deliberately always creates a NEW guardian rather than trying to
+   * match an existing one — same "flag, don't silently merge" restraint
+   * admissions.service.ts's possible_duplicate_of already applies; a
+   * staff member who recognizes this is actually an existing guardian can
+   * still unlink/relink by hand afterward from the Guardians tab. */
+  async approveAccessRequest(
+    id: string,
+    input: ApproveGuardianAccessRequestDto,
+  ): Promise<{ request: GuardianAccessRequest; guardian: Guardian; link: StudentGuardianLink; token: string }> {
+    const request = await this.findAccessRequest(id);
+    if (request.status !== 'pending') {
+      throw new ConflictException(`Guardian access request ${id} is '${request.status}', not 'pending'`);
+    }
+    const { userId } = TenantContextStore.current();
+
+    const guardian = await this.create({
+      fullName: request.requester_name,
+      phone: request.requester_phone ?? undefined,
+      email: request.requester_email ?? undefined,
+    });
+    const link = await this.linkToStudent(request.student_id, {
+      guardianId: guardian.id,
+      relationship: request.relationship ?? undefined,
+      isPrimaryContact: input.isPrimaryContact,
+      isEmergencyContact: input.isEmergencyContact,
+      canPickup: input.canPickup,
+      hasFinanceAccess: input.hasFinanceAccess,
+      hasReportAccess: input.hasReportAccess ?? true, // the whole point of the request — default it on
+    });
+    const { token } = await this.createAccessGrant(guardian.id);
+
+    const rows = await this.db.query<GuardianAccessRequest>(
+      `update guardian_access_requests set status = 'approved', reviewed_by = $1, reviewed_at = now(), updated_at = now()
+       where id = $2
+       returning *`,
+      [userId, id],
+    );
+    return { request: rows[0], guardian, link, token };
+  }
+
+  async rejectAccessRequest(id: string, reviewNotes?: string): Promise<GuardianAccessRequest> {
+    const request = await this.findAccessRequest(id);
+    if (request.status !== 'pending') {
+      throw new ConflictException(`Guardian access request ${id} is '${request.status}', not 'pending'`);
+    }
+    const { userId } = TenantContextStore.current();
+    const rows = await this.db.query<GuardianAccessRequest>(
+      `update guardian_access_requests set status = 'rejected', reviewed_by = $1, reviewed_at = now(), review_notes = $2, updated_at = now()
+       where id = $3
+       returning *`,
+      [userId, reviewNotes ?? null, id],
+    );
     return rows[0];
   }
 

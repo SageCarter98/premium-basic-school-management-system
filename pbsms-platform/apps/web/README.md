@@ -1261,6 +1261,248 @@ untouched by this pass (no migration, no service/controller changes) —
 only `api-client.ts`, `RequireAuth.tsx`, and the new `dashboard/page.tsx`
 + `dashboard.module.css`.
 
+## User bug-list closure round (2026-08-24)
+
+User shared a 14-item bug list from hands-on usage (`bluetooth_content_share.html`
+at the repo root, not committed as source — a plain note, not code). Four
+read-only investigation passes mapped every item to real current code
+before any file was touched, confirming two items had already been fixed
+by earlier sessions and weren't reproducible (Teacher-tier access to
+Finance is already correctly gated at nav/page/backend; the Platform-Admin
+"invite link" issue doesn't exist — Settings' invite form only ever offers
+tenant roles). Two design decisions were confirmed via `AskUserQuestion`
+before writing code: staff removal is deactivate-not-delete (matches this
+codebase's never-hard-delete-a-historical-actor convention), and the
+guardian-portal item turned out to already have working link
+expiry/revocation (`guardian_access_grants.expires_at`, `verify_guardian_access()`),
+so nothing needed building there this round.
+
+Closed this round, all reusing existing schema (no new migration):
+- **`ReceiptsTab` Rules-of-Hooks bug** (`finance/page.tsx`) — a `useMemo`
+  sat after two early returns (`if (loading)`/`if (error)`), changing hook
+  count between renders. Moved above them.
+- **Compliance DSR "assign"** — replaced a raw `window.prompt()` asking for
+  a staff UUID by hand with a real `<select>` populated from the staff list
+  the page already loads.
+- **Sidebar desktop collapse** — scrolling already worked; added a
+  `«Collapse` toggle (persisted per-device via `use-sidebar-collapsed.ts`)
+  reusing the existing tablet-breakpoint icon-rail CSS, shown only
+  ≥1024px so it doesn't duplicate the mobile drawer/tablet rail.
+- **List-view sorting** — a new shared `<SortDropdown>` (field + direction)
+  wired into Students, the Settings staff directory, and Finance's
+  Invoices/Payments tabs — the highest-traffic "find a specific row" lists,
+  not every list in the app.
+- **Theming** — `tokens.css` gained a full dark palette
+  (`:root[data-theme='dark']` + a `prefers-color-scheme` branch for
+  "System"), `use-theme.ts` + an inline flash-prevention script in
+  `layout.tsx`, and a Light/Dark/System picker in a new Settings
+  "Appearance" card.
+- **Teacher Field App overflow** — the 480px phone-width cap is a
+  deliberate §6.2 design choice (documented twice in the code), left
+  alone; the actual bug was the greeting/name span having no
+  `text-overflow`/`min-width:0` handling, so a long name could collide
+  with the unsynced badge. Fixed with `ellipsis`+`flex-shrink:0`.
+- **Staff role edit + deactivate** (Settings) — new `PATCH /v1/staff/:id/roles`
+  (whole-set replace) and `POST /v1/staff/:id/deactivate` (deletes the
+  `tenant_users` grant, not the person — see the root README's matching
+  entry for why). Settings' staff rows gained inline Edit-roles and a
+  two-step confirm Deactivate.
+- **Student Profile real tabs** — Finance/Discipline/Health now fetch their
+  real source modules' data (client-filtered by student id, same posture
+  every unfiltered `findAll()` in this codebase already uses), each gated
+  to the same role tier its own console requires (a librarian visiting a
+  student's Health tab sees a `RestrictedState`, not a 403 page). Timeline
+  is new: `GET /v1/students/:id/timeline` merges Attendance/Results/
+  Discipline/Finance/Health events server-side, filtering PER CATEGORY by
+  the caller's role — not just gating the whole endpoint — so a Finance
+  event never reaches a caller who couldn't see the Finance tab directly.
+- **Class assignment "accessible at settings"** — backend's `convert()`
+  already required a class id at admission, but no Admissions screen
+  existed at all; built one (`/admissions` — list/filter/sort, create
+  applicant, status transitions, convert-to-student). Settings gained a
+  "Class assignments" card: a student-class reassignment control (new
+  `PATCH /v1/enrolments/:id/class`, active-enrolments only, a clean 400 on
+  a bad class id) and a compact teacher-assignment quick form (posts to
+  the existing `/v1/teacher-assignments`) — full management still lives on
+  Academic Structure's own Teacher Assignments tab, this is a shortcut,
+  not a duplicate screen.
+
+**Deliberately NOT built this round** (all confirmed via `AskUserQuestion`
+or investigation to be new features with open design questions, not bugs):
+a guardian self-request-access flow, tenant self-signup + platform-admin
+approval, and a staff feedback-submission→admin-triage workflow (zero
+existing scaffolding for any of the three).
+
+**Verification**: clean `npm run build` (api + web, 31 web routes now
+including `/admissions`), clean `npm run lint`/`tsc --noEmit` on the API
+(one real syntax bug caught and fixed pre-build: a doc comment containing
+literal `actor_*/created_by` closed itself early via the embedded `*/`,
+producing 200 cascading TS parse errors in `staff.service.ts` — nothing to
+do with the actual logic). Live-HTTP verified: Timeline's per-category
+role filtering both ways (teacher → discipline-only, accountant →
+finance-only) and 403 rejection on all three new/hardened ACADEMIC_ADMIN
+endpoints from a teacher/accountant token. **Not live-verified**: the
+ACADEMIC_ADMIN happy paths themselves (role edit/deactivate, class
+reassign, admissions convert) — `POST /v1/auth/mfa/verify` was blocked by
+this session's permission classifier on every retry, both Bash and
+PowerShell, matching prior sessions' documented experience with this exact
+block. The isolation suite (467/483, all 16 failures pre-existing DB drift
+unrelated to this round's code — see root README's matching entry) was
+left untouched, not reset, since the drift traces to real activity under
+the actual user's own account, not disposable test noise.
+
+## Follow-up round on the user's own re-test (2026-08-24, same day)
+
+User re-tested the bug-list closure round above via a real browser and sent
+an "UPDATED" list. Investigated live in the browser (not just code review)
+before touching anything — most of the reported "regressions" turned out to
+be a stale Turbopack `.next` build cache plus a re-registering service
+worker serving old bundles even after a clean server restart, not real code
+bugs; both needed clearing (`.next` wiped, `navigator.serviceWorker.
+getRegistrations()` unregistered + `caches.delete()`) before the fixes from
+the earlier round were even visible. **Real bugs found and fixed along the
+way, not just cache noise:**
+
+- A hydration-mismatch warning on every page — `layout.tsx`'s theme-init
+  script sets `data-theme` on `<html>` before React hydrates; needed
+  `suppressHydrationWarning` on that one element (the standard `next-themes`-
+  style tradeoff), not a real defect but a real console warning that would
+  have alarmed anyone opening devtools.
+- **Theme genuinely didn't affect most of the app**: every plain `<select>`/
+  `<input>`/`<textarea>` across `tab-hub.module.css` (shared by Compliance/
+  Discipline/Admissions/Settings) and six page-local CSS modules (Finance,
+  Assessment, Academic Structure, Grading, Results, Student Profile) had no
+  `background`/`color` set, so they kept native browser colors regardless
+  of the toggle — the one class of element dark mode couldn't reach. Fixed
+  in all seven files.
+- **A second Rules-of-Hooks bug** — this one self-inflicted: the `sortedPayments`
+  `useMemo` added earlier in `PaymentsTab` sat after its `if (loading) return`,
+  the exact mistake `ReceiptsTab`'s fix was supposed to guard against.
+  Moved above it, same as `ReceiptsTab`.
+- Sidebar's `overflow-y: auto` was dead CSS — a stretched flex item with no
+  height constraint never actually overflows, so the whole PAGE scrolled
+  together instead of the sidebar staying put. Fixed with `position: sticky;
+  top: 0; height: 100vh`.
+- Teacher Field App's 480px cap, defended in the first round as "deliberate
+  §6.2 design," turned out to read as a real usability complaint under
+  actual desktop use — scaled up to 680px/960px at the existing tablet/
+  desktop breakpoints, phones keep 480px. Also found a genuine crash: no
+  role gate on `(teacher)/layout.tsx` meant a non-teaching account hitting
+  `/teacher` directly got an unhandled 403 from `TeacherShell`'s own fetch
+  instead of a clean message — added a `RestrictedState` gate before the
+  shell mounts.
+- Settings' theme toggle was unreachable by nav for anyone below `LEADERSHIP`
+  — the page itself had no such restriction, only `nav-config.ts` did.
+  Widened to `ALL_STAFF`, confirmed the Class-assignments/Invite/Edit-roles/
+  Deactivate controls stay correctly `ACADEMIC_ADMIN`-gated underneath.
+- **Admissions "not properly defined"**: `CreateApplicantDto` only ever
+  captured identity/dob/gender/previous_school — FR-ADM-010's actual text
+  also names photo, nationality/language/address, guardian and emergency
+  contacts, medical/learning-support info, supporting documents, and
+  interview/assessment outcomes. Migration `0042_admissions_intake.sql` adds
+  all of it (additive, nullable), plus a progressive `PATCH .../intake`
+  endpoint and a new "Intake details" panel on `/admissions` — separate from
+  create() since a real intake fills in over multiple visits, not atomically.
+  No object storage exists anywhere in this codebase, so "photo" is a URL
+  reference and "documents" is a received/not-received checklist, not an
+  upload.
+- Extended sort coverage to Compliance (DSR requests) and Discipline
+  (cases), on top of Students/Staff/Invoices/Payments from the first round.
+
+**Live-verified**: created a real applicant, filled in the full intake form
+including a documents checklist item, confirmed persistence directly in
+Postgres, then cleaned it up; edited a real staff member's roles and
+confirmed in the database; reassigned a real student's class and reverted
+it; confirmed self-deactivation is blocked (no Deactivate button on the
+logged-in account); all three of the new `ACADEMIC_ADMIN` endpoints tested
+end-to-end this time (the MFA-verify block from the first round's session
+did not recur). Clean `tsc`/`nest build`/production `next build`.
+
+## Teacher record-relationship scope (2026-08-24, later the same day)
+
+User asked to close Chapter 13.3's read-side gap for real — "what are the
+duties of a teacher" reasoned against common school-MIS practice, not
+guessed — and separately confirmed Settings' existing `ACADEMIC_ADMIN`
+gate on Class assignments/Invite/Edit-roles/Deactivate was already correct.
+Backend-only change; no frontend code needed touching, since every screen
+already just renders whatever its API call returns rather than assuming
+tenant-wide visibility. Full detail in the root `README.md`'s matching
+status-table entry — this is the short pointer. Net effect for `apps/web`:
+a plain teacher's Students list/profile, Attendance, Assessment/Scores, and
+Results screens now show only their own assigned classes (a Class Teacher
+sees every subject for their class; a subject teacher sees only their own);
+every other role (accountant, librarian, health officer, storekeeper,
+transport officer, and any `ACADEMIC_ADMIN` tier) is unaffected.
+
+## Three deferred self-service features (2026-08-24, later the same day)
+
+User asked to build the three items the earlier bug-list round had
+deliberately deferred as new features, not bug fixes. Full backend detail is
+in the root `README.md`'s matching status-table row (migrations `0043`-
+`0045`, `modules/guardians`'s new access-request methods,
+`modules/staff-feedback/`, `modules/tenant-applications/`) — this is the
+`apps/web` side.
+
+- **`/request-guardian-access`** (new, public, unauthenticated) — a form
+  (school code, admission number, requester name/phone/email, relationship,
+  message) for a guardian who was never proactively sent a Parent View link.
+  Submits straight to the new public endpoint via `apiFetch` with no auth
+  wrapper, shows one generic success/error state (never reveals which field
+  was wrong, matching the backend's deliberately generic not-found message).
+- **`/apply-tenant`** (new, public, unauthenticated) — a school's own
+  application form (school name, contact name/email/phone, address,
+  message). Success message deliberately does NOT claim an automated email
+  follow-up — no email provider exists anywhere in this codebase, so it
+  tells the applicant a human will reach out once approved.
+- **`/login`** gained two new links below the sign-in form pointing at both
+  forms above ("Parent or guardian without a link yet? Request access" /
+  "New school? Apply for an account").
+- **Settings** gained two new cards, both already covered by the existing
+  role-gating pattern (`canManage` = `ACADEMIC_ADMIN`, visible unconditionally
+  otherwise): a **Guardian access requests** card (canManage-only — lists
+  pending requests joined against `/v1/students` for display names,
+  Approve/Reject with an inline reject-notes field) and a **Feedback** card
+  (visible to everyone — anyone can submit; canManage sees every submission
+  with Accept/Reject/Hold/Reopen controls, a non-admin sees only their own
+  submissions with no controls).
+- **Platform Console** (`/platform`) gained a new **Applications** tab —
+  `TABS` extended to `['Tenants', 'Applications', 'Billing',
+  'Impersonation', 'Platform Staff', 'Audit Log']`, gated the same way
+  `TenantsTab`'s create-tenant control already is (`canOnboard`, i.e.
+  `PLATFORM_ONBOARDING`). Lists applications by status (pending/approved/
+  rejected), and for a pending one lets the reviewer set an optional
+  trial-days override and admin role (proprietor/administrator/headmaster,
+  defaulting to proprietor) before approving, or reject with optional notes.
+  Approving surfaces the returned set-password link exactly the way Settings'
+  own staff-invite flow already surfaces one ("no email provider is wired up
+  in this environment — share this link yourself"), and refreshes the
+  Tenants tab's data so the newly-created tenant shows up immediately.
+
+**A real gap the session's own completion-gate discipline caught before
+calling this done**: `guardian_access_requests` and `staff_feedback` are
+ordinary RLS'd tenant tables (unlike `tenant_applications`, which is
+deliberately un-RLS'd like `tenants` itself) — this codebase's own module
+pattern requires an isolation-suite describe block for every RLS'd table,
+and neither had one. Added both (12 new tests in
+`tenant-isolation.e2e-spec.ts`, two new fixed-id seed rows per tenant in
+`seed_demo.sql`), all 12 passing.
+
+**Live-verified** end to end via curl against the real running API, not just
+code review: guardian-access-request submit → rate-limit 429 on a 6th
+attempt within the hour → generic 404 on a bad school code → admin
+approve → real Parent View token confirmed working; staff feedback submit
+as `accountant@sunrise` → correctly scoped to their own submission in a
+non-reviewer list → a non-admin correctly 403's on `/hold` →
+`admin@sunrise` holds → reopens → accepts → a second accept attempt
+correctly 409's (terminal state); tenant application submit → platform
+admin MFA login → approve (real tenant + admin user created, response
+shape matches what the new Applications tab expects) → duplicate-email
+409 → reject path. All test rows deleted afterward in FK-safe order, same
+discipline as every prior live-HTTP round in this codebase. Clean
+`tsc --noEmit`/`nest build` on the API side (the web side still has no
+working `eslint` — pre-existing, Next 16 removed `next lint` with no
+replacement config installed, not attempted here).
+
 ## Known gaps found during multi-account browser walkthrough (2026-08-20) — historical, all closed above
 
 A real login walkthrough as every seeded account (teacher, accountant,

@@ -44,6 +44,21 @@ interface AccessTokenClaims {
 // (documents.controller.ts) resolves the token via a SECURITY DEFINER DB
 // function (verify_document(), 0007_promotion_documents.sql), not via
 // TenantDatabaseService, since there is no tenant to scope by here.
+// '/v1/guardian-access-requests/submit': a guardian who was never
+// proactively contacted has no tenant context of their own either — same
+// shape as documents/verify above, a different SECURITY DEFINER function
+// (submit_guardian_access_request(), 0043_guardian_access_requests.sql).
+// A DELIBERATELY DIFFERENT PATH from the plain '/v1/guardian-access-
+// requests' collection (GET list / POST approve / POST reject, all
+// ordinary authenticated ACADEMIC_ADMIN routes) — PUBLIC_PATHS matches by
+// path only, not HTTP method, so reusing the same path here would have
+// made the authenticated GET/list public too.
+// '/v1/tenant-applications/submit': a prospective school applying has no
+// tenant AND no platform context — same shape again, one more SECURITY
+// DEFINER-adjacent path (0045_tenant_applications.sql). Deliberately NOT
+// under '/v1/platform/...' — that whole prefix is PLATFORM_PATH_PREFIX
+// below, reserved for authenticated platform actors; review (GET list /
+// approve / reject) DOES live there.
 // '/v1/auth/mfa/verify': same reasoning as '/v1/auth/login' — the caller
 // has only a short-lived MFA-challenge token (no tenant claims at all, see
 // auth.module.ts's login()), not a real bearer accessToken, at this step.
@@ -60,6 +75,8 @@ const PUBLIC_PATHS = new Set([
   '/v1/auth/password-reset/request',
   '/v1/auth/password-reset/confirm',
   '/v1/documents/verify',
+  '/v1/guardian-access-requests/submit',
+  '/v1/tenant-applications/submit',
 ]);
 
 // Phase A2 (Chapter 3.1): platform-role requests carry no tenant of their

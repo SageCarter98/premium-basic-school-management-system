@@ -1,5 +1,6 @@
 import '../styles/globals.css';
 import { ServiceWorkerInit } from '@/components/shell/ServiceWorkerInit';
+import { THEME_INIT_SCRIPT } from '@/lib/use-theme';
 
 export const metadata = {
   title: 'PBSMS',
@@ -24,8 +25,18 @@ export const viewport = {
  * including future ones, inherits them automatically.
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // suppressHydrationWarning below is scoped to this element only (React
+  // does not propagate it to children) — needed because THEME_INIT_SCRIPT
+  // sets data-theme on this exact tag before React hydrates, which would
+  // otherwise make every single page log a false-positive hydration-
+  // mismatch warning, the standard tradeoff every dark-mode-via-inline-
+  // script approach (including next-themes) makes.
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* eslint-disable-next-line react/no-danger -- must run before first paint, see use-theme.ts */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>
         <ServiceWorkerInit />
         {children}

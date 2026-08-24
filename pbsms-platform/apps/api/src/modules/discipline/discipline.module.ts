@@ -10,5 +10,6 @@ import { DisciplineService } from './discipline.service';
   imports: [CommunicationModule, StaffModule, GuardiansModule, TeacherAssignmentsModule],
   controllers: [DisciplineController],
   providers: [DisciplineService],
+  exports: [DisciplineService],
 })
 export class DisciplineModule {}

@@ -70,6 +70,8 @@
   border-radius: var(--pb-radius-sm);
   padding: 0 var(--pb-space-3);
   font-size: var(--pb-text-body);
+  background: var(--pb-surface);
+  color: var(--pb-ink);
 }
 
 .checkboxRow {

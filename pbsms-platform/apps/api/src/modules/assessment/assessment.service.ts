@@ -136,6 +136,13 @@ export class AssessmentService {
     return rows[0];
   }
 
+  /** Chapter 13.3 scope, subject-precise here (unlike attendance/results,
+   * which are class-level) — a plain subject teacher only sees structures
+   * for their own class+subject; the designated Class Teacher for a class
+   * sees every subject's structures for it, not just their own. Filtered
+   * in application code, not SQL, after the existing filter params — same
+   * "compute once, filter after" posture the rest of this codebase uses
+   * at this seed-data scale (see e.g. attendance-roster.ts's own header). */
   async findAllStructures(
     filter: { classId?: string; subjectId?: string; academicYearId?: string } = {},
   ): Promise<AssessmentStructure[]> {
@@ -153,10 +160,13 @@ export class AssessmentService {
       params.push(filter.academicYearId);
       conditions.push(`academic_year_id = $${params.length}`);
     }
-    return this.db.query<AssessmentStructure>(
+    const rows = await this.db.query<AssessmentStructure>(
       `select * from assessment_structures where ${conditions.join(' and ')} order by created_at desc`,
       params,
     );
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (scope.unrestricted) return rows;
+    return rows.filter((s) => scope.classTeacherOf.has(s.class_id) || scope.subjectPairs.has(`${s.class_id}:${s.subject_id}`));
   }
 
   async findStructure(id: string): Promise<AssessmentStructure> {
@@ -167,7 +177,12 @@ export class AssessmentService {
     if (rows.length === 0) {
       throw new NotFoundException(`Assessment structure ${id} not found`);
     }
-    return rows[0];
+    const structure = rows[0];
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (!scope.unrestricted && !scope.classTeacherOf.has(structure.class_id) && !scope.subjectPairs.has(`${structure.class_id}:${structure.subject_id}`)) {
+      throw new NotFoundException(`Assessment structure ${id} not found`);
+    }
+    return structure;
   }
 
   /** FR-ASM-010: components are the weighted line items; only addable while
@@ -210,6 +225,7 @@ export class AssessmentService {
   }
 
   async findComponents(structureId: string): Promise<AssessmentComponent[]> {
+    await this.findStructure(structureId); // cascades the same Chapter 13.3 scope check, 404s if out of scope
     return this.db.query<AssessmentComponent>(
       `select * from assessment_components where assessment_structure_id = $1 order by component_type`,
       [structureId],
@@ -451,6 +467,20 @@ export class AssessmentService {
   }
 
   async findScores(componentId: string): Promise<Score[]> {
+    const structureRows = await this.db.query<{ class_id: string; subject_id: string }>(
+      `select ast.class_id, ast.subject_id
+       from assessment_components ac join assessment_structures ast on ast.id = ac.assessment_structure_id
+       where ac.id = $1`,
+      [componentId],
+    );
+    if (structureRows.length === 0) {
+      throw new NotFoundException(`Assessment component ${componentId} not found`);
+    }
+    const { class_id, subject_id } = structureRows[0];
+    const scope = await this.teacherAssignments.getCallerScope();
+    if (!scope.unrestricted && !scope.classTeacherOf.has(class_id) && !scope.subjectPairs.has(`${class_id}:${subject_id}`)) {
+      throw new NotFoundException(`Assessment component ${componentId} not found`);
+    }
     return this.db.query<Score>(
       `select * from scores where assessment_component_id = $1 order by created_at`,
       [componentId],

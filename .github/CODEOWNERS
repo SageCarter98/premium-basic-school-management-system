@@ -1,15 +1,21 @@
 # Protected zones from CLAUDE.md's "Internal Engineering Agent — process
 # rules" section (EC-202/EC-400, PBSMS_Internal_Engineering_Agent_v1_1.pdf).
-# Declarative today: GitHub's "Require review from Code Owners" branch
-# protection setting needs GitHub Pro or a public repo to enable on this
-# plan (this repo is private on the free tier) — see the note in CLAUDE.md.
-# This file is ready the moment that constraint is lifted; until then it
-# documents the intended reviewers, it does not yet enforce them.
+# Enforced as of 2026-08-24: this repo was made public (decision made and
+# approved by the repo owner) specifically to unlock GitHub's "Require
+# review from Code Owners" branch protection setting, which 403's on a
+# private repo without GitHub Pro. Branch protection on `main` now requires
+# a code-owner review from this file plus all 6 CI jobs green before any
+# merge, `enforce_admins: true` (no bypass, including for the owner).
 #
-# @SageCarter98 is currently the only collaborator on this repo, which
-# means EC-202's "two human approvers, one holding the Engineering Lead
-# role" is structurally unsatisfiable right now regardless of the
-# GitHub Pro question — flagged in CLAUDE.md as a second, separate gap.
+# @SageCarter98 is currently the only collaborator on this repo, so the
+# required-approval count is configured as 1, not EC-202's literal "two
+# approvers, one Engineering Lead" — GitHub's review-count setting is
+# per-branch, not conditional on which path changed, so it can't require
+# 2 only for these zones. Revisit once a second engineer joins.
+#
+# Not yet covered by CI (still just "a human must review the file"):
+# EC-501's finer-grained check that an *existing test case* wasn't changed
+# or deleted, as opposed to the file merely being touched. See CLAUDE.md.
 
 # Tenant isolation boundary
 /pbsms-platform/infra/migrations/          @SageCarter98

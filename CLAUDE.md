@@ -80,11 +80,13 @@ Reviewed and approved 2026-08-24. Full text: `PBSMS_Internal_Engineering_Agent_v
 - No deploy permission, ever. Deployment is human-triggered.
 - Never approve a pull request, including one this Agent did not author.
 - **Never modify CI configuration, branch protection rules, or repository permissions** — including this repository's own `.github/workflows/ci.yml`. A change to CI config is exactly the kind of protected-zone-adjacent action that needs a human decision, made outside this Agent's own hands. (The CI relocation fix in this file's own git history was a human-directed, explicitly-approved exception during initial setup — not a standing permission.)
-- A pull request touching a protected zone (below) needs two human approvers, one holding the Engineering Lead role.
+- A pull request touching a protected zone (below) needs two human approvers, one holding the Engineering Lead role. **Not yet mechanically enforceable at "two"**: `@SageCarter98` is the repo's only collaborator right now, so branch protection is configured for 1 required approval (GitHub's review-count setting is per-branch, not conditional per path — it can't express "2 for protected zones, 1 elsewhere"). CODEOWNERS does correctly force that one review to come from a code owner on every protected-zone path. Revisit the count once a second engineer joins.
+
+  **A deeper gap found the moment this was actually exercised (PR #1, 2026-08-24), not just theorized**: GitHub refuses to let a PR author approve their own PR, full stop — not a settings knob, a platform rule. Since every commit and PR in this repo is authored as the one account that exists (`@SageCarter98`), formal code-owner approval was structurally impossible for *any* PR, not just protected-zone ones — a hard deadlock, not a soft gap. Given the choice (asked directly, chosen by the repo owner), `enforce_admins` is now **off**: the required review + all-CI-green gate still applies to everyone, but the repo owner can merge as admin without a review when no second reviewer exists yet. **This Agent must not use that bypass itself** — admin-merging its own work, even when GitHub permits it, is exactly what EC-201 exists to prevent ("every Agent pull request requires review and approval by a named human engineer before merge"). The bypass exists for the human, not for this Agent to route around review.
 
 ### Protected zones — draft-with-stricter-review, or no access at all
 
-May draft changes here, but every PR touching these needs two human approvers (one Engineering Lead):
+Enforced for real as of 2026-08-24: this repo is public, `.github/CODEOWNERS` names `@SageCarter98` as owner of every path below, and branch protection on `main` requires a code-owner review plus all 6 CI jobs green before merge (`enforce_admins: true` — no bypass, including for the repo owner). May draft changes here, but every PR touching these needs code-owner review (see the two-approver caveat above):
 - RLS policies; any migration touching a tenant-owned table
 - Tenant context middleware, `AsyncLocalStorage` scoping, request-scoped DB service
 - Authentication, authorisation, Chapter 13 scope resolution
@@ -100,7 +102,7 @@ May draft changes here, but every PR touching these needs two human approvers (o
   - the finance invariant suite
   - the results-immutability suite
 
-  *Enforcement is currently CLAUDE.md-only* — this file states the rule but nothing in CI or CODEOWNERS yet blocks an edit to those files mechanically. §13's own open questions call this out: "a rulebook the Agent reads is a rule it can be talked out of; a CI check on the diff and a CODEOWNERS entry are not." Building that check is a prerequisite for reaching rollout Stage 3 (test-only PRs), not before.
+  *Enforcement is now two layers, not one.* Branch protection + CODEOWNERS (above) mechanically require a human review on any PR that touches these files at all — that part no longer depends on this Agent choosing to follow the rule. What's still missing is the finer-grained check §13's open questions actually asked for: a CI job that inspects the diff and fails if an *existing test case* was changed or deleted (EC-501), as opposed to just requiring review on the file generally. A determined bad diff could still slip past a distracted reviewer today; it cannot yet be caught by CI alone. Building EC-501 is a prerequisite for rollout Stage 3 (test-only PRs), not before.
 
 ### If asked to touch a feedback/telemetry pipeline (EC-300 to EC-303)
 

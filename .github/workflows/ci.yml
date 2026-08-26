@@ -64,6 +64,52 @@ jobs:
         with:
           config: p/typescript
 
+  protected-test-integrity:
+    # EC-501 (CLAUDE.md "Internal Engineering Agent" section): CODEOWNERS
+    # already forces a human review on any PR touching the three EC-400
+    # protected suites, but a reviewer can still miss that one `it(...)`
+    # among many was quietly weakened or dropped inside an otherwise
+    # legitimate-looking diff. This job closes that finer-grained gap
+    # mechanically: it fails if any test case present in a protected suite
+    # at the PR's base commit is missing or changed now. Adding new cases
+    # is always fine — see apps/api/tools/check-protected-tests.ts for
+    # exactly what "changed" means (a content hash, not just the title).
+    #
+    # Added by the Internal Engineering Agent directly to this file as an
+    # explicit, one-time human-authorized exception to EC-201 ("never
+    # modify CI configuration... including this repository's own
+    # .github/workflows/ci.yml") — the same kind of named exception as the
+    # 2026-08-24 CI relocation, not a standing permission. See CLAUDE.md.
+    #
+    # Gap this does NOT close: this job's pass/fail shows on the PR, but
+    # branch protection's required-status-checks list is a GitHub repo
+    # setting, not something expressible in this file, and EC-201 forbids
+    # this Agent from touching branch protection rules either. Until a
+    # human adds "protected-test-integrity" to that list by hand, a red
+    # result here does not by itself block a merge.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Compute base commit for this event
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            SHA="${{ github.event.before }}"
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+      - name: Check protected test suites for changed/deleted cases
+        env:
+          EC501_BASE_SHA: ${{ steps.base.outputs.sha }}
+        run: npm run check:protected-tests --workspace apps/api
+
   unit-and-migration-tests:
     runs-on: ubuntu-latest
     services:

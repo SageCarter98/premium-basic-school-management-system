@@ -234,10 +234,12 @@ describe('Finance invariants (EC-501 protected suite)', () => {
         // it rejects even a raw insert that bypasses the service's own
         // pre-check entirely.
         await expect(
-          conn.query(
-            `insert into reversals (tenant_id, reversed_entity_type, reversed_entity_id, amount, reason, created_by)
-             values (current_tenant_id(), 'payment', $1, $2, $3, $4)`,
-            [payment.id, payment.amount, 'forged duplicate reversal', HEADMASTER],
+          asUser(HEADMASTER, () =>
+            conn.query(
+              `insert into reversals (tenant_id, reversed_entity_type, reversed_entity_id, amount, reason, created_by)
+               values (current_tenant_id(), 'payment', $1, $2, $3, $4)`,
+              [payment.id, payment.amount, 'forged duplicate reversal', HEADMASTER],
+            ),
           ),
         ).rejects.toThrow(/duplicate key value violates unique constraint/);
       } finally {
@@ -352,6 +354,56 @@ describe('Finance invariants (EC-501 protected suite)', () => {
         conn.release();
       }
     });
+
+    /**
+     * SECOND, MORE SEVERE REAL BUG — found during code review of this same
+     * suite, confirmed live before being written up here (not just static
+     * analysis): allocate()'s invoice-side cap is a bare
+     * `sum(amount) from payment_allocations where invoice_id = $1`. It
+     * never subtracts approved financial_assistance the way
+     * findInvoiceBalance()/finalizeAssistanceApproval() both do. Unlike the
+     * reversal-exclusion bug above, this needs no reversal at all — just
+     * ordinary combined use of assistance + a payment, arguably the more
+     * common real-world path (a partial scholarship, parent pays the
+     * rest). Confirmed live: a 1000 invoice with 600 approved assistance
+     * (true remaining 400, per findInvoiceBalance()) still let a 500
+     * allocation through, overcommitting the invoice by 100 — the exact
+     * kind of "a credit push a balance negative" scenario
+     * finalizeAssistanceApproval()'s own header comment says this
+     * codebase's invariant is supposed to prevent. Documented, not fixed,
+     * same reasoning as the bug above.
+     */
+    it('DOCUMENTED BUG: allocate() ignores approved financial_assistance and can overcommit an invoice', async () => {
+      const { conn, service } = harness();
+      try {
+        const invoice = await createPostedInvoice(service, 1000);
+        const assistance = await asUser(HEADMASTER, () =>
+          service.requestAssistance({
+            studentId: STUDENT_A,
+            invoiceId: invoice.id,
+            type: 'scholarship',
+            amount: 600,
+            reason: 'EC-501 invariant test — allocate()/assistance divergence',
+          } as never),
+        );
+        await asUser(HEADMASTER, () => service.approveAssistance(assistance.id));
+        await asUser(ACCOUNTANT, () => service.secondApproveAssistance(assistance.id));
+
+        const balance = await asUser(HEADMASTER, () => service.findInvoiceBalance(invoice.id));
+        expect(balance.balance).toBe(400); // findInvoiceBalance correctly accounts for the assistance
+
+        const payment = await recordPayment(service, { studentId: STUDENT_A, method: 'cash', amount: 500 });
+        // Should be rejected (only 400 truly remains) — allocate() doesn't
+        // know about the assistance at all and lets it through, taking the
+        // invoice's real commitment (600 + 500 = 1100) past its 1000 total.
+        const allocation = await asUser(HEADMASTER, () =>
+          service.allocate(payment.id, { invoiceId: invoice.id, amount: 500 } as never),
+        );
+        expect(allocation.amount).toBe('500.00');
+      } finally {
+        conn.release();
+      }
+    });
   });
 
   describe('settlement reconciliation (spec §8.8)', () => {
@@ -382,9 +434,11 @@ describe('Finance invariants (EC-501 protected suite)', () => {
         // DB-level backstop, independent of the service's own pre-check —
         // uq_settlement_lines_matched_payment is a partial unique index.
         await expect(
-          conn.query(
-            `update settlement_lines set matched_payment_id = $1, match_status = 'matched' where id = $2`,
-            [payment.id, line2.id],
+          asUser(HEADMASTER, () =>
+            conn.query(
+              `update settlement_lines set matched_payment_id = $1, match_status = 'matched' where id = $2`,
+              [payment.id, line2.id],
+            ),
           ),
         ).rejects.toThrow(/duplicate key value violates unique constraint/);
       } finally {
@@ -454,7 +508,7 @@ describe('Finance invariants (EC-501 protected suite)', () => {
         // whenever this test actually runs — createPostedInvoice's own
         // instalment due date is in the near future, which wouldn't
         // satisfy applyPenalty()'s grace-period/overdue check.
-        await conn.query(`update invoices set due_date = '2020-01-01' where id = $1`, [invoice.id]);
+        await asUser(HEADMASTER, () => conn.query(`update invoices set due_date = '2020-01-01' where id = $1`, [invoice.id]));
 
         const rule = await asUser(HEADMASTER, () =>
           service.createPenaltyRule(invoice.fee_structure_id, {

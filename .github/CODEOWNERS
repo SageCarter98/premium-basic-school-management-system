@@ -36,8 +36,13 @@
 /pbsms-platform/apps/api/src/modules/billing/  @SageCarter98
 
 # The only validation not downstream of the Agent's own understanding
-# (EC-400) — never modify or delete an existing case in this file.
+# (EC-400) — never modify or delete an existing case in any of these three
+# files. finance-invariants.e2e-spec.ts and results-immutability.e2e-spec.ts
+# were added 2026-08-26, closing the documentation-drift gap where CLAUDE.md
+# named both as already-protected suites before either file existed.
 /pbsms-platform/apps/api/test/tenant-isolation.e2e-spec.ts  @SageCarter98
+/pbsms-platform/apps/api/test/finance-invariants.e2e-spec.ts  @SageCarter98
+/pbsms-platform/apps/api/test/results-immutability.e2e-spec.ts  @SageCarter98
 
 # The rulebook itself, and CI configuration (EC-205)
 /CLAUDE.md            @SageCarter98

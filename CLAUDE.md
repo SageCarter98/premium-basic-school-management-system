@@ -99,10 +99,10 @@ Enforced for real as of 2026-08-24: this repo is public, `.github/CODEOWNERS` na
 - The protected test suites below (EC-400) — this Agent may add new cases in a PR that touches nothing else; it may never modify or delete an existing case in any of them:
   - the cross-tenant isolation suite (`tenant-isolation.e2e-spec.ts`, NFR-QA-020)
   - Chapter 47's Assistant isolation and grounding gates (once built)
-  - the finance invariant suite
-  - the results-immutability suite
+  - the finance invariant suite (`finance-invariants.e2e-spec.ts`, closed 2026-08-26 — see below; this bullet named it as already-protected for two days before it actually existed, a real documentation-drift instance caught while scoping EC-501, not just a hypothetical this file warns about elsewhere)
+  - the results-immutability suite (`results-immutability.e2e-spec.ts`, closed 2026-08-26, same correction)
 
-  *Enforcement is now two layers, not one.* Branch protection + CODEOWNERS (above) mechanically require a human review on any PR that touches these files at all — that part no longer depends on this Agent choosing to follow the rule. What's still missing is the finer-grained check §13's open questions actually asked for: a CI job that inspects the diff and fails if an *existing test case* was changed or deleted (EC-501), as opposed to just requiring review on the file generally. A determined bad diff could still slip past a distracted reviewer today; it cannot yet be caught by CI alone. Building EC-501 is a prerequisite for rollout Stage 3 (test-only PRs), not before.
+  *Enforcement is two layers today, moving toward three.* Branch protection + CODEOWNERS (above, now covering all three real files) mechanically require a human review on any PR that touches these files at all — that part no longer depends on this Agent choosing to follow the rule. What's still missing is the finer-grained check §13's open questions actually asked for: a CI job that inspects the diff and fails if an *existing test case* was changed or deleted (EC-501), as opposed to just requiring review on the file generally. A determined bad diff could still slip past a distracted reviewer today; it cannot yet be caught by CI alone. Building EC-501 is a prerequisite for rollout Stage 3 (test-only PRs), not before — the two suites above exist now specifically so EC-501 has three real files to protect instead of one; EC-501 itself is a separate, not-yet-started PR.
 
 ### If asked to touch a feedback/telemetry pipeline (EC-300 to EC-303)
 

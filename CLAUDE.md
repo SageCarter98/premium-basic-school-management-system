@@ -86,7 +86,7 @@ Reviewed and approved 2026-08-24. Full text: `PBSMS_Internal_Engineering_Agent_v
 
 ### Protected zones — draft-with-stricter-review, or no access at all
 
-Enforced for real as of 2026-08-24: this repo is public, `.github/CODEOWNERS` names `@SageCarter98` as owner of every path below, and branch protection on `main` requires a code-owner review plus all 6 CI jobs green before merge (`enforce_admins: true` — no bypass, including for the repo owner). May draft changes here, but every PR touching these needs code-owner review (see the two-approver caveat above):
+Enforced for real as of 2026-08-24: this repo is public, `.github/CODEOWNERS` names `@SageCarter98` as owner of every path below, and branch protection on `main` requires a code-owner review plus all 6 CI jobs green before merge. `enforce_admins` is **off**, not on — see the self-approval deadlock above (PR #1): the repo owner can merge as admin without a review when no second reviewer exists, but this Agent must never invoke that bypass on its own work. May draft changes here, but every PR touching these needs code-owner review (see the two-approver caveat above):
 - RLS policies; any migration touching a tenant-owned table
 - Tenant context middleware, `AsyncLocalStorage` scoping, request-scoped DB service
 - Authentication, authorisation, Chapter 13 scope resolution

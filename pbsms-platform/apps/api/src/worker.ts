@@ -37,6 +37,7 @@ import { handleReportCardBatch, ReportCardBatchPayload } from './jobs-worker/han
 import { handleMassNotification, MassNotificationPayload } from './jobs-worker/handlers/mass-notification.handler';
 import { handleDunningNotification, DunningNotificationPayload } from './jobs-worker/handlers/dunning-notification.handler';
 import { handleKpiCompute, KpiComputePayload } from './jobs-worker/handlers/kpi-compute.handler';
+import { computeAndStoreFeedbackDigest } from './jobs-worker/handlers/product-feedback-digest.handler';
 
 config({ path: resolve(__dirname, '../../../.env') });
 
@@ -49,6 +50,14 @@ const SYSTEM_ACTOR_ID = '00000000-0000-0000-0000-000000000001';
 
 const DEQUEUE_POLL_MS = Number(process.env.WORKER_DEQUEUE_POLL_MS ?? 2000);
 const SCHEDULE_POLL_MS = Number(process.env.WORKER_SCHEDULE_POLL_MS ?? 60000);
+// EC-100/101's product-feedback digest (0048) — a genuinely separate
+// timer, not part of the dequeue/schedule loops above. Those two are
+// built around background_jobs/job_schedules, both per-tenant RLS'd
+// tables; product_feedback has no tenant_id at all (0046's whole point),
+// so there's nothing to dequeue or schedule per-tenant here. Defaults to
+// once a day — feedback volume doesn't need anything tighter, and the
+// handler itself skips writing a row when nothing's new since last run.
+const FEEDBACK_DIGEST_POLL_MS = Number(process.env.WORKER_FEEDBACK_DIGEST_POLL_MS ?? 86400000);
 
 type JobRow = {
   id: string;
@@ -119,6 +128,19 @@ async function scheduleLoop(workerPool: Pool): Promise<void> {
   }
 }
 
+async function feedbackDigestLoop(workerPool: Pool): Promise<void> {
+  const result = await computeAndStoreFeedbackDigest(workerPool);
+  if (result.skipped) {
+    // eslint-disable-next-line no-console
+    console.log(`[worker] feedback digest skipped: ${result.reason}`);
+  } else {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[worker] feedback digest ${result.digestId} written (${result.sourceReportCount} total reports, ${result.newReportCount} new)`,
+    );
+  }
+}
+
 async function bootstrap() {
   const workerPool = new Pool({
     connectionString: process.env.WORKER_DATABASE_URL,
@@ -130,7 +152,9 @@ async function bootstrap() {
   });
 
   // eslint-disable-next-line no-console
-  console.log(`[worker] started — dequeue every ${DEQUEUE_POLL_MS}ms, schedules every ${SCHEDULE_POLL_MS}ms`);
+  console.log(
+    `[worker] started — dequeue every ${DEQUEUE_POLL_MS}ms, schedules every ${SCHEDULE_POLL_MS}ms, feedback digest every ${FEEDBACK_DIGEST_POLL_MS}ms`,
+  );
 
   let stopping = false;
   const dequeueTimer = setInterval(() => {
@@ -141,11 +165,16 @@ async function bootstrap() {
     if (stopping) return;
     scheduleLoop(workerPool).catch((err) => console.error('[worker] schedule loop error', err));
   }, SCHEDULE_POLL_MS);
+  const feedbackDigestTimer = setInterval(() => {
+    if (stopping) return;
+    feedbackDigestLoop(workerPool).catch((err) => console.error('[worker] feedback digest loop error', err));
+  }, FEEDBACK_DIGEST_POLL_MS);
 
   const shutdown = async () => {
     stopping = true;
     clearInterval(dequeueTimer);
     clearInterval(scheduleTimer);
+    clearInterval(feedbackDigestTimer);
     await Promise.all([workerPool.end(), appPool.end()]);
     // eslint-disable-next-line no-console
     console.log('[worker] shut down cleanly');

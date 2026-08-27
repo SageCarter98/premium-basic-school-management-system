@@ -105,7 +105,7 @@ Key chapters worth knowing exist:
 
 ### Protected zones and immutable suites (EC-400, EC-401) — draft-with-stricter-review, or no access at all
 
-Enforced for real as of 2026-08-24: this repo is public, `.github/CODEOWNERS` names `@SageCarter98` as owner of every path below, and branch protection on `main` requires a code-owner review plus the 6 CI jobs that existed then green before merge. `ci.yml` gained a 7th job, `protected-test-integrity`, on 2026-08-26 (EC-501) — not yet in branch protection's required-status-checks list (a GitHub setting, EC-205 bars touching it same as CI config); a human still needs to add it by hand. May draft changes in the zones below, but every PR touching one needs code-owner review:
+Enforced for real as of 2026-08-24: this repo is public, `.github/CODEOWNERS` names `@SageCarter98` as owner of every path below, and branch protection on `main` requires a code-owner review plus 8 CI jobs green before merge — the original 6, plus `protected-test-integrity` (EC-501) and `agent-pr-gates` (EC-500/502-506), both added to the required-status-checks list on 2026-08-27 under the same human-directed, explicitly-approved one-time exception to EC-205 already used for the `ci.yml` edits themselves — not a standing permission; each future branch-protection touch needs its own sign-off, same as CI config. May draft changes in the zones below, but every PR touching one needs code-owner review:
 - RLS policies; any migration touching a tenant-owned table
 - Tenant context middleware, `AsyncLocalStorage` scoping, request-scoped DB service
 - Authentication, authorisation, Chapter 13 scope resolution

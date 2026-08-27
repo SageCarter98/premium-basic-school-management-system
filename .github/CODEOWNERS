@@ -5,7 +5,10 @@
 # review from Code Owners" branch protection setting, which 403's on a
 # private repo without GitHub Pro. Branch protection on `main` now requires
 # a code-owner review from this file plus the required CI jobs green before
-# any merge, `enforce_admins: true` (no bypass, including for the owner).
+# any merge. `enforce_admins` is off, not on (corrected 2026-08-27 — see
+# CLAUDE.md's merge-boundary section for why: the PR #1 self-approval
+# deadlock, since GitHub won't let a PR author approve their own PR and
+# this repo has only one collaborator).
 #
 # @SageCarter98 is currently the only collaborator on this repo, so the
 # required-approval count is configured as 1, not EC-202's literal "two
@@ -13,17 +16,17 @@
 # per-branch, not conditional on which path changed, so it can't require
 # 2 only for these zones. Revisit once a second engineer joins.
 #
-# EC-501 closed 2026-08-26: ci.yml's protected-test-integrity job now fails
-# a PR if an existing test case in any of the three files below was changed
+# EC-501 closed 2026-08-26: ci.yml's protected-test-integrity job fails a
+# PR if an existing test case in any of the three files below was changed
 # or deleted (a content hash, not just title, so a kept title with a
 # gutted body still fails). Review of these files is still required
 # regardless — this catches what a distracted reviewer misses, it doesn't
-# replace the reviewer. One real gap remains: branch protection's
-# required-status-checks list is a GitHub repo setting, not something this
-# repo's files can express, and this Agent is barred from touching branch
-# protection rules (EC-201) same as CI config itself — a human still needs
-# to add "protected-test-integrity" to that list by hand for a red result
-# here to actually block a merge, not just show as a failing check.
+# replace the reviewer. `protected-test-integrity`, and `agent-pr-gates`
+# (EC-500/502-506, ci.yml's other Agent-PR gate job), were both added to
+# branch protection's required-status-checks list on 2026-08-27, under an
+# explicit, one-time human-authorized exception to EC-205 (same category
+# as the ci.yml edits themselves) — a red result on either now actually
+# blocks a merge, not just shows as a failing check.
 
 # Tenant isolation boundary
 /pbsms-platform/infra/migrations/          @SageCarter98

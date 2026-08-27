@@ -81,12 +81,10 @@ jobs:
     # .github/workflows/ci.yml") — the same kind of named exception as the
     # 2026-08-24 CI relocation, not a standing permission. See CLAUDE.md.
     #
-    # Gap this does NOT close: this job's pass/fail shows on the PR, but
-    # branch protection's required-status-checks list is a GitHub repo
-    # setting, not something expressible in this file, and EC-201 forbids
-    # this Agent from touching branch protection rules either. Until a
-    # human adds "protected-test-integrity" to that list by hand, a red
-    # result here does not by itself block a merge.
+    # Added to branch protection's required-status-checks list on
+    # 2026-08-27 (alongside agent-pr-gates, below) under the same kind of
+    # explicit exception, this time to EC-205's branch-protection-rules
+    # clause — a red result here now actually blocks a merge.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

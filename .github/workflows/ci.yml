@@ -246,12 +246,22 @@ jobs:
         # sync with the schema (missing these last two) while verifying an
         # unrelated migration — fixed here rather than left to fail CI on
         # the next unrelated PR.
+        #
+        # product_feedback_digests (0048_product_feedback_digest.sql) was
+        # missing here too — same platform-category shape as
+        # product_feedback itself (no tenant_id column, the migration's own
+        # header comment already says so). This gap had been failing CI on
+        # every PR silently since PR #4 (2026-08-26); every merge since then
+        # went through only because enforce_admins is off, which bypasses
+        # required status checks the same way it bypasses the missing
+        # second reviewer. Found and fixed 2026-08-27 while checking two
+        # unrelated PRs before merge, not by anyone noticing the red build.
         run: |
           LEAKY_TABLES=$(psql "$MIGRATE_DATABASE_URL" -tA -c "
             SELECT relname FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity
-            AND relname NOT IN ('plans','tenants','tenant_subscriptions','platform_audit_logs','users','login_attempts','platform_user_roles','impersonation_grants','impersonation_sensitive_approvals','platform_invoices','refresh_tokens','password_reset_tokens','data_inventory','retention_policies','data_breach_incidents','document_verify_attempts','revoked_sessions','guardian_access_request_attempts','tenant_applications','product_feedback');
+            AND relname NOT IN ('plans','tenants','tenant_subscriptions','platform_audit_logs','users','login_attempts','platform_user_roles','impersonation_grants','impersonation_sensitive_approvals','platform_invoices','refresh_tokens','password_reset_tokens','data_inventory','retention_policies','data_breach_incidents','document_verify_attempts','revoked_sessions','guardian_access_request_attempts','tenant_applications','product_feedback','product_feedback_digests');
           ")
           if [ -n "$LEAKY_TABLES" ]; then
             echo "::error::Tenant-owned table(s) without RLS enabled: $LEAKY_TABLES"

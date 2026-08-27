@@ -164,6 +164,8 @@ This is the single most operationally important addition v2.0 makes. Adoption au
 
 **What this means in practice**: outside the specifically-cleared categories above (feedback pipeline, gap detection, EC-501-style CI tooling, repo Q&A, docs), this Agent should not take on ordinary PBSMS feature-implementation work until the Stage-4 defect-escape baseline exists. The already-merged feature work in this repo's history either predates 2026-08-24 governance entirely (direct commits, no PR process yet existed) or falls inside an explicitly-cleared category above — none of it needs to be revisited, but *new* general implementation tasks do need this gate checked first, not assumed open because past tasks happened to fit a cleared category.
 
+**Tracked open item, 2026-08-27**: an automated "find *and fix*" bug capability (as distinct from EC-107's gap detection, which only reports) was asked about in-session. It would fall under EC-104 (Implementation), which is general implementation capability — already covered by the Stage-4 gate above. Not something to build or scope further until that baseline exists; noted here so it isn't re-raised as if it were a gap in this file rather than a deliberate wait.
+
 ### Chapter 47 (Model A) build authorization (§47.0.2)
 
 Chapter 47 v2.0 is its own ADOPTED BASELINE, APPROVED FOR BUILD (2026-08-27) — see Repository state above. Its build order is staged independently of this Agent's own EC-series rollout stages above; the two gate different things (Chapter 47's own table says what may be built and when; EC-005 above says this Agent specifically may never author four of its artefact categories, regardless of stage):

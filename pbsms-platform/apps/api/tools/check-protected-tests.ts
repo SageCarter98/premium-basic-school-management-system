@@ -28,6 +28,7 @@ const PROTECTED_FILES = [
   'pbsms-platform/apps/api/test/tenant-isolation.e2e-spec.ts',
   'pbsms-platform/apps/api/test/finance-invariants.e2e-spec.ts',
   'pbsms-platform/apps/api/test/results-immutability.e2e-spec.ts',
+  'pbsms-platform/apps/api/test/tenant-ai-assistant-isolation.e2e-spec.ts',
 ];
 
 interface TestCase {

@@ -1,0 +1,30 @@
+{
+  "name": "@pbsms/seed",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic multi-tenant fixture generator for PBSMS",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "pbsms-seed": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "seed": "tsx src/cli.ts",
+    "seed:ci": "tsx src/cli.ts --profile ci --out fixtures/ci --verify-determinism",
+    "seed:dev": "tsx src/cli.ts --profile dev --out fixtures/dev",
+    "seed:volume": "tsx src/cli.ts --profile volume --out fixtures/volume --format sql",
+    "check": "tsx src/cli.ts --profile ci --check-only --verify-determinism",
+    "check:one-to-many": "tsx src/cli.ts --profile ci --cardinality one_to_many --check-only",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "report": "tsx src/report.ts",
+    "report:ci": "tsx src/report.ts --profile ci",
+    "seed:plaintext": "tsx src/cli.ts --profile ci --hash none --out fixtures/ci-plain"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.7.0"
+  }
+}

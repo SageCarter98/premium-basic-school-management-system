@@ -107,7 +107,11 @@ export class AssistantRetrievalService {
         { recordType: 'class' as const, recordId: r.classId },
       ],
     }));
-    const totalCount = rows[0]?.totalHits ?? 0;
+    // count(*) over () comes back from pg as a bigint, which node-postgres
+    // returns as a string rather than silently losing precision above
+    // Number.MAX_SAFE_INTEGER — safe to parse here since a request-count
+    // this small never approaches that bound.
+    const totalCount = rows[0] ? Number(rows[0].totalHits) : 0;
 
     await this.interactionLogger.log({
       category,

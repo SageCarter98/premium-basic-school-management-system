@@ -74,25 +74,38 @@ describe('Tenant AI Assistant isolation & grounding (TEN-050/051/054/055, DP-100
   });
 
   afterAll(async () => {
-    const cleanup = new WorkerTenantConnection(pool);
+    // Two connections, one per tenant context — the "adversarial classId"
+    // test creates a Tenant B fixture, and a single Tenant-A-scoped cleanup
+    // connection's deletes would have RLS silently filter those rows out
+    // (no error, just never deleted). classIds/studentIds/teacherAssignmentIds
+    // hold ids from both tenants, so each pass below simply deletes whatever
+    // its own tenant context actually owns.
+    const cleanupA = new WorkerTenantConnection(pool);
+    const cleanupB = new WorkerTenantConnection(pool);
     try {
-      await asUser(ctx({ tenantId: TENANT_A, userId: HEADMASTER, roles: ['headmaster'] }), async () => {
-        // assistant_interactions (append-only, insert/select only per
-        // 0049_assistant_interactions.sql — "an audit trail that can be
-        // edited after the fact is not an audit trail") and
-        // assistant_settings (insert/update only, same migration) grant
-        // pbsms_app no delete at all. Nothing else asserts an exact row
-        // count on either table, and CI gets a fresh Postgres per run, so
-        // this suite leaves its rows in place rather than fighting the
-        // grants a permission-denied error here previously hung the whole
-        // afterAll hook and left Jest unable to exit.
-        await cleanup.query(`delete from attendance_records where class_id = any($1::uuid[])`, [classIds]);
-        await cleanup.query(`delete from teacher_assignments where id = any($1::uuid[])`, [teacherAssignmentIds]);
-        await cleanup.query(`delete from students where id = any($1::uuid[])`, [studentIds]);
-        await cleanup.query(`delete from classes where id = any($1::uuid[])`, [classIds]);
-      });
+      for (const [cleanup, tenantId] of [
+        [cleanupA, TENANT_A],
+        [cleanupB, TENANT_B],
+      ] as const) {
+        await asUser(ctx({ tenantId, userId: HEADMASTER, roles: ['headmaster'] }), async () => {
+          // assistant_interactions (append-only, insert/select only per
+          // 0049_assistant_interactions.sql — "an audit trail that can be
+          // edited after the fact is not an audit trail") and
+          // assistant_settings (insert/update only, same migration) grant
+          // pbsms_app no delete at all. Nothing else asserts an exact row
+          // count on either table, and CI gets a fresh Postgres per run, so
+          // this suite leaves its rows in place rather than fighting the
+          // grants a permission-denied error here previously hung the whole
+          // afterAll hook and left Jest unable to exit.
+          await cleanup.query(`delete from attendance_records where class_id = any($1::uuid[])`, [classIds]);
+          await cleanup.query(`delete from teacher_assignments where id = any($1::uuid[])`, [teacherAssignmentIds]);
+          await cleanup.query(`delete from students where id = any($1::uuid[])`, [studentIds]);
+          await cleanup.query(`delete from classes where id = any($1::uuid[])`, [classIds]);
+        });
+      }
     } finally {
-      cleanup.release();
+      cleanupA.release();
+      cleanupB.release();
       await pool.end();
     }
   });
@@ -161,19 +174,27 @@ describe('Tenant AI Assistant isolation & grounding (TEN-050/051/054/055, DP-100
 
   describe('tenant isolation and Chapter 13.3 scope (TEN-050/051)', () => {
     it("a cross-tenant caller gets zero low-attendance rows, never Tenant A's", async () => {
-      const { conn, retrieval } = harness();
+      const { conn } = harness();
+      // A fresh connection for the Tenant B caller, not the one used to seed
+      // Tenant A's data: TenantDatabaseService.getClient() sets
+      // app.current_tenant once per physical connection and reuses it for
+      // every later query, by design (TEN-004, one request = one fixed
+      // tenant) — reusing `conn` here would run the "as Tenant B" query
+      // still physically scoped to Tenant A and pass for the wrong reason.
+      const { conn: tenantBConn, retrieval: tenantBRetrieval } = harness();
       try {
         const { classId, studentId } = await createClassAndStudent(conn, TENANT_A, SCHOOL_A, ACADEMIC_YEAR_A);
         await seedAttendance(conn, TENANT_A, classId, studentId, ['present', 'absent', 'absent', 'absent']);
 
         const result = await asUser(ctx({ tenantId: TENANT_B, userId: HEADMASTER, roles: ['proprietor'] }), () =>
-          retrieval.findLowAttendance({ thresholdPercentage: 80, startDate: '2026-09-01', endDate: '2026-09-30' }),
+          tenantBRetrieval.findLowAttendance({ thresholdPercentage: 80, startDate: '2026-09-01', endDate: '2026-09-30' }),
         );
 
         expect(result.records).toHaveLength(0);
         expect(result.totalCount).toBe(0);
       } finally {
         conn.release();
+        tenantBConn.release();
       }
     });
 
@@ -238,10 +259,15 @@ describe('Tenant AI Assistant isolation & grounding (TEN-050/051/054/055, DP-100
 
     it("an adversarial classId (Tenant B's own class, or one the caller has no assignment for) never bypasses scope filtering", async () => {
       const { conn, retrieval } = harness();
+      // Tenant B's fixture needs its own connection for the same reason as
+      // the cross-tenant test above — this test's queries all run as a
+      // Tenant A teacher, so `conn` must stay physically scoped to Tenant A
+      // for its whole lifetime.
+      const { conn: tenantBConn } = harness();
       try {
-        const tenantBClass = await createClassAndStudent(conn, TENANT_B, 'bbbbbbbb-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-000000000002');
+        const tenantBClass = await createClassAndStudent(tenantBConn, TENANT_B, 'bbbbbbbb-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-000000000002');
         const unassigned = await createClassAndStudent(conn, TENANT_A, SCHOOL_A, ACADEMIC_YEAR_A);
-        await seedAttendance(conn, TENANT_B, tenantBClass.classId, tenantBClass.studentId, ['absent', 'absent', 'absent', 'present']);
+        await seedAttendance(tenantBConn, TENANT_B, tenantBClass.classId, tenantBClass.studentId, ['absent', 'absent', 'absent', 'present']);
         await seedAttendance(conn, TENANT_A, unassigned.classId, unassigned.studentId, ['absent', 'absent', 'absent', 'present']);
 
         // Spoofed classId belonging to Tenant B, while acting as a Tenant A teacher.
@@ -267,6 +293,7 @@ describe('Tenant AI Assistant isolation & grounding (TEN-050/051/054/055, DP-100
         expect(unassignedAttempt.records).toHaveLength(0);
       } finally {
         conn.release();
+        tenantBConn.release();
       }
     });
   });

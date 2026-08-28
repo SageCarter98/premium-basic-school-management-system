@@ -25,10 +25,10 @@ export class AssistantSettingsService {
     const { userId } = TenantContextStore.current();
     await this.db.query(
       `insert into assistant_settings (tenant_id, is_enabled, disabled_role_codes, updated_by)
-       values (current_tenant_id(), coalesce($1, true), coalesce($2, '{}'), $3)
+       values (current_tenant_id(), coalesce($1, true), coalesce($2::text[], '{}'::text[]), $3)
        on conflict (tenant_id) do update
          set is_enabled = coalesce($1, assistant_settings.is_enabled),
-             disabled_role_codes = coalesce($2, assistant_settings.disabled_role_codes),
+             disabled_role_codes = coalesce($2::text[], assistant_settings.disabled_role_codes),
              updated_at = now(), updated_by = $3`,
       [input.isEnabled ?? null, input.disabledRoleCodes ?? null, userId],
     );

@@ -1,9 +1,13 @@
 /**
  * EC-501 (CLAUDE.md "Internal Engineering Agent" section): fails the build
- * if an EXISTING test case in one of the three EC-400 protected suites was
- * modified or deleted between the PR's base commit and the current working
- * tree. Adding a NEW test case is always allowed — only shrinking or
- * altering what the base commit already asserted is a violation.
+ * if an EXISTING test case in one of the EC-400 protected suites listed in
+ * PROTECTED_FILES below was modified or deleted between the PR's base
+ * commit and the current working tree. Adding a NEW test case is always
+ * allowed — only shrinking or altering what the base commit already
+ * asserted is a violation. (Previously hardcoded "the three EC-400
+ * protected suites" here — already stale by one file before this comment
+ * was corrected; kept generic now so the count can't drift out of sync
+ * with PROTECTED_FILES again.)
  *
  * This does not replace the CODEOWNERS review these files already require
  * (a human reviews every PR that touches them regardless). It closes the
@@ -29,6 +33,15 @@ const PROTECTED_FILES = [
   'pbsms-platform/apps/api/test/finance-invariants.e2e-spec.ts',
   'pbsms-platform/apps/api/test/results-immutability.e2e-spec.ts',
   'pbsms-platform/apps/api/test/tenant-ai-assistant-isolation.e2e-spec.ts',
+  // Chapter 47 Stage 2 (§47.15): the eval harness's own it()/test() bodies
+  // — structural checks, route-coverage checks, the §47.15.2 threshold
+  // assertion, and the shared golden/adversarial comparison logic these
+  // loops call. The golden-set and adversarial-corpus DATA this file
+  // loops over live in tenant-ai-assistant-eval/golden-cases.ts and
+  // adversarial-cases.ts instead — data arrays, not it()/test() calls, so
+  // EC-501's call-expression hashing can't see them; see
+  // check-assistant-eval-integrity.ts for their id-keyed equivalent.
+  'pbsms-platform/apps/api/test/tenant-ai-assistant-eval.eval-spec.ts',
 ];
 
 interface TestCase {

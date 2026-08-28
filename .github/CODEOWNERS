@@ -51,18 +51,32 @@
 # CLAUDE.md). Needs a Chapter-47/AI-domain-owning approver too.
 /pbsms-platform/apps/api/src/modules/tenant-ai-assistant/  @SageCarter98
 
+# Chapter 47 Stage 2 (§47.15): the evaluation harness itself — golden set,
+# adversarial corpus, oracle. Same review posture as the retrieval module
+# above (EC-005 amendment). The eval spec file itself
+# (tenant-ai-assistant-eval.eval-spec.ts) is listed in the EC-400 block
+# below, alongside the other protected suites.
+/pbsms-platform/apps/api/test/tenant-ai-assistant-eval/  @SageCarter98
+/pbsms-platform/apps/api/tools/check-assistant-eval-integrity.ts  @SageCarter98
+
 # The only validation not downstream of the Agent's own understanding
-# (EC-400) — never modify or delete an existing case in any of these four
+# (EC-400) — never modify or delete an existing case in any of these
 # files. finance-invariants.e2e-spec.ts and results-immutability.e2e-spec.ts
 # were added 2026-08-26, closing the documentation-drift gap where CLAUDE.md
 # named both as already-protected suites before either file existed.
 # tenant-ai-assistant-isolation.e2e-spec.ts was added 2026-08-27, the same
 # EC-400 protection applied the moment it exists per CLAUDE.md's own
-# pre-reserved slot for it.
+# pre-reserved slot for it. tenant-ai-assistant-eval.eval-spec.ts (Stage 2,
+# §47.15) is enforced by check-protected-tests.ts the same way as the
+# other four; its DATA files (golden-cases.ts, adversarial-cases.ts) are
+# enforced separately by check-assistant-eval-integrity.ts instead, keyed
+# by each case's `id` rather than by it()/test() call hashing — see that
+# script's header for why EC-501's own mechanism doesn't fit a data array.
 /pbsms-platform/apps/api/test/tenant-isolation.e2e-spec.ts  @SageCarter98
 /pbsms-platform/apps/api/test/finance-invariants.e2e-spec.ts  @SageCarter98
 /pbsms-platform/apps/api/test/results-immutability.e2e-spec.ts  @SageCarter98
 /pbsms-platform/apps/api/test/tenant-ai-assistant-isolation.e2e-spec.ts  @SageCarter98
+/pbsms-platform/apps/api/test/tenant-ai-assistant-eval.eval-spec.ts  @SageCarter98
 
 # The rulebook itself, and CI configuration (EC-205)
 /CLAUDE.md            @SageCarter98

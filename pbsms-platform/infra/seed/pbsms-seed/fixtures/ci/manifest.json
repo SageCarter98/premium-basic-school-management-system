@@ -1,0 +1,74 @@
+{
+  "meta": {
+    "seed": "pbsms-2026-baseline",
+    "generated_at": "2026-02-18T06:00:00.000Z",
+    "generator_version": "1.0.0",
+    "as_of": "2026-02-18",
+    "guardian_cardinality": "many_to_many"
+  },
+  "tenants": [
+    {
+      "id": "tnt_sunrise",
+      "slug": "sunrise",
+      "status": "active"
+    },
+    {
+      "id": "tnt_brightfuture",
+      "slug": "brightfuture",
+      "status": "active"
+    },
+    {
+      "id": "tnt_mountzion",
+      "slug": "mountzion",
+      "status": "suspended"
+    }
+  ],
+  "tables": {
+    "schools": 4,
+    "campuses": 5,
+    "academic_years": 8,
+    "terms": 24,
+    "divisions": 8,
+    "class_levels": 16,
+    "staff": 52,
+    "classes": 40,
+    "subjects": 48,
+    "teaching_assignments": 420,
+    "students": 216,
+    "enrolments": 358,
+    "guardians": 156,
+    "guardian_links": 220,
+    "users": 370,
+    "user_roles": 374,
+    "invitations": 4,
+    "password_reset_tokens": 12,
+    "access_links": 12,
+    "attendance_records": 2547,
+    "attendance_conflicts": 4,
+    "assessment_components": 12,
+    "assessment_instances": 840,
+    "scores": 8928,
+    "grading_scales": 8,
+    "grade_bands": 48,
+    "result_sets": 40,
+    "result_versions": 24,
+    "result_lines": 2574,
+    "fee_structures": 32,
+    "fee_items": 192,
+    "invoices": 428,
+    "invoice_lines": 2118,
+    "payments": 390,
+    "allocations": 1468,
+    "financial_assistance": 12,
+    "provider_settlements": 4,
+    "settlement_lines": 155,
+    "message_templates": 20,
+    "message_batches": 12,
+    "message_deliveries": 393,
+    "consent_records": 468,
+    "health_records": 4,
+    "discipline_cases": 4,
+    "data_subject_requests": 8,
+    "audit_events": 24
+  }
+}

@@ -77,8 +77,15 @@ describe('Tenant AI Assistant isolation & grounding (TEN-050/051/054/055, DP-100
     const cleanup = new WorkerTenantConnection(pool);
     try {
       await asUser(ctx({ tenantId: TENANT_A, userId: HEADMASTER, roles: ['headmaster'] }), async () => {
-        await cleanup.query(`delete from assistant_interactions where request_category = 'attendance_below_threshold'`);
-        await cleanup.query(`delete from assistant_settings where tenant_id = current_tenant_id()`);
+        // assistant_interactions (append-only, insert/select only per
+        // 0049_assistant_interactions.sql — "an audit trail that can be
+        // edited after the fact is not an audit trail") and
+        // assistant_settings (insert/update only, same migration) grant
+        // pbsms_app no delete at all. Nothing else asserts an exact row
+        // count on either table, and CI gets a fresh Postgres per run, so
+        // this suite leaves its rows in place rather than fighting the
+        // grants a permission-denied error here previously hung the whole
+        // afterAll hook and left Jest unable to exit.
         await cleanup.query(`delete from attendance_records where class_id = any($1::uuid[])`, [classIds]);
         await cleanup.query(`delete from teacher_assignments where id = any($1::uuid[])`, [teacherAssignmentIds]);
         await cleanup.query(`delete from students where id = any($1::uuid[])`, [studentIds]);

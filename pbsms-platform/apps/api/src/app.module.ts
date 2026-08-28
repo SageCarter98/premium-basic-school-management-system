@@ -40,6 +40,7 @@ import { TimelineModule } from './modules/timeline/timeline.module';
 import { StaffFeedbackModule } from './modules/staff-feedback/staff-feedback.module';
 import { TenantApplicationsModule } from './modules/tenant-applications/tenant-applications.module';
 import { ProductFeedbackModule } from './modules/product-feedback/product-feedback.module';
+import { TenantAiAssistantModule } from './modules/tenant-ai-assistant/tenant-ai-assistant.module';
 
 @Controller()
 class HealthController {
@@ -91,6 +92,7 @@ class HealthController {
     StaffFeedbackModule,
     TenantApplicationsModule,
     ProductFeedbackModule,
+    TenantAiAssistantModule,
   ],
   controllers: [HealthController],
 })

@@ -24,3 +24,8 @@ npm-debug.log*
 
 # Postgres local volume artifacts if ever created outside Docker
 *.pgdata/
+
+# check-assistant-eval-integrity.ts's throwaway base-commit snapshot —
+# always removed in its own finally block; ignored here only as a backstop
+# against a leftover from a killed/crashed run.
+apps/api/.assistant-eval-integrity-tmp-*/

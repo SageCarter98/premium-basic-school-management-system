@@ -12,6 +12,8 @@
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"tools/**/*.ts\"",
     "test": "jest --passWithNoTests",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
+    "test:assistant-eval": "jest --config ./test/jest-eval.json --runInBand",
+    "check:assistant-eval-integrity": "ts-node tools/check-assistant-eval-integrity.ts",
     "check:protected-tests": "ts-node tools/check-protected-tests.ts",
     "check:protected-path": "ts-node tools/check-protected-path.ts",
     "check:migration-safety": "ts-node tools/check-migration-safety.ts",

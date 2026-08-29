@@ -100,8 +100,30 @@ export class AssistantRetrievalService {
     );
 
     const truncated = rows.length > MAX_RECORDS;
+    // presentDays/totalDays come back from pg as bigint (count(*)) and
+    // attendancePercentage as numeric (round(...)) — node-postgres returns
+    // both as strings by default, the same reason totalHits below needs
+    // Number(). Found live while building the Stage 2 evaluation harness
+    // (§47.15's numeric-fidelity gate against an independent oracle,
+    // TEN-054): the pre-fix code spread `r` as-is, so every served record
+    // silently carried string-typed numbers instead of the `number`s
+    // LowAttendanceRow declares — exactly the kind of mismatch FR-AIT-203
+    // exists to block once a model sits in front of this. Also stops
+    // spreading `r` wholesale: that leaked "totalHits" (the window
+    // function's own per-row total-match column, needed once to compute
+    // `totalCount` below) into every individual record, a field never in
+    // LowAttendanceRow's declared shape and irrelevant per-record — a
+    // DP-102 minimality slip this Stage 2 harness's "prohibited output"
+    // structural check also caught live.
     const records = rows.slice(0, MAX_RECORDS).map((r) => ({
-      ...r,
+      studentId: r.studentId,
+      studentFirstName: r.studentFirstName,
+      studentLastName: r.studentLastName,
+      classId: r.classId,
+      className: r.className,
+      presentDays: Number(r.presentDays),
+      totalDays: Number(r.totalDays),
+      attendancePercentage: Number(r.attendancePercentage),
       refs: [
         { recordType: 'student' as const, recordId: r.studentId },
         { recordType: 'class' as const, recordId: r.classId },

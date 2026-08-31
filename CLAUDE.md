@@ -164,10 +164,10 @@ This is the single most operationally important addition v2.0 makes. Adoption au
 | CLAUDE.md rulebook; CODEOWNERS + branch protection | CLEARED, done |
 | Chapter 47 (Model A) governance-runtime artefact authorship (retrieval/scope/audit — Stage 4–5 under Ch47 v2.2's renumbering, `STAGE-1-SPEC.md`) | **CLEARED, 2026-08-27** — EC-005 amendment above; two-approver-plus-domain-owner review applies, same as finance/results. Does **not** extend to the `pbsms-ai/` tree (Ch47 v2.2 Stages 1–2) — that's the stricter, no-draft-path restriction added 2026-08-29, see the EC-series section's Chapter 47 build-authorization table. |
 | EC-501 immutable-suite CI check | CLEARED, done (2026-08-26) |
-| EC-500, EC-502 to EC-506 gates | **CLEARED — begin immediately. Not yet built; a genuinely available next task.** |
+| EC-500, EC-502 to EC-506 gates | CLEARED, done (2026-08-27, `f7efdaf`; EC-507 followed 2026-08-31) |
 | Repository question-answering (EC-102) | CLEARED, in continuous use every session |
 | Feedback ingestion & clustering (EC-100/101) | BUILD CLEARED (done — capture 2026-08-24, clustering 2026-08-24, digest job 2026-08-26), **operation deferred** — no real tenants exist yet, so there's no feedback signal to actually cluster in production |
-| Gap detection (EC-107) | **CLEARED — begin immediately. Not yet built.** |
+| Gap detection (EC-107) | CLEARED, done (2026-08-27, `f7efdaf`; `apps/api/tools/detect-spec-gaps.ts`) |
 | Stage 3 — test-only pull requests | CLEARED (EC-501 exists — the gate condition is satisfied). PR #5's finance/results invariant suites already exercised this, one PR ahead of EC-501 itself existing — a real sequencing slip, harmless in outcome, worth remembering as precedent for reading a gate's condition before starting, not after. |
 | **Stage 4 onward — general implementation PRs (code changes outside protected zones)** | **GATED on a human defect-escape baseline existing (§9/§13). Does not exist yet — takes roughly a quarter of ordinary human-authored development to produce, and cannot be shortcut. Not yet authorized.** |
 | Stage 6 — protected-zone drafting | **NOT AUTHORISED by this adoption.** A separate, explicit Engineering Lead decision, not automatic on stages 1–5. |

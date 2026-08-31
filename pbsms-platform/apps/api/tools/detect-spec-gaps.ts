@@ -26,7 +26,15 @@ import { join } from 'path';
 import { SRS_ID_PREFIXES } from './requirement-id-prefixes';
 
 const SRS_EXTRACT_FILENAME = 'srs_v21_extract.txt';
-const IMPLEMENTATION_DIRS = ['pbsms-platform/apps/api/src', 'pbsms-platform/apps/api/test', 'pbsms-platform/infra/migrations'];
+// .github/workflows/ added 2026-08-31: a first EC-107 run missed NFR-SEC-020,
+// NFR-ACC-020 and NFR-DEP-020 entirely because they're satisfied by CI gates
+// (SAST/dependency scan, pa11y-ci, the pipeline itself), not application code.
+const IMPLEMENTATION_DIRS = [
+  'pbsms-platform/apps/api/src',
+  'pbsms-platform/apps/api/test',
+  'pbsms-platform/infra/migrations',
+  '.github/workflows',
+];
 const TEST_DIR_MARKER = 'pbsms-platform/apps/api/test';
 
 const DEFINITION_PATTERN = new RegExp(`^\\s*((?:${SRS_ID_PREFIXES.join('|')})-[A-Z]+-?[0-9]{2,3})(?=:)`);

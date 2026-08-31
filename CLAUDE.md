@@ -127,7 +127,7 @@ Enforced for real as of 2026-08-24: this repo is public, `.github/CODEOWNERS` na
   - the results-immutability suite (`results-immutability.e2e-spec.ts`, closed 2026-08-26)
   - **added 2026-08-29 (secondhand, see the EC-005 note above)** — the `pbsms-ai/` blind evaluation corpus, dataset manifests and hashes, the captured web corpus, the adversarial corpus, and the scorers computing the §47.16.2 release metrics. Same rule as the rest of EC-400: this Agent may propose additional cases in a PR touching nothing else, never modify or delete an existing one.
 
-  *Enforcement is three layers as of 2026-08-26 for the four suites above the 2026-08-29 addition.* Branch protection + CODEOWNERS mechanically require human review on any PR touching these files at all. `apps/api/tools/check-protected-tests.ts` (the EC-501 job) parses each protected file with the TypeScript compiler API, hashes every `it(...)`/`test(...)` call's normalized body, and fails the build if any hash present at the PR's base commit is missing at head — a kept title with a gutted body still fails, since matching is by content. New cases never flagged. Live-verified against all three failure modes before merging. The `pbsms-ai/` addition above has no CI enforcement yet — see EC-507 in the CI gates table below.
+  *Enforcement is three layers as of 2026-08-26 for the four suites above the 2026-08-29 addition.* Branch protection + CODEOWNERS mechanically require human review on any PR touching these files at all. `apps/api/tools/check-protected-tests.ts` (the EC-501 job) parses each protected file with the TypeScript compiler API, hashes every `it(...)`/`test(...)` call's normalized body, and fails the build if any hash present at the PR's base commit is missing at head — a kept title with a gutted body still fails, since matching is by content. New cases never flagged. Live-verified against all three failure modes before merging. **The `pbsms-ai/` addition is now mechanically enforced too, built 2026-08-31** — see EC-507 in the CI gates table below (`apps/api/tools/check-pbsms-ai-boundary.ts`). Per Ch47 v2.2 §47.0.5's own words, "until EC-507 runs in CI the boundary is a convention rather than a control" — that condition is now satisfied for Agent PRs specifically; note it still has no CODEOWNERS/branch-protection backstop the way the four suites above do, since `pbsms-ai/`'s real path can't be added to `.github/CODEOWNERS` until the tree actually exists.
 
 ### CI gates for Agent pull requests (EC-500 to EC-506)
 
@@ -136,14 +136,16 @@ A pull request passes every gate below before a human is asked to look at it —
 | ID | Gate | Status |
 |---|---|---|
 | — | Existing pipeline: SAST, dependency scan, RLS coverage gate, cross-tenant isolation suite, accessibility gate | Built, running in `ci.yml` |
-| EC-500 | Protected-path check — diff touches a protected zone without the required label/approver count | **Not built.** Cleared to build now. |
+| EC-500 | Protected-path check — diff touches a protected zone without the required label/approver count | **Built, 2026-08-27** (`apps/api/tools/check-protected-path.ts`, the `agent-pr-gates` job) |
 | EC-501 | Immutable-suite check — any protected test file modified or deleted | **Built, 2026-08-26** (`apps/api/tools/check-protected-tests.ts`, the `protected-test-integrity` job) |
-| EC-502 | Migration safety check — a destructive migration with no explicit, separately-reviewed exception | **Not built.** Cleared to build now. |
-| EC-503 | Diff ceiling — change exceeds the reviewable size limit (proposed 400 changed lines), not split | **Not built.** Cleared to build now; the 400-line figure is a guess per the spec's own Open Questions, to be re-set from stage-3 measurement. |
-| EC-504 | Traceability check — PR doesn't reference the SRS requirement IDs it implements/changes | **Not built.** Cleared to build now. |
-| EC-505 | Behaviour-change flag check — a user-visible workflow change ships with no feature flag (EC-311) | **Not built.** Cleared to build now. |
-| EC-506 | Attribution check — commit/PR not labelled Agent-authored | **Not built.** Cleared to build now. |
-| EC-507 | `pbsms-ai/` boundary check — Agent PR diff touches the `pbsms-ai/` tree at all, including a rename or move | **Not built.** Cleared to build now (Ch47 v2.2 §47.0.5). |
+| EC-502 | Migration safety check — a destructive migration with no explicit, separately-reviewed exception | **Built, 2026-08-27** (`apps/api/tools/check-migration-safety.ts`) |
+| EC-503 | Diff ceiling — change exceeds the reviewable size limit (proposed 400 changed lines), not split | **Built, 2026-08-27** (`apps/api/tools/check-diff-ceiling.ts`); the 400-line figure is a guess per the spec's own Open Questions, to be re-set from stage-3 measurement. |
+| EC-504 | Traceability check — PR doesn't reference the SRS requirement IDs it implements/changes | **Built, 2026-08-27** (`apps/api/tools/check-traceability.ts`) |
+| EC-505 | Behaviour-change flag check — a user-visible workflow change ships with no feature flag (EC-311) | **Built, 2026-08-27** (`apps/api/tools/check-behaviour-flag.ts`) |
+| EC-506 | Attribution check — commit/PR not labelled Agent-authored | **Built, 2026-08-27** (`apps/api/tools/check-attribution.ts`) |
+| EC-507 | `pbsms-ai/` boundary check — Agent PR diff touches the `pbsms-ai/` tree at all, including a rename or move | **Built, 2026-08-31** (`apps/api/tools/check-pbsms-ai-boundary.ts`, same `agent-pr-gates` job — no separate branch-protection change needed since it's a step inside an already-required job). Detects "Agent-authored" the same way EC-506 does (a `Co-Authored-By: Claude` commit trailer); a PR with no such trailer is left alone, since `pbsms-ai/` content is meant to come from the Engineering Lead per the Chapter 47 table below. `pbsms-ai/`'s real location doesn't exist anywhere yet (see Repository state's provenance note), so the check matches any `pbsms-ai` path segment rather than one guessed location — revisit once the tree's real path is known. |
+
+**2026-08-27 documentation drift, found and fixed 2026-08-31**: this table previously claimed EC-500 and EC-502 to EC-506 were "Not built. Cleared to build now" — they were in fact already built and wired into `ci.yml`'s `agent-pr-gates` job the same day (2026-08-27, commit `f7efdaf`), just never reflected here. Caught while building EC-507 alongside them. Exactly the kind of drift EC-106 exists to catch — recorded honestly rather than quietly corrected.
 
 ### Accountability (EC-600 to EC-602)
 

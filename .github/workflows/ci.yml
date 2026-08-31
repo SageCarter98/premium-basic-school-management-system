@@ -109,24 +109,33 @@ jobs:
         run: npm run check:protected-tests --workspace apps/api
 
   agent-pr-gates:
-    # EC-500, EC-502 to EC-506 (CLAUDE.md "Internal Engineering Agent"
-    # section): six CI gates for Agent-authored pull requests, cleared to
-    # build by the v2.0 spec's own §1.3 authorization table (2026-08-27).
-    # Same shape as protected-test-integrity (EC-501) above: standalone
-    # ts-node scripts under apps/api/tools/, driven by env vars computed
-    # here from github.event/git diff — never a GitHub API call. Runs only
-    # on pull_request events: EC-504/505 need a PR title/body that simply
-    # doesn't exist on a push event, and the other four gates re-checking
-    # an already-merged diff on push would be redundant, not protective.
+    # EC-500, EC-502 to EC-507 (CLAUDE.md "Internal Engineering Agent"
+    # section): CI gates for Agent-authored pull requests. EC-500/502-506
+    # were cleared and built 2026-08-27 by the v2.0 spec's own §1.3
+    # authorization table. EC-507 was added 2026-08-31, cleared by Ch47
+    # v2.2 §47.0.5 (a pbsms-ai/ tree write-boundary check — see CLAUDE.md's
+    # EC-005/EC-400 notes on that amendment's own provenance gap). Same
+    # shape as protected-test-integrity (EC-501) above: standalone ts-node
+    # scripts under apps/api/tools/, driven by env vars computed here from
+    # github.event/git diff — never a GitHub API call. Runs only on
+    # pull_request events: EC-504/505 need a PR title/body that simply
+    # doesn't exist on a push event, and the other gates re-checking an
+    # already-merged diff on push would be redundant, not protective.
     #
     # Added by the Internal Engineering Agent directly to this file as an
     # explicit, one-time human-authorized exception to EC-201 — the same
     # category of named exception as the CI relocation, the EC-501
     # addition, and the product_feedback_digests RLS-exclusion fix. Not a
     # standing permission; each future ci.yml touch needs its own sign-off.
+    # EC-507's addition specifically was requested in-session by the repo
+    # owner ("Start with Phase 0, the EC-507 CI check", 2026-08-31).
     #
-    # Same gap as protected-test-integrity: these gates' pass/fail show on
-    # the PR, but branch protection's required-status-checks list is a
+    # EC-507 needs no separate branch-protection change, unlike EC-501's
+    # own job: it's a new step inside this already-required job, so it
+    # blocks a merge the moment it lands here.
+    #
+    # Same gap as protected-test-integrity: EC-500/502-506's pass/fail show
+    # on the PR, but branch protection's required-status-checks list is a
     # GitHub repo setting this Agent cannot touch (EC-201 bars that too) —
     # a human still needs to add whichever of these should actually block
     # a merge, same follow-up already outstanding for protected-test-
@@ -168,6 +177,10 @@ jobs:
         env:
           EC506_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: npm run check:attribution --workspace apps/api
+      - name: EC-507 pbsms-ai/ boundary check
+        env:
+          EC507_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: npm run check:pbsms-ai-boundary --workspace apps/api
 
   unit-and-migration-tests:
     runs-on: ubuntu-latest

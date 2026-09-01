@@ -28,8 +28,13 @@
   color: var(--pb-ink);
   cursor: pointer;
   font-size: var(--pb-text-body);
+  transition: background var(--pb-dur-fast) var(--pb-ease), transform var(--pb-dur-fast) var(--pb-ease);
 }
 
 .direction:hover {
   background: var(--pb-teal-50);
+}
+
+.direction:active {
+  transform: scale(0.97);
 }

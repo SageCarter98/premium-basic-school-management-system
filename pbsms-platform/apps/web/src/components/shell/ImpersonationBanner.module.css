@@ -42,10 +42,15 @@
   background: transparent;
   color: #fff;
   cursor: pointer;
+  transition: background var(--pb-dur-fast) var(--pb-ease), transform var(--pb-dur-fast) var(--pb-ease);
 }
 
 .endButton:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.12);
+}
+
+.endButton:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .endButton:focus-visible {

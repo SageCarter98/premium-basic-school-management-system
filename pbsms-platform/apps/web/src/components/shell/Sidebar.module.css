@@ -75,6 +75,7 @@
   color: var(--pb-ink);
   text-decoration: none;
   border-left: 3px solid transparent;
+  transition: background var(--pb-dur-fast) var(--pb-ease);
 }
 
 .item:hover {
@@ -115,14 +116,17 @@
     transform: translateX(0);
   }
   .backdrop {
-    display: none;
     position: fixed;
     inset: 0;
     background: rgba(18, 33, 31, 0.4);
     z-index: 20;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--pb-dur-base) var(--pb-ease);
   }
   .backdropVisible {
-    display: block;
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 

@@ -94,4 +94,14 @@
   border-radius: var(--pb-radius-sm);
   font-size: var(--pb-text-caption);
   font-weight: 600;
+  cursor: pointer;
+  transition: background var(--pb-dur-fast) var(--pb-ease), transform var(--pb-dur-fast) var(--pb-ease);
+}
+
+.offlineAction:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.offlineAction:active {
+  transform: scale(0.97);
 }

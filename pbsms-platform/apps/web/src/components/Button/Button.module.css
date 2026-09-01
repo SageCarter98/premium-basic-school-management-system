@@ -6,7 +6,12 @@
   min-width: 44px;
   font-weight: 500;
   font-size: var(--pb-text-body);
-  transition: background var(--pb-dur-fast) var(--pb-ease);
+  transition: background var(--pb-dur-fast) var(--pb-ease), transform var(--pb-dur-fast) var(--pb-ease);
+}
+
+/* Press feedback — confirms the click landed before the request resolves. */
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .primary {

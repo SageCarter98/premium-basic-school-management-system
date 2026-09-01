@@ -39,10 +39,15 @@
   background: transparent;
   color: #fff;
   cursor: pointer;
+  transition: background var(--pb-dur-fast) var(--pb-ease), transform var(--pb-dur-fast) var(--pb-ease);
 }
 
 .signOut:hover {
   background: rgba(255, 255, 255, 0.12);
+}
+
+.signOut:active {
+  transform: scale(0.97);
 }
 
 .signOut:focus-visible {

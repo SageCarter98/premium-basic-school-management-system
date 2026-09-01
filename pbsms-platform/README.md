@@ -92,6 +92,22 @@ Quick Start yourself before trusting this further; "verified once" is not
    drops to zero once requests go idle, which only happens if clients are
    genuinely being returned to the pool, not merely idle-but-leaked.
 
+10. **Bug #6 regressed once `apps/api/tools/` (the EC-500-series CI gate
+    scripts) started existing** — `tsconfig.build.json` excluded `test/`
+    but never `tools/`, so once real `.ts` files lived there too, `tsc`
+    inferred `rootDir` back up to `apps/api` (the common ancestor of
+    `src/` and `tools/`) instead of `src/`, and `nest build` started
+    emitting to `dist/src/main.js`/`dist/tools/*` instead of `dist/main.js`
+    — silently breaking the same `.env` path math bug #6 already fixed
+    once, found while verifying `test/billing.e2e-spec.ts` actually ran.
+    Fixed the same way bug #6 was: excluded `tools` in
+    `tsconfig.build.json` too, restoring `dist/main.js` at the expected
+    depth (`tools/*.ts` were never built this way anyway — they run via
+    `ts-node`, per the `check:*` scripts in `package.json`). A stale
+    partial `dist/` (mixing an old correct `dist/main.js` with a newer
+    misplaced `dist/src/main.js`) had to be fully removed and rebuilt from
+    scratch, not just rebuilt on top of, before this was verifiable.
+
 None of these were visible from reading the code — every one needed an
 actual Postgres, an actual HTTP request, or an actual `tsc` run to surface.
 That is the whole argument for Quick Start over code review as a first step.

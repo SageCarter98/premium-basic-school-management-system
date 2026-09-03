@@ -85,7 +85,14 @@ function withoutSupersededAt<T extends { superseded_at: unknown }>(row: T): Omit
   return rest;
 }
 
-describe('Results immutability (EC-501 protected suite, Chapter 21 FR-RES-020/030)', () => {
+describe('Results immutability (EC-501 protected suite, Chapter 21 FR-RES-010/020/030)', () => {
+  // FR-RES-010 (the 9-state machine: Draft, Submitted, Returned, Corrected,
+  // Reviewed, Approved, Published, Locked, Archived) is fully exercised by
+  // the 'status transition state machine' describe() below — the full
+  // legal path plus returnForCorrection() together cover all nine states
+  // and reject the out-of-order transitions tried against them. Added as an
+  // explicit citation 2026-09-03 (EC-107): the ID existed nowhere in this
+  // file even though the coverage did.
   let pool: Pool;
   const classIds: string[] = [];
   const resultIds: string[] = [];

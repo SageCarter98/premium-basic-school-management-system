@@ -16,6 +16,20 @@
  * compiler API this repo already depends on (ts-node/ts-jest) — AST-based
  * extraction of `it(...)`/`test(...)` call expressions is robust to nested
  * braces, strings and template literals in a way a regex scan would not be.
+ *
+ * EC-400 v2.2 authorization (see the amendment note below main()): by
+ * default this check is a hard, unconditional fail for any of the four
+ * named suites — nothing here weakens that. It only downgrades to a
+ * warning when BOTH conditions hold at once: CLAUDE.md's EC-400 entry
+ * carries the literal marker EC400_V22_ADOPTED_MARKER (meaning the
+ * Engineering Lead has actually completed real re-adoption per CLAUDE.md
+ * §1.3 — this script does not and cannot make that adoption decision,
+ * it only reads whether it happened), AND the PR carries the
+ * `ec400-suite-modification` label (a visibility signal, same pattern as
+ * EC-500's `protected-zone` override — CODEOWNERS review is still
+ * required regardless). Until CLAUDE.md actually carries that marker,
+ * this whole branch is dead code in practice: the four suites stay fully
+ * immutable exactly as before.
  */
 import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
@@ -30,6 +44,24 @@ const PROTECTED_FILES = [
   'pbsms-platform/apps/api/test/results-immutability.e2e-spec.ts',
   'pbsms-platform/apps/api/test/tenant-ai-assistant-isolation.e2e-spec.ts',
 ];
+
+const EC400_MODIFICATION_LABEL = 'ec400-suite-modification';
+const EC400_V22_ADOPTED_MARKER = 'EC-400-V2.2-ADOPTED';
+
+function hasEc400ModificationLabel(): boolean {
+  try {
+    const labels: string[] = JSON.parse(process.env.PR_LABELS ?? '[]');
+    return labels.includes(EC400_MODIFICATION_LABEL);
+  } catch {
+    return false;
+  }
+}
+
+function isEc400V22Adopted(repoRoot: string): boolean {
+  const claudeMdPath = join(repoRoot, 'CLAUDE.md');
+  if (!existsSync(claudeMdPath)) return false;
+  return readFileSync(claudeMdPath, 'utf8').includes(EC400_V22_ADOPTED_MARKER);
+}
 
 interface TestCase {
   title: string;
@@ -92,7 +124,9 @@ function main(): void {
 
   // apps/api/tools -> apps/api -> apps -> pbsms-platform -> repo root
   const repoRoot = join(__dirname, '..', '..', '..', '..');
+  const authorized = isEc400V22Adopted(repoRoot) && hasEc400ModificationLabel();
   const violations: string[] = [];
+  const authorizedChanges: string[] = [];
 
   for (const repoRelativePath of PROTECTED_FILES) {
     const baseSource = readAtBase(baseSha, repoRelativePath);
@@ -119,11 +153,24 @@ function main(): void {
       }
       const stillPresentByTitle = headCases.some((h) => h.title === baseCase.title);
       const verb = stillPresentByTitle ? 'modified' : 'removed';
-      violations.push(
+      const message =
         `${repoRelativePath}:${baseCase.line}  "${baseCase.title}" was ${verb} ` +
-          `(present at base ${baseSha.slice(0, 12)}, not found unchanged now).`,
-      );
+        `(present at base ${baseSha.slice(0, 12)}, not found unchanged now).`;
+      if (authorized) {
+        authorizedChanges.push(message);
+      } else {
+        violations.push(message);
+      }
     }
+  }
+
+  if (authorizedChanges.length > 0) {
+    console.log(
+      `EC-501: ${authorizedChanges.length} protected-suite case(s) changed under EC-400 v2.2 ` +
+        `authorization (CLAUDE.md marker present + '${EC400_MODIFICATION_LABEL}' label on this PR).\n` +
+        'CODEOWNERS review is still required regardless — this does not skip that:\n',
+    );
+    for (const c of authorizedChanges) console.log(`  - ${c}`);
   }
 
   if (violations.length > 0) {

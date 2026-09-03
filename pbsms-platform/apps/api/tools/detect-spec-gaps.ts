@@ -29,13 +29,32 @@ const SRS_EXTRACT_FILENAME = 'srs_v21_extract.txt';
 // .github/workflows/ added 2026-08-31: a first EC-107 run missed NFR-SEC-020,
 // NFR-ACC-020 and NFR-DEP-020 entirely because they're satisfied by CI gates
 // (SAST/dependency scan, pa11y-ci, the pipeline itself), not application code.
+//
+// apps/web/src added 2026-09-03: FR-UX-020 (offline attendance/score entry)
+// was reported "referenced in code, but never in a test file" when in fact
+// its frontend half (apps/web/src/lib/offline-db.ts, offline-sync.ts, the
+// teacher register/scores pages) was fully implemented — this script simply
+// never looked at apps/web/ at all, so any purely-frontend implementation
+// was invisible to it and any purely-backend reference (here, a design-
+// rationale comment in 0003_attendance.sql) was all it ever saw.
 const IMPLEMENTATION_DIRS = [
   'pbsms-platform/apps/api/src',
   'pbsms-platform/apps/api/test',
+  'pbsms-platform/apps/web/src',
   'pbsms-platform/infra/migrations',
   '.github/workflows',
 ];
-const TEST_DIR_MARKER = 'pbsms-platform/apps/api/test';
+// A fixed directory marker (as apps/api/test used alone, before 2026-09-03)
+// doesn't fit the frontend: apps/web has zero test files today and no
+// established convention for where they'd live once it does. Matching by
+// filename shape instead is robust to whichever convention gets adopted.
+function isTestFile(repoRelativePath: string): boolean {
+  return (
+    repoRelativePath.startsWith('pbsms-platform/apps/api/test/') ||
+    /\.(test|spec)\.tsx?$/.test(repoRelativePath) ||
+    /\/__tests__\//.test(repoRelativePath)
+  );
+}
 
 const DEFINITION_PATTERN = new RegExp(`^\\s*((?:${SRS_ID_PREFIXES.join('|')})-[A-Z]+-?[0-9]{2,3})(?=:)`);
 
@@ -73,7 +92,7 @@ function main(): void {
     const refs = grepReferences(repoRoot, id);
     if (refs.length === 0) {
       unimplemented.push(id);
-    } else if (!refs.some((f) => f.startsWith(TEST_DIR_MARKER))) {
+    } else if (!refs.some(isTestFile)) {
       untested.push(id);
     }
   }

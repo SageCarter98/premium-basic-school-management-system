@@ -10,6 +10,23 @@
  * already proven elsewhere (reported/closed state machines, guardian
  * contact dispatch).
  *
+ * discipline.service.ts's own header names FR-STU-040 as this module's
+ * "student-lifecycle restatement" of FR-OPS-040 — same code, same tests,
+ * just never literally labelled FR-STU-040 anywhere before this comment
+ * (EC-107's gap-detection tool does a literal per-id substring match).
+ * FR-STU-040's discipline half (investigation, response, guardian
+ * contact, follow-up, appeal, positive-behaviour recording) is exactly
+ * what this file's "Covers" list below already exercises. FR-STU-040's
+ * OTHER half — "restrict health information beyond general student
+ * data" — is genuinely NOT covered by this or any e2e-spec file:
+ * that's role-based access control enforced by RolesGuard/@Roles() at
+ * the HTTP layer, and every *.e2e-spec.ts file in this test/ directory
+ * (this one included) constructs its service directly, bypassing Nest's
+ * guard pipeline entirely — none of them test through real HTTP. Closing
+ * that specific gap needs a supertest-driven HTTP harness, a different
+ * kind of test than every other file here, not a same-shaped addition to
+ * this one — flagged honestly rather than forced.
+ *
  * Covers:
  *  - Case status machine: reported -> investigating -> response_issued ->
  *    closed -> investigating (reopenCase(), an explicit way back), with a

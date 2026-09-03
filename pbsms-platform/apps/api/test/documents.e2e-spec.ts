@@ -197,6 +197,59 @@ describe('Documents (Chapter 22.1 FR-DOC-010/020/030)', () => {
     });
   });
 
+  describe('getBranding()/upsertBranding() — FR-DOC-030', () => {
+    it('upsert fully overwrites (not COALESCEs) every field, and a generated document embeds the current branding', async () => {
+      const { conn, service } = harness();
+      const original = await asHeadmaster(() => service.getBranding());
+      try {
+        const first = await asHeadmaster(() =>
+          service.upsertBranding({
+            schoolNameOverride: 'FR-DOC-030 Test School',
+            signatoryName: 'Test Signatory One',
+            signatoryTitle: 'Test Title One',
+          } as never),
+        );
+        expect(first.school_name_override).toBe('FR-DOC-030 Test School');
+        expect(first.signatory_name).toBe('Test Signatory One');
+        expect(first.signatory_title).toBe('Test Title One');
+        // Same tenant_branding row updated in place, not a second one.
+        expect(first.id).toBe(original?.id);
+
+        // A second call naming only one field overwrites the other two to
+        // null -- upsertBranding() is a full replace each time, not a
+        // per-field COALESCE like admissions' updateIntake().
+        const second = await asHeadmaster(() =>
+          service.upsertBranding({ schoolNameOverride: 'FR-DOC-030 Test School Two' } as never),
+        );
+        expect(second.school_name_override).toBe('FR-DOC-030 Test School Two');
+        expect(second.signatory_name).toBeNull();
+        expect(second.signatory_title).toBeNull();
+
+        const studentId = await createStudent(conn);
+        const classId = await createClass(conn);
+        const draft = await createDraftResult(conn, studentId, classId);
+        const published = await publishResult(conn, draft.id);
+        const doc = await asHeadmaster(() => service.generateReportCard({ studentResultId: published.id } as never));
+        documentIds.push(doc.id);
+        expect((doc.content as { branding: { school_name_override: string } }).branding.school_name_override).toBe(
+          'FR-DOC-030 Test School Two',
+        );
+      } finally {
+        // Restore Tenant A's real seeded branding exactly, regardless of
+        // outcome -- this table is shared seed data other tests/fixtures
+        // may also rely on.
+        await asHeadmaster(() =>
+          service.upsertBranding({
+            schoolNameOverride: original?.school_name_override ?? undefined,
+            signatoryName: original?.signatory_name ?? undefined,
+            signatoryTitle: original?.signatory_title ?? undefined,
+          } as never),
+        );
+        conn.release();
+      }
+    });
+  });
+
   describe('generateAdmissionLetter()', () => {
     it("refuses a non-'admitted' applicant, succeeds once admitted", async () => {
       const { conn, service } = harness();

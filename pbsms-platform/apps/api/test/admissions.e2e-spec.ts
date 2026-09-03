@@ -13,11 +13,19 @@
  *    and correctly ignores rejected/cancelled applicants as candidates.
  *  - The FR-ADM 15.2 status transition table: one legal and one illegal
  *    transition.
- *  - FR-ADM-030/040: convert()'s atomic student+enrolment creation,
- *    sequential never-reused admission-number assignment, and the
- *    state-check idempotency the class header comment describes (a
- *    retried convert() on an already-converted applicant fails closed
- *    rather than creating a second student).
+ *  - FR-ADM-030, FR-ADM-040: convert()'s atomic student+enrolment
+ *    creation and sequential, never-reused admission-number assignment
+ *    (assigned only at conversion, per FR-ADM-040's own text).
+ *  - NFR-API-010: the state-check idempotency the class header comment
+ *    describes (a retried convert() on an already-converted applicant
+ *    fails closed rather than creating a second student) — this is the
+ *    same convert() call the two points above already exercise, not a
+ *    separate test; recorded here as its own bullet only because EC-107's
+ *    gap-detection tool does a literal-substring match per id and the
+ *    combined "FR-ADM-030/040" slash form above doesn't contain the
+ *    contiguous string "FR-ADM-040" (a known limitation the tool's own
+ *    header names), and NFR-API-010 was previously named only in
+ *    admissions.service.ts's comment, never here.
  *  - FR-ADM-010: updateIntake()'s progressive, per-field COALESCE
  *    semantics — updating one field never clobbers another already set.
  *

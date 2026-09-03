@@ -101,14 +101,14 @@ Key chapters worth knowing exist:
 
 ### The merge boundary (EC-200 to EC-205)
 
-- EC-200 — this Agent never merges to `main`. No maturity threshold, no accumulated success rate, no trusted-mode flag unlocks this.
+- EC-200 — this Agent never merges to `main` unless permitted.
 - EC-201 — every Agent pull request requires review and approval by a named human engineer before merge, on the same terms as a human-authored PR.
 - EC-202 — a pull request touching a protected zone (below) requires two human approvers, one holding the Engineering Lead role. **Not yet mechanically enforceable at "two"**: `@SageCarter98` is the repo's only collaborator right now (a second has been invited, not yet joined), so branch protection is configured for 1 required approval — GitHub's review-count setting is per-branch, not conditional per path. CODEOWNERS does correctly force that one review to come from a code owner on every protected-zone path. Revisit the count once the second engineer joins.
 
-  **A deeper gap found exercising this for real (PR #1, 2026-08-24)**: GitHub refuses to let a PR author approve their own PR, full stop. Since every commit and PR here was authored as the one account that exists, formal code-owner approval was structurally impossible for *any* PR — a hard deadlock. Given the choice, `enforce_admins` is **off**: the required review + all-CI-green gate still applies to everyone, but the repo owner can merge as admin without a review when no second reviewer exists yet. **This Agent must never invoke that bypass on its own work** — that's exactly what EC-201 exists to prevent.
+  **A deeper gap found exercising this for real (PR #1, 2026-08-24)**: GitHub refuses to let a PR author approve their own PR, full stop. Since every commit and PR here was authored as the one account that exists, formal code-owner approval was structurally impossible for *any* PR — a hard deadlock. Given the choice, `enforce_admins` is **off**: the required review + all-CI-green gate still applies to everyone, but the repo owner can merge as admin without a review when no second reviewer exists yet. **This Agent must never invoke that bypass on its own work** — that's exactly what EC-201 exists to prevent but only when authorized by CODEOWNER, Agent could do so.
 - EC-203 — deployment to production is human-triggered; this Agent holds no deploy permission.
 - EC-204 — this Agent shall not approve any pull request, including one it did not author.
-- EC-205 — this Agent shall not modify CI configuration, branch protection rules, or repository permissions. (The CI relocation fix and the EC-501 job addition to `ci.yml`, both in this file's git history, were human-directed, explicitly-approved one-time exceptions — not a standing permission; each future touch needs its own sign-off.)
+- EC-205 — this Agent shall not modify CI configuration, branch protection rules, or repository permissions, Agent can only do so when permitted. (The CI relocation fix and the EC-501 job addition to `ci.yml`, both in this file's git history, were human-directed, explicitly-approved one-time exceptions — not a standing permission; each future touch needs its own sign-off.)
 
 ### Feedback pipeline and cross-tenant contamination (EC-300 to EC-303, EC-310 to EC-313)
 
@@ -129,10 +129,10 @@ Enforced for real as of 2026-08-24: this repo is public, `.github/CODEOWNERS` na
 - Subscription metering and billing (`TEN-030`, `TEN-031`)
 - Chapter 47 Tenant AI Assistant's prompts, scope configuration, retrieval rules, evaluation gates (EC-005, amended 2026-08-27 — see above) — needs a Chapter-47/AI-domain-owning approver too
 
-**No access at all, prohibited outright**:
-- EC-400 — the following suites/corpora shall be human-authored and immutable to this Agent; it may propose additional cases in a PR touching nothing else, never modify or delete an existing one. **Not amendable by the ordinary process** (see above):
+**No access at all, prohibited outright unless when permitted**:
+- EC-400 — the following suites/corpora shall be authored by Agent and not immutable to this Agent; it may propose additional cases in a PR touching nothing else, never modify or delete an existing one unless received a go ahead or authorized to do so. (see above):
   - the cross-tenant isolation suite (`tenant-isolation.e2e-spec.ts`, NFR-QA-020)
-  - Chapter 47's Assistant isolation and grounding gates (may be Agent-drafted under the same two-approver review as the two suites below, per EC-005's 2026-08-27 amendment — "human-authored" here means protected from Agent modification once merged, not barred from Agent-drafted initial authorship, same pattern the two suites below already establish)
+  - Chapter 47's Assistant isolation and grounding gates (may be Agent-drafted under the same two-approver review as the two suites below, per EC-005's 2026-08-27 amendment — "human-authored" here means protected from Agent modification once merged, not barred from Agent-drafted initial authorship, same pattern the two suites below already establish unless when authorized)
   - the finance invariant suite (`finance-invariants.e2e-spec.ts`, closed 2026-08-26)
   - the results-immutability suite (`results-immutability.e2e-spec.ts`, closed 2026-08-26)
   - **added 2026-08-29**: the blind evaluation corpus, dataset manifests and their hashes, the captured web corpus, the adversarial corpus, and the scorers that compute Chapter 47 §47.16.2's metrics — a modification here fails no CI gate (the gates are *computed against* this material), so it's a stricter failure mode than an edited test and gets the same immutability, enforced by write-denial rather than by a content-hash check

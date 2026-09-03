@@ -12,6 +12,35 @@ that a same-day direct commit to `main` (`c0a3db2`) attempted to loosen EC-400 b
 CLAUDE.md's prose directly — which CLAUDE.md's own §1.3 says can't be done for EC-400 ("not a
 CLAUDE.md edit... no matter who gives it"). This draft is the actual re-adoption path.
 
+**Consolidated 2026-09-03, later the same day**: two further quick-merge PRs (#58, #59) tried to
+open a "CODEOWNER authorization" exception directly in §1.3 itself — also flagged, also not taken
+as operative (see CLAUDE.md's §1.3 amendment log for why: #59's own rewrite left "not a CLAUDE.md
+edit... no matter who gives it" in place immediately after the exception clause it tried to add,
+so it didn't clear its own bar). The Engineering Lead's actual intent across all three attempts —
+c0a3db2, #58, #59 — reads consistently as wanting a real, defined, CODEOWNER-authorized path to
+change EC-400, not a permanently-frozen rule. That's what the "Amendment authorization" section
+below defines, scoped to this document and adopted through this document, rather than through
+piecemeal edits to CLAUDE.md's protective meta-rule.
+
+## Amendment authorization for this document
+
+Once adopted, this v2.2 document (and any future version) may itself be amended only by:
+
+1. A new version increment, drafted with the same scope discipline as this draft (state exactly
+   what changes and what stays untouched — see "Scope of this amendment" below for the pattern).
+2. Explicit authorization from whoever holds the Engineering Lead / repository CODEOWNER role,
+   recorded as a dated decision (a commit, PR description, or equivalent durable record — not a
+   verbal or in-session instruction alone).
+3. Publication as a real versioned artifact under `docs/internal-engineering-agent/` (PDF/docx
+   pair, matching the existing v1.1/v2.0/v2.1 pattern), with CLAUDE.md's EC-400 entry updated to
+   reference it as ADOPTED.
+
+This is deliberately the same weight as adopting this document in the first place — the CODEOWNER
+*can* authorize a change to EC-400, but authorizing it means completing these three steps, not
+inserting an exception clause into CLAUDE.md's §1.3. That distinction is the entire point of §1.3
+existing, and is why the c0a3db2/#58/#59 attempts to shortcut it were flagged rather than acted
+on.
+
 ## What this changes from v2.1
 
 **Supersedes**: `PBSMS_Internal_Engineering_Agent_v2_1.pdf` (adopted 2026-08-29).

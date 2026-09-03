@@ -314,10 +314,14 @@ jobs:
         run: npm test --workspace apps/api
       - name: Mandatory cross-tenant isolation suite (NFR-QA-020)
         run: npm run test:e2e --workspace apps/api
-      - name: Confirm RLS is enabled on every tenant-owned table
+      - name: Confirm RLS is enabled on every tenant-owned table (NFR-SEC-010)
         # A machine-checked version of the sanity query left as a comment
         # at the bottom of 0001_init_tenancy.sql. If this ever returns a
         # row, a new table was added without RLS and the build must fail.
+        # ID citation added 2026-09-03 (EC-107) -- this step already existed
+        # and already enforced NFR-SEC-010's "RLS enabled" half; it just
+        # never cited the requirement anywhere. See the BYPASSRLS step
+        # below for the half this step alone didn't cover.
         # Exclusions: plans/tenants/tenant_subscriptions/platform_audit_logs
         # (TEN-005 platform tables, exempt from tenant scoping entirely) and
         # users/login_attempts (genuinely tenant-agnostic — neither has a
@@ -346,6 +350,27 @@ jobs:
           ")
           if [ -n "$LEAKY_TABLES" ]; then
             echo "::error::Tenant-owned table(s) without RLS enabled: $LEAKY_TABLES"
+            exit 1
+          fi
+      - name: Confirm no application role has BYPASSRLS (NFR-SEC-010)
+        # NFR-SEC-010's second half ("Database roles used by the
+        # application MUST NOT have BYPASSRLS") was never checked anywhere
+        # -- found while investigating an EC-107 report that NFR-SEC-010
+        # was "referenced but untested." A role with BYPASSRLS silently
+        # defeats every RLS policy the step above just confirmed exists --
+        # cheap to check, high-value if it ever regresses (e.g. someone
+        # granting BYPASSRLS while debugging locally and the grant leaking
+        # into a migration). pbsms_app/pbsms_worker/pbsms_platform are the
+        # three application-facing roles created in 0001/0021/0027 --
+        # platform superuser/owner roles are out of scope, same as the
+        # step above excludes platform-only tables.
+        run: |
+          BYPASS_ROLES=$(psql "$MIGRATE_DATABASE_URL" -tA -c "
+            SELECT rolname FROM pg_roles
+            WHERE rolname IN ('pbsms_app','pbsms_worker','pbsms_platform') AND rolbypassrls;
+          ")
+          if [ -n "$BYPASS_ROLES" ]; then
+            echo "::error::Application role(s) with BYPASSRLS set (defeats RLS entirely): $BYPASS_ROLES"
             exit 1
           fi
 

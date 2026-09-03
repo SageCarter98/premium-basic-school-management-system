@@ -20,6 +20,18 @@
  *    compute() runs as one BEGIN/COMMIT across the roster).
  *  - FR-GRA-050's competition/dense tie modes and the developmental
  *    override that forces 'none' regardless of the requested mode.
+ *  - FR-GRA-020's three coexisting applicability models: developmental
+ *    and numerical were already exercised above (rank()'s tests); this
+ *    file's own FR-GRA-020 block below adds the third, nacca_competency,
+ *    end to end through compute(). FR-GRA-020's other half — "never
+ *    altering historical outcomes graded under a prior model" — is NOT
+ *    re-tested here: it's the same published/locked immutability
+ *    results-immutability.e2e-spec.ts already covers structurally (once
+ *    approved, student_result_items are a snapshot, never a live join
+ *    back to grading_policies), just never framed around a model change
+ *    specifically there. compute()'s own result_candidates staging table
+ *    (this file's other describe blocks) is deliberately mutable/
+ *    re-computable pre-approval — that's a draft, not yet "historical."
  *
  * Fixtures are built with direct SQL for assessment_structures/
  * assessment_components/scores/enrolments (published/scored/active
@@ -310,6 +322,41 @@ describe('Grading engine (Chapter 20 FR-GRA-010..070)', () => {
         const structureId = await computedFourWay(conn, service, 'developmental');
         const ranked = await asUser(() => service.rank(structureId, { mode: 'competition' } as never));
         expect(ranked.every((r) => r.rank === null)).toBe(true);
+      } finally {
+        conn.release();
+      }
+    });
+  });
+
+  describe('compute() with a nacca_competency policy — FR-GRA-020 third applicability model', () => {
+    it('computes a real result end to end under a nacca_competency-applicability policy', async () => {
+      const { conn, service } = harness();
+      try {
+        const policy = await asUser(() =>
+          service.createPolicy({ name: uniqueName('FR-GRA NaCCA Policy'), applicability: 'nacca_competency' } as never),
+        );
+        policyIds.push(policy.id);
+        await asUser(() =>
+          service.addScaleItem(policy.id, { minValue: 0, maxValue: 54.99, grade: 'Approaching', isPass: false } as never),
+        );
+        await asUser(() =>
+          service.addScaleItem(policy.id, { minValue: 55, maxValue: 100, grade: 'Proficient', isPass: true } as never),
+        );
+        const activated = await asUser(() => service.activatePolicy(policy.id));
+        expect(activated.applicability).toBe('nacca_competency');
+
+        const classId = await createClass(conn);
+        const studentId = await createEnrolledStudent(conn, classId);
+        const { structureId, componentIds } = await createPublishedStructure(conn, classId);
+        // 60%*75 + 40%*70 = 73.00
+        await score(conn, componentIds[0], studentId, 75);
+        await score(conn, componentIds[1], studentId, 70);
+
+        const [result] = await asUser(() => service.compute(structureId, { gradingPolicyId: activated.id } as never));
+        expect(result.percentage).toBe('73.00');
+        expect(result.grade).toBe('Proficient');
+        expect(result.is_pass).toBe(true);
+        expect(result.grading_policy_id).toBe(policy.id);
       } finally {
         conn.release();
       }

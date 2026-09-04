@@ -421,6 +421,23 @@ jobs:
           done
           npm run a11y --workspace apps/web
 
+  web-tests:
+    # FR-UX-020 (SRS v2.1): offline attendance/score entry. Added 2026-09-04
+    # (EC-107) -- apps/web had zero test tooling before this job; Vitest +
+    # fake-indexeddb (real IndexedDB semantics, not a mock) + Testing
+    # Library, chosen over Jest for closer alignment with this Next.js
+    # version's own tooling. Kept as its own job rather than folded into
+    # lint-and-typecheck or web-a11y -- separate concern, separate failure
+    # signal.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test --workspace apps/web
+
   build:
     needs: [lint-and-typecheck, unit-and-migration-tests]
     runs-on: ubuntu-latest

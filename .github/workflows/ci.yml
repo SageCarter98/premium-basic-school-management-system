@@ -232,7 +232,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Apply migrations (NFR-QA-030)
+      - name: Apply migrations
+        # Citation correction, 2026-09-04 (EC-107): this step's name used to
+        # read "Apply migrations (NFR-QA-030)", which overstated what it
+        # does. NFR-QA-030 requires migration TESTS that "compare counts,
+        # identifiers, relationships, scores, results, invoice balances,
+        # payments and documents before and after any migration" — this
+        # step only applies every migration in order; it takes no before
+        # snapshot and makes no such comparison. If a migration silently
+        # dropped rows or corrupted a relationship, this step would still
+        # pass. The unit-and-migration-tests job as a whole gets partial,
+        # indirect coverage from the isolation suite below (which does
+        # assert on post-migration row shapes for its own fixtures) and
+        # from ordinary application tests exercising the resulting schema,
+        # but neither is the systematic before/after comparison the
+        # requirement actually describes. Real before/after migration-
+        # comparison tooling is deferred, not built here — this is a
+        # citation fix only, scoped down deliberately (see the PR this
+        # citation fix shipped in for the decision).
+        #
         # Kept as an explicit, ordered list (not a glob) deliberately — a
         # glob would silently pick up a future migration before its author
         # intended it to run in CI. This list must be extended by hand

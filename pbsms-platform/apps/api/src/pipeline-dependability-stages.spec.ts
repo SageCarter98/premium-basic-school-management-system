@@ -66,7 +66,16 @@ describe('NFR-DEP-020 release pipeline stages', () => {
     expect(jobStart).toBeGreaterThan(-1);
     const nextJob = /\n {2}[a-zA-Z0-9_-]+:\s*\n/.exec(ciYml.slice(jobStart + 1));
     const jobBlock = nextJob ? ciYml.slice(jobStart, jobStart + 1 + nextJob.index) : ciYml.slice(jobStart);
-    expect(jobBlock).toMatch(/Apply migrations \(NFR-QA-030\)/);
+    // Doesn't require the step to be *named* "... (NFR-QA-030)" -- that
+    // citation was corrected separately (EC-107, 2026-09-04) to stop
+    // implying this step does NFR-QA-030's before/after data comparison,
+    // which it doesn't; it only applies migrations. What this test cares
+    // about is the ordering: migrations run, then the isolation suite runs
+    // against the resulting schema.
+    expect(jobBlock).toMatch(/name: Apply migrations/);
+    const applyIndex = jobBlock.indexOf('name: Apply migrations');
+    const isolationIndex = jobBlock.indexOf('Mandatory cross-tenant isolation suite');
+    expect(isolationIndex).toBeGreaterThan(applyIndex);
   });
 
   it('honestly states that staging deploy, DAST, and production deploy remain unbuilt, rather than silently dropping the caveat', () => {

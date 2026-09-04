@@ -66,12 +66,16 @@ describe('NFR-DEP-020 release pipeline stages', () => {
     expect(jobStart).toBeGreaterThan(-1);
     const nextJob = /\n {2}[a-zA-Z0-9_-]+:\s*\n/.exec(ciYml.slice(jobStart + 1));
     const jobBlock = nextJob ? ciYml.slice(jobStart, jobStart + 1 + nextJob.index) : ciYml.slice(jobStart);
-    // Doesn't require the step to be *named* "... (NFR-QA-030)" -- that
-    // citation was corrected separately (EC-107, 2026-09-04) to stop
-    // implying this step does NFR-QA-030's before/after data comparison,
-    // which it doesn't; it only applies migrations. What this test cares
-    // about is the ordering: migrations run, then the isolation suite runs
-    // against the resulting schema.
+    // Doesn't require the step to carry a since-corrected requirement-ID
+    // citation in its name (EC-107, 2026-09-04 -- see ci.yml's own comment
+    // on this step for why: it only applies migrations, it doesn't do the
+    // before/after data comparison that citation used to imply). Spelling
+    // the ID out here would also wrongly satisfy EC-107's own gap detector,
+    // which would then report that unrelated requirement as test-covered
+    // by prose mention alone -- exactly the false-positive risk its own
+    // docstring warns about. What this test actually cares about is the
+    // ordering: migrations run, then the isolation suite runs against the
+    // resulting schema.
     expect(jobBlock).toMatch(/name: Apply migrations/);
     const applyIndex = jobBlock.indexOf('name: Apply migrations');
     const isolationIndex = jobBlock.indexOf('Mandatory cross-tenant isolation suite');

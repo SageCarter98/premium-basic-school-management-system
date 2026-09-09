@@ -1,9 +1,20 @@
 /**
  * analytics.e2e-spec.ts
  *
- * Chapter 14 (Operational Intelligence Framework), FR-ANL-010/020/040 —
+ * Chapter 14 (Operational Intelligence Framework), FR-ANL-010/020/030/040 —
  * genuinely untested before this file (no existing suite constructs
  * AnalyticsService).
+ *
+ * FR-ANL-030 (Chapter 27.1) reads, verbatim: "Provide a tenant-level
+ * roll-up (Chapter 14.3) for proprietors operating more than one school"
+ * — an explicit self-citation back to Chapter 14.3, which is FR-ANL-010's
+ * own section. Same capability, same code, restated in the Chapter 27
+ * functional-requirements catalog; not a second thing to build or test,
+ * just a second ID the groupRollup() case below already satisfies.
+ * Verified against srs_v21_extract.txt directly before citing this,
+ * rather than assuming the cross-reference — see FR-ACA-030's deliberate
+ * omission elsewhere in this codebase's history for what happens when
+ * that check is skipped.
  *
  * FR-ANL-040 ("configurable, auditable AI-assisted summarization of
  * trends and draft recommendations") is deliberately NOT covered here —
@@ -20,11 +31,12 @@
  *    only seeds one year for Tenant A) come back ordered ascending by
  *    year with the correct percentages — the actual "term-over-term/
  *    year-over-year trend" the requirement text names.
- *  - groupRollup() — FR-ANL-010: a second school for Tenant A (proving
- *    the "where a tenant contains more than one school" half of the
- *    requirement text for real, not with the single seeded school) shows
- *    up in the roll-up with a real academicPerformance figure once a
- *    published result exists for it, and collectionRate/attendanceRate
+ *  - groupRollup() — FR-ANL-010/FR-ANL-030: a second school for Tenant A
+ *    (proving the "where a tenant contains more than one school"/
+ *    "proprietors operating more than one school" half of both
+ *    requirements' text for real, not with the single seeded school)
+ *    shows up in the roll-up with a real academicPerformance figure once
+ *    a published result exists for it, and collectionRate/attendanceRate
  *    default to 0 rather than erroring when no finance/attendance data
  *    exists for that school yet.
  *
@@ -57,7 +69,7 @@ function uniqueName(prefix: string): string {
   return `${prefix} ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-describe('Analytics (Chapter 14, FR-ANL-010/020)', () => {
+describe('Analytics (Chapter 14, FR-ANL-010/020/030)', () => {
   let pool: Pool;
   const studentIds: string[] = [];
   const classIds: string[] = [];
@@ -202,6 +214,9 @@ describe('Analytics (Chapter 14, FR-ANL-010/020)', () => {
     }
   });
 
+  // FR-ANL-030 (Chapter 27.1) is the same "tenant-level roll-up for a
+  // multi-school proprietor" capability as FR-ANL-010 above, restated
+  // with its own ID -- this case satisfies both, see this file's header.
   it('groupRollup() includes a second school, with a real academicPerformance figure and 0 for finance/attendance with no data', async () => {
     const { conn, service } = harness();
     try {

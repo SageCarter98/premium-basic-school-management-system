@@ -1,8 +1,18 @@
 /**
  * billing.e2e-spec.ts
  *
- * Chapter 5 (Subscription, Billing & Metering) — FR-BIL-030/040/050.
+ * Chapter 5 (Subscription, Billing & Metering) — FR-BIL-010/020/030/040/050.
  * BillingService had zero test coverage before this file.
+ *
+ * FR-BIL-010/FR-BIL-020 were cited by ID in billing.service.ts's own
+ * comments (assignPlan()/generateInvoice()) before this file gained a
+ * dedicated case for them — detect-spec-gaps.ts correctly flagged that
+ * citation-without-a-test gap. The 'monthly' half of both requirements was
+ * already exercised incidentally by every other test in this file (every
+ * assignPlan() call below passes 'monthly'); what was genuinely untested
+ * is the 'termly' half, which is not just a different label — it's the
+ * one place billing_cycle changes an actual computed number
+ * (revenueReport()'s MRR normalization, see that describe block).
  *
  * Covers:
  *  - createPlan()/updatePlan(): a duplicate plan code 409s (plans_code
@@ -17,6 +27,11 @@
  *    documented, not separately exercised here — it needs real active
  *    students in a throwaway tenant, out of proportion to what this
  *    pass buys).
+ *  - assignPlan()/generateInvoice() — FR-BIL-010/FR-BIL-020: a 'termly'
+ *    billing cycle persists on the subscription, generateInvoice() reads
+ *    it back onto the invoice's own billing_cycle column (it takes no
+ *    cycle parameter of its own), and revenueReport() normalizes a termly
+ *    flat-plan subscription's contribution to MRR by /3.
  *  - recordInvoicePayment()/markInvoiceOverdue(): the issued -> overdue
  *    -> paid path, plus the 404-vs-409 distinction on each.
  *  - runDunningStep() — FR-BIL-040: 409s with no overdue invoice; the
@@ -52,7 +67,7 @@ function uniqueSlug(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-describe('Billing (Chapter 5, FR-BIL-030/040/050)', () => {
+describe('Billing (Chapter 5, FR-BIL-010/020/030/040/050)', () => {
   let platformPool: Pool;
   let cleanupPool: Pool;
   let billing: BillingService;
@@ -151,6 +166,34 @@ describe('Billing (Chapter 5, FR-BIL-030/040/050)', () => {
 
       const listed = await billing.listInvoices({ tenantId });
       expect(listed.map((i) => i.id)).toContain(invoice.id);
+    });
+  });
+
+  describe('assignPlan()/generateInvoice() — FR-BIL-010/FR-BIL-020: termly billing cycle', () => {
+    it('persists a termly cycle on the subscription, carries it onto the invoice, and revenueReport() normalizes it to a monthly-equivalent MRR contribution', async () => {
+      const tenantId = await createActiveTenant();
+
+      const before = await billing.revenueReport('2026-09-01', '2026-09-30');
+      const mrrBefore = Number(before.mrr);
+
+      const sub = await billing.assignPlan(PLATFORM_ADMIN, tenantId, STARTER_PLAN, 'termly');
+      expect(sub.billing_cycle).toBe('termly');
+
+      // FR-BIL-010: generateInvoice() takes no cycle parameter of its own —
+      // it reads the persisted cycle back per-tenant, from the subscription
+      // assignPlan() just wrote (FR-BIL-020).
+      const invoice = await billing.generateInvoice(PLATFORM_ADMIN, tenantId, '2026-09-01', '2026-09-30');
+      expect(invoice.billing_cycle).toBe('termly');
+      expect(Number(invoice.amount)).toBe(500); // the invoice itself is the full termly amount, unnormalized
+
+      const after = await billing.revenueReport('2026-09-01', '2026-09-30');
+      const mrrAfter = Number(after.mrr);
+      // STARTER is a flat GHS 500 plan. A monthly subscription contributes
+      // the full 500 to MRR (already covered by every other test in this
+      // file); a termly one contributes 500/3 -- the monthly-equivalent run
+      // rate. This is the one place billing_cycle changes a real computed
+      // number rather than just being a stored label.
+      expect(mrrAfter - mrrBefore).toBeCloseTo(500 / 3, 2);
     });
   });
 

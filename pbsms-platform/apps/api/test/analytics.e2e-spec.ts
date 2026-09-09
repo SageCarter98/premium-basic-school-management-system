@@ -12,9 +12,15 @@
  * functional-requirements catalog; not a second thing to build or test,
  * just a second ID the groupRollup() case below already satisfies.
  * Verified against srs_v21_extract.txt directly before citing this,
- * rather than assuming the cross-reference — see FR-ACA-030's deliberate
- * omission elsewhere in this codebase's history for what happens when
- * that check is skipped.
+ * rather than assuming the cross-reference — see PR #73's description
+ * for a requirement ID it deliberately left uncited after the same kind
+ * of check turned up thinner evidence than assumed. (Not naming that ID
+ * literally here on purpose — this exact sentence, in an earlier draft,
+ * caused detect-spec-gaps.ts to misread it as a real citation and close
+ * that requirement as "referenced" — the tool's own plain-substring
+ * matching taking a footnote about an ID for evidence of testing it.
+ * Caught by re-running the detector after this file's own change,
+ * fixed here rather than left in.)
  *
  * FR-ANL-040 ("configurable, auditable AI-assisted summarization of
  * trends and draft recommendations") is deliberately NOT covered here —

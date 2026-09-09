@@ -1,5 +1,8 @@
 'use client';
 
+// FR-UX-040: low-data-usage pages -- detects a real data-saver signal
+// (navigator.connection.saveData, or a slow effectiveType) and lets pages
+// opt into lighter payloads/pagination accordingly.
 import { useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'pbsms.dataSaver';

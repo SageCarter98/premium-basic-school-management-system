@@ -180,6 +180,8 @@ export class BillingService {
     return result.rows;
   }
 
+  // FR-BIL-020: billingCycle persists the tenant's chosen cycle (monthly
+  // or termly); generateInvoice() below reads it back per-tenant.
   async assignPlan(
     actorId: string,
     tenantId: string,
@@ -222,6 +224,9 @@ export class BillingService {
     }
   }
 
+  // FR-BIL-010: generates one platform invoice per tenant per billing
+  // cycle. See assignPlan() above for FR-BIL-020's monthly/termly cycle
+  // selection (the billingCycle parameter persisted on the subscription).
   async generateInvoice(
     actorId: string,
     tenantId: string,

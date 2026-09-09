@@ -1,5 +1,7 @@
 /**
- * timeline.service.ts — Student Profile's Timeline tab (spec §7.5). No
+ * timeline.service.ts — FR-STU-050: a chronological student timeline
+ * (timestamp/actor/module/description per event). Student Profile's
+ * Timeline tab (spec §7.5). No
  * new table: a chronological merge of events already owned by other
  * modules' services, reusing their existing find-all methods (the same
  * cross-module-DI pattern parent-view.service.ts established for

@@ -1,6 +1,10 @@
 /**
  * offline-db.ts
  *
+ * Part of FR-UX-010's installable PWA offline story (see apps/web/public/
+ * manifest.json + sw.js for the install/cache half; this file is the
+ * client-side data layer the offline workflows actually read/write).
+ *
  * Stage 3's storage layer (spec §9.1/§9.2). Hand-rolled on the raw
  * IndexedDB API — no new npm dependency, same call the codebase already
  * made for TOTP (apps/api/src/common/auth/totp.ts) rather than pulling in

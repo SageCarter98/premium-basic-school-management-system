@@ -246,6 +246,7 @@ create table academic_years (
   tenant_id   uuid not null references tenants(id),
   school_id   uuid not null,
   name        text not null,          -- e.g. '2026/2027'
+  -- FR-ACA-020: academic year/term states are Planned/Active/Closed/Archived.
   status      text not null default 'planned' check (status in ('planned','active','closed','archived')),
   start_date  date,
   end_date    date,
@@ -271,6 +272,8 @@ create table classes (
   tenant_id         uuid not null references tenants(id),
   academic_year_id  uuid not null,
   name              text not null,      -- e.g. 'JHS 2A'
+  -- FR-ACA-010: free text, tenant-defined, not a fixed enum -- Nursery
+  -- through JHS progression is configurable per tenant, not hardcoded here.
   level             text not null,      -- e.g. 'JHS 2'
   created_at        timestamptz not null default now(),
   created_by        uuid,

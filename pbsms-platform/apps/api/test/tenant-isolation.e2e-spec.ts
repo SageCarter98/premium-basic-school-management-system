@@ -1,6 +1,12 @@
 /**
  * tenant-isolation.e2e-spec.ts
  *
+ * This suite is also the "100% of permission and tenant-isolation
+ * boundary conditions" half of NFR-QA-010 (the other half, 80% line
+ * coverage on business-logic modules, is jest.config.js's job -- see that
+ * file's own header). Every table's describe block here is a boundary
+ * condition covered.
+ *
  * Implements SRS v2.1 NFR-QA-020:
  *   "Cross-tenant access attempts are a mandatory, first-class test
  *    category — every endpoint, report, export and background job is

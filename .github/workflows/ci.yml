@@ -232,82 +232,38 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Apply migrations
-        # Citation correction, 2026-09-04 (EC-107): this step's name used to
-        # read "Apply migrations (NFR-QA-030)", which overstated what it
-        # does. NFR-QA-030 requires migration TESTS that "compare counts,
-        # identifiers, relationships, scores, results, invoice balances,
-        # payments and documents before and after any migration" — this
-        # step only applies every migration in order; it takes no before
-        # snapshot and makes no such comparison. If a migration silently
-        # dropped rows or corrupted a relationship, this step would still
-        # pass. The unit-and-migration-tests job as a whole gets partial,
-        # indirect coverage from the isolation suite below (which does
-        # assert on post-migration row shapes for its own fixtures) and
-        # from ordinary application tests exercising the resulting schema,
-        # but neither is the systematic before/after comparison the
-        # requirement actually describes. Real before/after migration-
-        # comparison tooling is deferred, not built here — this is a
-        # citation fix only, scoped down deliberately (see the PR this
-        # citation fix shipped in for the decision).
+      - run: npm ci
+      - name: Apply migrations, seed, and verify NFR-QA-030 before/after data integrity
+        # Replaces the old hand-maintained "Apply migrations" step (see git
+        # history for the full 49-line psql list this used to be) and the
+        # separate "Apply demo seed" step below. Both problems that step's
+        # own header used to name are fixed by this one call:
         #
-        # Kept as an explicit, ordered list (not a glob) deliberately — a
-        # glob would silently pick up a future migration before its author
-        # intended it to run in CI. This list must be extended by hand
-        # every time apps/api/package.json's own `migrate` script gains a
-        # new file; caught stale here once already (only 0001-0003 were
-        # wired in while the schema had grown to 0016 — CI's isolation-
-        # suite step would have failed outright against the real schema).
-        run: |
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0001_init_tenancy.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0002_admissions.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0003_attendance.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0004_assessment.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0005_grading.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0006_results.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0007_promotion_documents.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0008_finance.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0009_finance_assistance.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0010_communication.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0011_discipline.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0012_library.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0013_transport.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0014_health.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0015_inventory.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0016_authorization.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0017_score_optimistic_locking.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0018_staff_directory.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0019_guardians.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0020_teacher_assignments.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0021_tenant_lifecycle.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0022_platform_roles.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0023_impersonation.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0024_billing.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0025_auth_completeness.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0026_delegation.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0027_background_jobs.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0028_analytics.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0029_data_protection.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0030_nacca_curriculum.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0031_guardian_access.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0032_fee_penalties.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0033_timetable.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0034_settlement_reconciliation.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0035_transport_gps.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0036_assessment_component_types.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0037_document_verify_rate_limit.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0038_revoked_sessions.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0039_class_teacher.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0040_period_day_variation.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0041_billing_plan_grants.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0042_admissions_intake.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0043_guardian_access_requests.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0044_staff_feedback.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0045_tenant_applications.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0046_product_feedback.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0047_product_feedback_clustering.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0048_product_feedback_digest.sql
-          psql "$MIGRATE_DATABASE_URL" -f infra/migrations/0049_assistant_interactions.sql
+        # 1. "This list must be extended by hand every time... caught stale
+        #    here once already" -- test/migration-data-integrity.spec.ts
+        #    (via tools/migration-integrity.ts's readMigrationFiles) reads
+        #    infra/migrations/ off disk and applies every file in order, so
+        #    there is no list here to fall out of sync with the migrate
+        #    script ever again.
+        # 2. "Real before/after migration-comparison tooling is deferred,
+        #    not built here" -- it's built now. The same run that applies
+        #    every migration also takes a real before-snapshot ahead of the
+        #    most-recently-added migration, applies it, and asserts counts/
+        #    identifiers/relationships/scores/results/invoice balances/
+        #    payments/documents are all preserved -- NFR-QA-030's literal
+        #    text. See that spec file's own header for exactly what is and
+        #    isn't covered (it re-points at whichever migration is newest
+        #    automatically; it does not replay all 49 migrations as
+        #    separate historical boundaries).
+        #
+        # End state is identical to the two steps this replaces: every
+        # migration applied, then seed_demo.sql applied (the spec applies
+        # seed_demo.sql itself, immediately before the final migration —
+        # harmless reordering, since the final migration here only adds a
+        # new table nothing in seed_demo.sql references; see the spec's own
+        # header). Everything below this step (password resets, unit
+        # tests, the isolation suite, the RLS checks) is unaffected.
+        run: npm run test:migration-integrity --workspace apps/api
       - name: Set the CI-only pbsms_app password to match TEST_DATABASE_URL/DATABASE_URL
         # 0001_init_tenancy.sql hardcodes pbsms_app's local-dev password; CI
         # uses a different generated postgres password for pbsms itself
@@ -325,9 +281,6 @@ jobs:
         # here defensively rather than left to drift unnoticed until a
         # future e2e test actually needs it.
         run: psql "$MIGRATE_DATABASE_URL" -c "ALTER ROLE pbsms_worker WITH PASSWORD 'pbsms_worker_ci';"
-      - name: Apply demo seed (needed by the isolation e2e test)
-        run: psql "$MIGRATE_DATABASE_URL" -f infra/seed/seed_demo.sql
-      - run: npm ci
       - name: Unit tests
         run: npm test --workspace apps/api
       - name: Mandatory cross-tenant isolation suite (NFR-QA-020)

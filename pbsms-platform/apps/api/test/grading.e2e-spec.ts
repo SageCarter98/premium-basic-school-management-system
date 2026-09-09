@@ -6,6 +6,20 @@
  * at all). Covers the pieces of the pipeline the requirement text names
  * explicitly:
  *
+ * Also FR-ACA-030 (Chapter 17): "Subjects vary by division and class
+ * level; Nursery/KG may use developmental learning areas, Primary/JHS use
+ * configurable subject structures" -- the FR-GRA-020 block below (three
+ * applicability models: developmental/numerical/nacca_competency) is
+ * exactly this distinction, same code, restated in Chapter 17's
+ * academic-structure catalog rather than Chapter 20's grading one.
+ * FR-ACA-030's OTHER clause -- "an optional NaCCA strand/sub-strand
+ * mapping (Chapter 41)" -- is genuinely NOT covered here or anywhere
+ * else: nacca.service.ts's createStrand()/createSubStrand()/findStrands()
+ * are only ever constructed as a DI dependency in documents.e2e-spec.ts/
+ * parent-view.e2e-spec.ts, never exercised for their own behaviour.
+ * Flagged rather than papered over with a citation that would read as
+ * more coverage than exists.
+ *
  *  - FR-GRA-030's "no unintended gaps" half of scale validation
  *    (the overlap half is DB-enforced and already covered by
  *    results-immutability.e2e-spec.ts's EXCLUDE-constraint test).
@@ -70,7 +84,7 @@ function uniqueName(prefix: string): string {
   return `${prefix} ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-describe('Grading engine (Chapter 20 FR-GRA-010..070)', () => {
+describe('Grading engine (Chapter 20 FR-GRA-010..070; Chapter 17 FR-ACA-030)', () => {
   let pool: Pool;
   const classIds: string[] = [];
   const studentIds: string[] = [];

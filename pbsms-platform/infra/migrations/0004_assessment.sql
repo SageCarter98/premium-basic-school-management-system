@@ -51,7 +51,10 @@ create policy tenant_isolation_subjects on subjects
 
 -- One assessment_structures row = the weighted "recipe" for how a class's
 -- subject is assessed in a given academic year (FR-ASM-010). Components
--- (below) hold the actual weighted line items.
+-- (below) hold the actual weighted line items. Also the per-class-level
+-- "configurable subject structures" FR-ACA-030 asks for -- this table is
+-- what makes a subject's assessment recipe vary by class/division rather
+-- than being fixed tenant-wide.
 create table assessment_structures (
   id                uuid primary key default gen_random_uuid(),
   tenant_id         uuid not null references tenants(id),

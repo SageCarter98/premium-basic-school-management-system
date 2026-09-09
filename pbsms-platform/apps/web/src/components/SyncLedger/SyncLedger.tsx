@@ -1,5 +1,8 @@
 'use client';
 
+// FR-UX-030: a persistent, unambiguous online/offline/syncing indicator.
+// This component (plus ConflictReview.tsx for the conflict half) is that
+// indicator -- see OfflineState for the underlying connectivity signal.
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/Card/Card';
 import { OfflineState } from '@/components/states/OfflineState';

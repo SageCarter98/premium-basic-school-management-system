@@ -281,7 +281,9 @@ export class AnalyticsService {
   }
 
   // --------------------------------------------------------------------
-  // Group roll-up (Chapter 14.3, FR-ANL-010)
+  // Group roll-up (Chapter 14.3, FR-ANL-010) -- the SRS's own text also
+  // cross-references this exact capability as FR-ANL-030 (tenant-level
+  // roll-up for multi-school proprietors); same feature, second ID.
   // --------------------------------------------------------------------
 
   async groupRollup(periodStart: string, periodEnd: string): Promise<{ schools: SchoolRollup[]; outstandingActionsCount: number }> {

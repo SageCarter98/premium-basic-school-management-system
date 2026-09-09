@@ -1,6 +1,8 @@
 /**
  * worker.ts — the "dedicated worker pool" FR-JOB-020 requires ("never on
- * request-serving capacity"). This is a genuinely separate Node process:
+ * request-serving capacity"), and the same property NFR-PERF-011 asks for
+ * (bulk operations run on a dedicated worker pool, never request-serving
+ * capacity). This is a genuinely separate Node process:
  * it never imports NestFactory.create()/app.listen(), so it structurally
  * cannot serve an HTTP request — a real, checkable property, not just a
  * documented intent (`npm run worker` / `npm run worker:dev`, distinct

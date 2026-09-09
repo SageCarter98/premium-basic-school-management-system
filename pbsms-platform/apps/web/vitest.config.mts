@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
@@ -16,6 +17,18 @@ import react from '@vitejs/plugin-react';
  */
 export default defineConfig({
   plugins: [react()],
+  // tsconfig.json's own "@/*" -> "./src/*" path mapping (used throughout
+  // src/, e.g. SyncLedger.tsx's "@/lib/offline-sync") -- Vite/Vitest does
+  // not read tsconfig "paths" on its own, only Next.js's webpack/turbopack
+  // build does, so every component test that imports something under
+  // src/ via '@/' needs this mirrored here. First needed by
+  // SyncLedger.test.tsx, the first test file to render a component with
+  // '@/' imports rather than a leaf lib module.
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],

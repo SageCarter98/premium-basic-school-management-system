@@ -52,6 +52,9 @@ create table grading_policies (
   -- opt-in NaCCA competency-based model — never altering historical
   -- outcomes graded under a different applicability, which is exactly why
   -- policies are immutable once active rather than editable in place.
+  -- Also FR-ACA-030's "Nursery/KG may use developmental learning areas,
+  -- Primary/JHS use configurable subject structures" -- same distinction,
+  -- restated in Chapter 17's academic-structure requirement catalog.
   applicability  text not null check (applicability in ('developmental', 'numerical', 'nacca_competency')),
   version        integer not null default 1,
   status         text not null default 'draft' check (status in ('draft', 'active', 'retired')),

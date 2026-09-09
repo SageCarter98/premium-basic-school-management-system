@@ -1,0 +1,113 @@
+name: Defect report
+description: >-
+  A defect found AFTER a change already merged -- an escaped defect. This is
+  the defect register NFR-QA-050/the SDLC tracker's G4.06 item calls for, and
+  the raw data source for the Internal Engineering Agent's own EC-700
+  suspension metric ("defect escape rate, Agent vs human PRs" -- see that
+  document's §9/§13, and docs/quality-assurance/NFR-QA-050-defect-severity-taxonomy.md
+  for the full severity definitions used below).
+title: "[Defect] "
+labels: ["escaped-defect"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this only for a defect that escaped a merged change -- i.e. it
+        shipped, and was found afterward. A defect caught in review or CI
+        before merge isn't an "escape" for this register's purposes; leave
+        it as normal PR review feedback instead.
+
+        This form auto-applies the `escaped-defect` label. GitHub issue
+        forms can't apply a label from a dropdown answer automatically --
+        after filing, also add the matching `severity:*` and
+        `introduced-by:*` labels by hand from your answers below, so the
+        defect is filterable without opening every issue.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity (NFR-QA-050)
+      description: >-
+        Critical and High defects block release per NFR-QA-050. Pick the
+        highest severity that genuinely applies -- don't round down to avoid
+        the release-blocking consequence.
+      options:
+        - "Critical -- security, financial integrity, data loss, cross-tenant leak, or total outage"
+        - "High -- a major workflow unavailable, or an official result (grade/result/invoice) incorrect"
+        - "Medium -- an important impairment with a workaround"
+        - "Low -- minor usability or presentation issue"
+    validations:
+      required: true
+
+  - type: input
+    id: introduced-by-pr
+    attributes:
+      label: PR that introduced this defect
+      description: >-
+        The merged PR whose change let this defect through, if known (e.g.
+        "#82"). Leave blank if genuinely unknown -- don't guess.
+      placeholder: "#123"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: author-type
+    attributes:
+      label: Was the introducing PR Agent-authored or human-authored?
+      description: >-
+        This is the field the Internal Engineering Agent spec's EC-700
+        comparison actually needs -- check the introducing PR's own labels
+        (agent-authored) or its author. Pick "Unknown" rather than guessing;
+        a wrong guess here corrupts the one metric this register exists to
+        produce.
+      options:
+        - "Agent-authored"
+        - "Human-authored"
+        - "Unknown / predates governance (before 2026-08-24) / not traceable to one PR"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What broke, and how it was found
+      description: Symptom, reproduction steps, and how/where it was discovered (bug report, manual QA, incident, etc).
+    validations:
+      required: true
+
+  - type: dropdown
+    id: disposition
+    attributes:
+      label: Disposition
+      description: Update this as the defect moves through triage -- leave at "Open" when first filed.
+      options:
+        - "Open"
+        - "Fixed"
+        - "Accepted risk (documented, not being fixed)"
+        - "Duplicate"
+        - "Not a defect (false report)"
+      default: 0
+    validations:
+      required: true
+
+  - type: input
+    id: owner
+    attributes:
+      label: Owner
+      description: Named human accountable for triaging/fixing this. Never "the Agent" -- EC-600/EC-602's accountability rule applies to defects the same way it applies to merges.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: retest-status
+    attributes:
+      label: Retest status
+      description: Update once a fix lands.
+      options:
+        - "Not yet retested"
+        - "Retested -- confirmed fixed"
+        - "Retested -- still present"
+        - "N/A (accepted risk / duplicate / not a defect)"
+      default: 0
+    validations:
+      required: false

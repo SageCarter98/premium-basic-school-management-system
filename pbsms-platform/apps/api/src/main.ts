@@ -29,6 +29,16 @@ async function bootstrap() {
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
 
+  // FR-API-020: every controller in modules/ is mounted under a literal
+  // v1/ prefix (@Controller('v1/students'), etc.) -- there is no
+  // unversioned route in this API. The other half of FR-API-020 (a
+  // published deprecation policy, minimum 6 months' notice before a
+  // version is retired) is adopted in
+  // docs/api/FR-API-020-versioning-and-deprecation-policy.md; the
+  // enforcement mechanism it describes (a Deprecation response header, a
+  // 410 Gone on retirement) has nothing to enforce yet -- v1/ has never
+  // been deprecated -- and isn't built here.
+
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
   // eslint-disable-next-line no-console

@@ -12,9 +12,14 @@ import { RolesGuard } from './roles.guard';
 import { PlatformRolesGuard } from './platform-roles.guard';
 import { ImpersonationSensitiveActionGuard } from './impersonation-sensitive-action.guard';
 import { AuditLogInterceptor } from '../audit/audit-log.interceptor';
+import { RateLimitGuard } from '../rate-limit/rate-limit.guard';
 
 @Module({
   providers: [
+    // First: FR-API-040 rate limiting is the cheapest check and should
+    // reject an over-limit caller with 429 before paying for any
+    // DB-backed role/delegation lookup below.
+    { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PlatformRolesGuard },
     // After RolesGuard: "are you allowed to call this at all" comes

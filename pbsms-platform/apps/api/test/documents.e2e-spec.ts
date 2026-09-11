@@ -67,7 +67,7 @@ describe('Documents (Chapter 22.1 FR-DOC-010/020/030)', () => {
     // document_verify_attempts is append-only for pbsms_app (select+insert
     // only) — same gap transport.e2e-spec.ts hit; teardown needs the
     // schema-owning role.
-    cleanupPool = new Pool({ connectionString: process.env.MIGRATE_DATABASE_URL });
+    cleanupPool = new Pool({ connectionString: process.env.TEST_MIGRATE_DATABASE_URL ?? process.env.MIGRATE_DATABASE_URL });
   });
 
   afterAll(async () => {

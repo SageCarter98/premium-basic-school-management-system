@@ -76,8 +76,8 @@ describe('Billing (Chapter 5, FR-BIL-010/020/030/040/050)', () => {
   const createdPlanIds: string[] = [];
 
   beforeAll(() => {
-    platformPool = new Pool({ connectionString: process.env.PLATFORM_DATABASE_URL });
-    cleanupPool = new Pool({ connectionString: process.env.MIGRATE_DATABASE_URL });
+    platformPool = new Pool({ connectionString: process.env.TEST_PLATFORM_DATABASE_URL ?? process.env.PLATFORM_DATABASE_URL });
+    cleanupPool = new Pool({ connectionString: process.env.TEST_MIGRATE_DATABASE_URL ?? process.env.MIGRATE_DATABASE_URL });
     billing = new BillingService(platformPool, new TenantsService(platformPool));
     tenants = new TenantsService(platformPool);
   });

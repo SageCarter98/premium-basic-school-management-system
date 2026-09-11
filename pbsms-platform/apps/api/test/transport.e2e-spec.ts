@@ -86,7 +86,7 @@ describe('Transport (Chapter 28 FR-OPS-020)', () => {
     // append-only: a GPS ping log and an arrival-debounce log). Same gap
     // tenant-lifecycle.e2e-spec.ts hit for audit_log/platform_audit_logs —
     // teardown for those two tables needs the schema-owning role instead.
-    cleanupPool = new Pool({ connectionString: process.env.MIGRATE_DATABASE_URL });
+    cleanupPool = new Pool({ connectionString: process.env.TEST_MIGRATE_DATABASE_URL ?? process.env.MIGRATE_DATABASE_URL });
   });
 
   afterAll(async () => {

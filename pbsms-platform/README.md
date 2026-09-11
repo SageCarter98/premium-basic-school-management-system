@@ -266,6 +266,27 @@ Then run the commands at the bottom of `infra/seed/seed_demo.sql` — set
 Tenant A's id, select students, set Tenant B's id, select again. Same
 table, same query, different tenant, different (correct) results.
 
+## FR-API-040/NFR-PERF-010 — request rate limiting, 2026-09-11
+
+Built as a scoped, one-off exception to the Internal Engineering Agent's
+Stage-4 gate (CLAUDE.md's "Internal Engineering Agent" section, "What's
+actually authorized right now" — explicit Engineering Lead decision, not
+a general reopening of Stage 4). `common/rate-limit/rate-limit.guard.ts`:
+an in-process, per-tenant/per-user fixed-window counter registered
+globally via `APP_GUARD` (same wiring as `RolesGuard`), returning 429 +
+`Retry-After` once a caller crosses the limit. Deliberately not the
+Postgres-table-counter pattern the login-lockout and document-verify
+rate limits use — a DB round-trip on every single request would work
+against the NFR it serves.
+
+**Real, stated limitation**: correct for exactly one running process; the
+SRS's own architecture table names Redis for this NFR, but nothing in
+this codebase uses Redis yet, so this is a deliberately-scoped MVP, not
+the final multi-instance-correct version. `RATE_LIMIT_ENABLED=false` is
+an operational kill switch. NFR-PERF-010's other half — background-job
+fair-share — is a different subsystem (the job queue, Chapter 35) and
+was explicitly NOT built in this pass.
+
 ## Where to go next
 
 Work in the order SRS v2.1 Chapter 44 (Phased Delivery Roadmap) lays out,

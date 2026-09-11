@@ -65,7 +65,7 @@ describe('Guardian access grants/requests (Stage 6 Parent View onboarding)', () 
 
   beforeAll(() => {
     pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL });
-    cleanupPool = new Pool({ connectionString: process.env.MIGRATE_DATABASE_URL });
+    cleanupPool = new Pool({ connectionString: process.env.TEST_MIGRATE_DATABASE_URL ?? process.env.MIGRATE_DATABASE_URL });
   });
 
   afterAll(async () => {

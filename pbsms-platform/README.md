@@ -204,6 +204,16 @@ cp .env.example .env
 # used only by migrate/seed above. Do not swap these — see the "Bugs this
 # run actually caught" section above for exactly why that matters.
 
+# 3.5. NFR-DEP-010: the e2e suite runs against its own pbsms_test database,
+# separate from dev's pbsms — one-time setup:
+psql -U postgres -c "CREATE DATABASE pbsms_test OWNER pbsms;"
+MIGRATE_DATABASE_URL=postgres://pbsms:pbsms_local_only@localhost:5432/pbsms_test npm run migrate --workspace apps/api
+MIGRATE_DATABASE_URL=postgres://pbsms:pbsms_local_only@localhost:5432/pbsms_test npm run seed --workspace apps/api
+# .env.example's TEST_DATABASE_URL/TEST_MIGRATE_DATABASE_URL/
+# TEST_PLATFORM_DATABASE_URL already point at pbsms_test — see
+# apps/api/test/env-setup.ts for why every one of those three matters, not
+# just the first.
+
 # 4. THE IMPORTANT ONE: prove tenant isolation actually works
 npm run api:test:e2e
 # Reads test/tenant-isolation.e2e-spec.ts — confirms Tenant B genuinely

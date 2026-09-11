@@ -30,13 +30,13 @@ describe('Tenant lifecycle (Chapter 4.1, TEN-023..026)', () => {
   const createdTenantIds: string[] = [];
 
   beforeAll(() => {
-    platformPool = new Pool({ connectionString: process.env.PLATFORM_DATABASE_URL });
+    platformPool = new Pool({ connectionString: process.env.TEST_PLATFORM_DATABASE_URL ?? process.env.PLATFORM_DATABASE_URL });
     appPool = new Pool({ connectionString: process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL });
     // pbsms_platform (platformPool's role) deliberately has no DELETE grant
     // on tenants/platform_audit_logs — same restricted-role posture as
     // pbsms_app (0021_tenant_lifecycle.sql). Cleanup below needs the
     // schema-owning role instead, used for nothing but this teardown.
-    cleanupPool = new Pool({ connectionString: process.env.MIGRATE_DATABASE_URL });
+    cleanupPool = new Pool({ connectionString: process.env.TEST_MIGRATE_DATABASE_URL ?? process.env.MIGRATE_DATABASE_URL });
     service = new TenantsService(platformPool);
   });
 

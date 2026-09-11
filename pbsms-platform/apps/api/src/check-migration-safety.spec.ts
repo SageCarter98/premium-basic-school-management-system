@@ -11,6 +11,14 @@
  *
  * Genuinely untested before this file (check-migration-safety.ts had no
  * test coverage at all, destructive-pattern detection included).
+ *
+ * NFR-DEP-050 ("rollback triggers include ... migration ... failures;
+ * valid post-release transactions are preserved, and forward-fix
+ * migration is preferred over destructive restoration wherever safe"):
+ * the destructive-statement check this file covers is the write-time half
+ * of that policy -- see docs/deployment/NFR-DEP-050-rollback-policy.md
+ * for the trigger-condition list and preservation principles in full;
+ * this repo has no deployment pipeline to actually roll back within yet.
  */
 import {
   findUnapprovedDestructiveStatements,
